@@ -1,0 +1,12 @@
+# Order of the documents in the dashboard's /docs nav. One filename per line.
+# A document missing from this list is appended alphabetically rather than
+# hidden, so adding a doc and forgetting this file cannot make it disappear.
+usage.md
+privacy.md
+deployment_tldr.md
+deployment_detail.md
+architecture.md
+data-reference.md
+api.md
+testing.md
+changelog.md
