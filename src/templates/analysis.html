@@ -1,0 +1,138 @@
+{#
+  analysis.html — the matrix as a heat grid, the distributions as one row of bar
+  cards. Cell shade is the share within its row, on one neutral ramp so rows stay
+  comparable; the group color lives in the row label only, never in the data.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, range_tabs, chart_card,
+    bar_rows, stacked_bars, series_legend, stat_card, th_tip %}
+{% block title %}Analysis — Vidar{% endblock %}
+
+{% block content %}
+{% call page_header('Analysis') %}
+  {{ range_tabs(active_range, '/analysis', date_from=date_from, date_to=date_to) }}
+{% endcall %}
+
+{# ── What the classifier is working from. These sat at the very bottom under a
+     "Classifier diagnostics" label, which is where a reader arrives last — and
+     they are the fastest thing on the page to read. A share like "1.3 % with a
+     browser signal" is also the number that makes the matrix below it make
+     sense, so it belongs before it, not after. ── #}
+{% set no_sf_pct = ((bot_signals.no_sec_fetch or 0) / (bot_signals.total_visits or 1) * 100) | round(1) %}
+{% set with_sf_pct = (100 - no_sf_pct) | round(1) %}
+<div class="cards">
+  {{ stat_card('Enriched IPs', (counts.total or 0) | fmtnum, ('IPs that have been through enrichment.',
+      'A row in ip_intel: geo from ip-api.com, exposure from Shodan, blocklist and Tor lookups.')) }}
+  {{ stat_card('No browser signal', no_sf_pct ~ '%', ('Share of requests with no Sec-Fetch-Dest header.',
+      'Every current browser sends one; scripts and CLI tools do not. The classifier\'s primary browser test.')) }}
+  {{ stat_card('With browser signal', with_sf_pct ~ '%', ('Share of requests that did send Sec-Fetch-Dest.',
+      'The inverse of the tile beside it — the traffic a real browser could account for.'), color_class='text-success') }}
+  {{ stat_card('Bot-device requests', (bot_signals.bot_device_count or 0) | fmtnum, ('Requests whose User-Agent names a bot.',
+      'The UA parser matched a known crawler, scanner or library string.')) }}
+  {{ stat_card('Bot IPs', (bot_signals.bot_ips or 0) | fmtnum, ('IPs that sent at least one bot User-Agent.',
+      'Distinct IPs behind the requests counted in the tile beside it.')) }}
+</div>
+
+{# ── Identity × Signals ── rows = who, columns = orthogonal network/reputation.
+   Every column links to its filter, Mobile included: a cell showing a count
+   that could not be opened read as a broken link, not as a deliberate
+   omission. There was a second column set for exactly that case; it is gone
+   with the flag behind it. #}
+{# The columns come straight from the signal registry, which is also what
+   get_identity_signal_matrix() builds its columns from — so the table and the
+   query cannot disagree about which signals exist. Headers use the short forms:
+   a 1fr numeric column cannot carry "Hosting / Cloud" without colliding with
+   its neighbour. #}
+{% set sig_cols = SIGNALS %}
+<div class="panel">
+  <div class="table-block-head">
+    <span class="table-block-title">Identity × Signals</span>
+    <span class="table-block-count">cell shade = share within the row · click to filter Visitors</span>
+  </div>
+  <table class="responsive-table matrix">
+    <thead>
+      <tr>
+        {{ th_tip('Identity',
+               ('The visitor identity group this row counts.',
+                'Each row crosses its group against every signal — identity and signals are independent.'),
+               w='c-group') }}
+        {% for s in sig_cols %}
+        {{ th_tip(s.short, s.tip) }}
+        {% endfor %}
+        {{ th_tip('Total', ('Total unique IPs in this identity group.',
+                            'Sum of the row, linking to the unfiltered group.'), w='c-total') }}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in identity_signal_matrix %}
+      {# Share is taken within the row, so a small group stays readable next to a
+         large one. Tags are left out of the maximum, as they always were: a group
+         where every IP is known to Shodan would flatten every other cell. #}
+      {% set shades = [] %}
+      {%- for s in sig_cols if s.key != 'has_tags' -%}
+        {%- set _ = shades.append(row[s.alias] or 0) -%}
+      {%- endfor %}
+      {% set row_max = shades | max %}
+      <tr>
+        <td data-label="Identity">
+          <span class="matrix-label" style="--clr: {{ GROUP_COLOR_VARS.get(row.grp, GROUP_COLOR_VARS['unknown']) }}">{{ row.grp | title }}</span>
+        </td>
+        {% for s in sig_cols %}
+        {% set n = row[s.alias] %}
+        <td data-label="{{ s.short }}" class="matrix-cell{% if n %} filled{% endif %}"
+            style="--shade: {{ (4 + 26 * (n / row_max)) | round(1) if row_max and n else 0 }}%">
+          {% if n %}<a href="/visitors?class={{ row.grp | urlencode }}&signal={{ s.key }}">{{ n | fmtnum }}</a>{% else %}<span class="matrix-zero">·</span>{% endif %}
+        </td>
+        {% endfor %}
+        <td data-label="Total">
+          {% if row.total %}<a href="/visitors?class={{ row.grp | urlencode }}">{{ row.total | fmtnum }}</a>{% else %}<span class="matrix-zero">·</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ sig_cols | length + 2 }}" class="text-muted">No enriched IPs yet.</td></tr>
+      {% endfor %}
+      {% if identity_signal_matrix %}
+      <tr class="matrix-totals">
+        <td data-label="Identity"><strong>All</strong></td>
+        {% for s in sig_cols %}
+        {% set col_total = identity_signal_matrix | sum(attribute=s.alias) %}
+        <td data-label="{{ s.short }}">{% if col_total %}<a href="/visitors?signal={{ s.key }}">{{ col_total | fmtnum }}</a>{% else %}<span class="matrix-zero">·</span>{% endif %}</td>
+        {% endfor %}
+        <td data-label="Total"><strong>{{ identity_signal_matrix | sum(attribute='total') | fmtnum }}</strong></td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Distributions: three cards in one row. Each bar carries its own number,
+      and "Table ⇄" swaps the bars for the plain numbers. ── #}
+<div class="facet-grid">
+  {% for c in cards %}
+  {{ chart_card(c.title, c.note, c.rows, c.color, table_toggle=true) }}
+  {% endfor %}
+</div>
+
+{% if rl_stats.rl_total %}
+<div class="panel">
+  <div class="table-block-head">
+    <span class="table-block-title">Rate limiting</span>
+    <span class="table-block-count">{{ rl_summary }} · feeds Needs attention on the Overview</span>
+    {{ series_legend(rl_series) }}
+  </div>
+  {{ stacked_bars(rl_days, rl_series) }}
+  {% if rl_rows %}
+  <div class="table-block-head rl-offenders">
+    <span class="table-block-title">Most rate-limited IPs</span>
+    <span class="table-block-count">click to open the visitor</span>
+  </div>
+  {{ bar_rows(rl_rows, GROUP_COLOR_VARS['threats'], 'top') }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/viz.js?v={{ asset_v }}"></script>
+{% endblock %}

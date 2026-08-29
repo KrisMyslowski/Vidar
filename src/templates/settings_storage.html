@@ -1,0 +1,248 @@
+{#
+  settings_storage.html — retention mode and the monthly archives.
+
+  Both mode and window size are POST forms styled with the existing .tab-group
+  segmented control, so this page introduces no new control, only a new use.
+  Every destructive action confirms first: delete here removes rows or a file
+  with nothing behind it.
+#}
+{% extends "subnav_base.html" %}
+{% from '_macros.html' import table_block, empty_state, tip_attrs %}
+{% block title %}Storage &amp; Retention — Vidar{% endblock %}
+
+{% block settings_content %}
+
+<div class="panel">
+  <h3>Retention</h3>
+  <form method="post" action="/settings/storage/mode" class="tab-row">
+    <div class="tab-group">
+      <button class="tab{% if mode == 'rolling' %} active{% endif %}"
+              type="submit" name="mode" value="rolling">Rolling</button>
+      <button class="tab{% if mode == 'lifetime' %} active{% endif %}"
+              type="submit" name="mode" value="lifetime">Lifetime</button>
+    </div>
+  </form>
+
+  {% if mode == 'rolling' %}
+  <p class="text-muted">
+    Keeps the current month plus the last {{ rolling_months }}. Older months are
+    zipped to <code>{{ archive_dir }}/YYYY-MM.zip</code>, then deleted from the
+    database. Window: <strong>{{ window_start }}</strong> onward. Next to archive:
+    <strong>{{ next_out }}</strong>.
+  </p>
+  <form method="post" action="/settings/storage/window" class="storage-window">
+    <label for="rolling-months">Months to keep before the current one</label>
+    <input id="rolling-months" name="months" type="number" inputmode="numeric"
+           min="0" max="{{ max_rolling_months }}" value="{{ rolling_months }}">
+    <button class="btn-refresh" type="submit">Apply</button>
+  </form>
+
+  <p class="text-muted">
+    <strong>Archiving is not deletion.</strong> The window above says what stays in the
+    database; the zip written on the way out is kept
+    {% if archive_keep %}for {{ archive_keep }} months after its own month{% else %}until you
+    delete it{% endif %}.
+    {% if archives %}
+      {{ archives | length }} archive{{ '' if archives | length == 1 else 's' }} on disk,
+      {{ archives_total_bytes | filesizeformat }}, oldest {{ oldest_archive }}.
+    {% endif %}
+  </p>
+  <form method="post" action="/settings/storage/archive-keep" class="storage-window"
+        {% if archives_expiring_now %}
+        data-confirm="Delete {{ archives_expiring_now }} archive(s) on the next daily pass? They are already older than this window. The zip files are gone for good."
+        {% endif %}>
+    <label for="archive-keep">Months to keep an archive (0 keeps every archive)</label>
+    <input id="archive-keep" name="months" type="number" inputmode="numeric"
+           min="0" max="{{ max_archive_keep }}" value="{{ archive_keep }}">
+    <button class="btn-refresh" type="submit">Apply</button>
+  </form>
+  {% if archive_keep and archive_keep < archive_keep_floor %}
+  <p class="text-muted">Raised to {{ archive_keep_floor }} — a shorter window would archive a
+    month and delete it in the same pass.</p>
+  {% endif %}
+  {% else %}
+  <div class="settings-warning">
+    <strong>No archiving, no deletion.</strong>
+    The database grows without bound; query time and disk usage grow with it.
+    Archives already on disk stay: the keep window does not run in this mode.
+    Switching back to Rolling archives every month outside the window on the next pass.
+  </div>
+  {% endif %}
+
+  <p class="text-muted">
+    Daily pass, last run
+    <strong>{% if last_run %}{{ last_run | fmtdate }}{% else %}never{% endif %}</strong>.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>In the database</h3>
+  <p class="text-muted">
+    Download zips the month without removing it. Delete removes it with no archive
+    written — use Download first if you want to keep it.
+  </p>
+  {% call table_block('Months held', (months | length | fmtnum) ~ ' months') %}
+  <table>
+    <thead>
+      <tr>
+        {# The same head as Archived months below, column for column. Size and
+           Archived are empty for a month that is still in the database — there
+           is no zip and so no size and no archive date — but the two tables
+           read as one thing when their heads match, and a month moves from
+           this table to that one without the row changing shape. #}
+        <th class="c-date">Month</th>
+        <th class="c-num">Visits</th>
+        <th class="c-num">IPs</th>
+        <th class="c-num">Size</th>
+        <th class="c-date">Archived</th>
+        <th class="c-mix">State</th>
+        <th class="c-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in months %}
+      <tr>
+        <td>{{ m.month }}</td>
+        <td>{{ m.visits | fmtnum }}</td>
+        <td>{{ m.ips | fmtnum }}</td>
+        {# No zip yet, so no size and no archive date. An em dash rather than a
+           blank cell: blank reads as "we did not look". #}
+        <td class="text-muted">—</td>
+        <td class="text-muted">—</td>
+        <td><span class="text-muted">in database</span></td>
+        <td class="storage-actions">
+          <a class="btn-refresh" href="/settings/storage/download/{{ m.month }}">Download</a>
+          <form method="post" action="/settings/storage/delete-month/{{ m.month }}"
+                data-confirm="Delete {{ m.month }} from the database? {{ m.visits | fmtnum }} visits, no archive is written. This cannot be undone.">
+            <button class="btn-refresh btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr class="empty-state-row"><td colspan="7">{{ empty_state('visit') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+</div>
+
+<div class="panel">
+  <h3>Archives</h3>
+  <p class="text-muted">
+    Re-import loads a month back into the database for {{ restore_days }} days, then
+    the daily pass moves it out again. Delete removes the zip; any rows currently
+    restored from it stay.
+  </p>
+
+  {# ── Disk, because retention is the one setting on this page whose whole
+       point is disk and the page had no number for it. Deliberately a bar and
+       one line, not a card: this is a glance, and it belongs beside the thing
+       it constrains. Omitted entirely when the volume cannot be read — an
+       unknown quantity drawn as an empty bar reads as "plenty of room". ── #}
+  {% if disk %}
+  <div class="diskbar"{{ tip_attrs(('Free space on the volume holding the database and the archives.',
+      'shutil.disk_usage() on ' ~ archive_dir ~ ', read at page load.')) }} tabindex="0">
+    <div class="diskbar-track">
+      <span class="diskbar-fill{% if disk.pct_used >= 90 %} diskbar-fill--critical{% elif disk.pct_used >= 75 %} diskbar-fill--warn{% endif %}"
+            style="width: {{ disk.pct_used }}%"></span>
+    </div>
+    <span class="diskbar-text">
+      <strong>{{ disk.free | fmtbytes }}</strong> free of {{ disk.total | fmtbytes }}
+      <span class="text-muted">· {{ disk.pct_used }}% used</span>
+    </span>
+  </div>
+  {% endif %}
+  {% call table_block('Archived months', (archives | length | fmtnum) ~ ' on disk') %}
+  <table>
+    <thead>
+      <tr>
+        <th class="c-date">Month</th>
+        <th class="c-num">Visits</th>
+        <th class="c-num">IPs</th>
+        <th class="c-num">Size</th>
+        <th class="c-date">Archived</th>
+        <th class="c-mix">State</th>
+        <th class="c-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in archives %}
+      <tr>
+        <td>{{ a.month }}</td>
+        <td>{{ a.visits | fmtnum }}</td>
+        <td>{{ a.ips | fmtnum }}</td>
+        <td>{{ a.bytes | fmtbytes }}</td>
+        <td>{{ a.created_at | fmtdate }}</td>
+        <td>
+          {%- if not a.readable %}<span class="badge badge-red">unreadable</span>
+          {%- elif a.restored_until %}<span class="badge badge-teal">in database until {{ a.restored_until | fmtdate }}</span>
+          {%- else %}<span class="text-muted">archived</span>{% endif %}
+        </td>
+        <td class="storage-actions">
+          <a class="btn-refresh" href="/settings/storage/download/{{ a.month }}">Download</a>
+          {%- if a.restored_until %}
+          <form method="post" action="/settings/storage/release/{{ a.month }}">
+            <button class="btn-refresh" type="submit">Put back</button>
+          </form>
+          {%- elif a.readable %}
+          <form method="post" action="/settings/storage/restore/{{ a.month }}">
+            <button class="btn-refresh" type="submit">Re-import</button>
+          </form>
+          {%- endif %}
+          <form method="post" action="/settings/storage/delete-archive/{{ a.month }}"
+                data-confirm="Delete the {{ a.month }} archive? The file is gone for good.">
+            <button class="btn-refresh btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr class="empty-state-row"><td colspan="7">{{ empty_state('archived month') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+
+  {# The archives hold the months that left the window; these hold the ones that
+     have not. Same page, because both answer "what exists besides the live
+     file", and a backup nobody can see is how the last scheduled job in this
+     project failed for months. #}
+  {% call table_block('Snapshots', (snapshots | length | fmtnum) ~ ' of ' ~ backup_keep) %}
+  <table>
+    <thead>
+      <tr>
+        <th class="c-date">Snapshot</th>
+        <th class="c-num">Size</th>
+        <th class="c-date">Taken</th>
+        <th class="c-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in snapshots %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ s.bytes | fmtbytes }}</td>
+        <td>{{ s.created_at | fmtdate }}</td>
+        <td class="storage-actions">
+          <a class="btn-refresh" href="/settings/storage/snapshot/{{ s.name }}">Download</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr class="empty-state-row"><td colspan="4">{{ empty_state('snapshot') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+
+  <p class="text-muted">
+    {% if backup_enabled %}Daily, keeping the {{ backup_keep }} newest.{% else %}Disabled via BACKUP_ENABLED.{% endif %}
+    Last run
+    <strong>{% if backup_last_run %}{{ backup_last_run | fmtdate }}{% else %}never{% endif %}</strong>.
+    They sit on the same disk as the database, so they cover corruption and a
+    mistaken delete — not the loss of the volume. Download one for that.
+  </p>
+  <form method="post" action="/settings/storage/backup">
+    <button class="btn-refresh" type="submit">Back up now</button>
+  </form>
+</div>
+
+{% endblock %}

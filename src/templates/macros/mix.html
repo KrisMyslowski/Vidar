@@ -1,0 +1,138 @@
+{#
+  macros/mix.html — The proportional mix bar and everything drawn with it: the class and
+  signal bars on an IP, and the three cells that summarise a group.
+
+  Imported through _macros.html, which re-exports every block; no page needs
+  to know which file a block lives in.
+#}
+{% from 'macros/_tip.html' import tip_attrs %}
+
+
+{#
+  ip_class_bar / ip_signal_bar — the same mix bar the aggregation rows use, for a
+  row that is a single IP. One visitor has one identity, so its class bar is a
+  single full-width band; its signal bar carries one band per active signal.
+  Class mix and Signals read identically on every grouping this way — the value
+  itself lives in the tooltip.
+#}
+{%- macro ip_class_bar(v) -%}
+{%- if v.visitor_class -%}
+{%- set grp = v.visitor_class.split('/')[0] -%}
+{%- set parts = [{'label': v.visitor_class, 'count': 1,
+                  'color': GROUP_COLOR_VARS.get(grp, GROUP_COLOR_VARS['unknown'])}] -%}
+{{ mix_bar(parts, tip=v.visitor_class) }}
+{%- else -%}{{ mix_bar([]) }}{%- endif -%}
+{%- endmacro -%}
+
+
+{%- macro ip_signal_bar(v) -%}
+{%- set ns = namespace(parts=[], names=[]) -%}
+{%- set flags = [
+    ('is_tor', v.is_tor),
+    ('is_proxy', v.is_proxy),
+    ('is_hosting', v.is_hosting),
+    ('dnsbl_listed', v.dnsbl_listed),
+    ('has_tags', v.tags)] -%}
+{%- for key, on in flags if on -%}
+{%- set ns.parts = ns.parts + [{'label': SIGNAL_LABELS[key], 'count': 1, 'color': SIGNAL_COLOR_VARS[key]}] -%}
+{%- set ns.names = ns.names + [SIGNAL_LABELS[key] ~ (' (' ~ v.dnsbl_sources ~ ')' if key == 'dnsbl_listed' and v.dnsbl_sources else '')] -%}
+{%- endfor -%}
+{%- if not ns.parts and v.enriched -%}
+{#- No signal is itself a signal, and a filterable one — so it reads as a band
+    like every other value in this column, not as a word among bars. An IP that
+    was never enriched stays blank: unknown is not clean. -#}
+{%- set ns.parts = [{'label': SIGNAL_LABELS['clean'], 'count': 1, 'color': SIGNAL_COLOR_VARS['clean']}] -%}
+{%- set ns.names = [SIGNAL_LABELS['clean']] -%}
+{%- endif -%}
+{{ mix_bar(ns.parts, empty_label='not enriched', tip=ns.names | join(' · ')) }}
+{%- endmacro -%}
+
+
+{# ─────────────────────────────────────────────────────────────────────────────
+   Release blocks — the block set the pages are assembled from. Each block is
+   defined once here, in every state it has, and used unchanged on every page.
+   ───────────────────────────────────────────────────────────────────────── #}
+
+
+{#
+  mix_bar — proportional stacked bar, replaces the truncated badge rows.
+  Fixed width, no overflow, comparable across rows; the counts live in the
+  tooltip. The same bar carries class mix, signal mix and status mix.
+  parts: list of {label, count, color} — color is a var() reference from
+  GROUP_COLOR_VARS / SIGNAL_COLOR_VARS, never a literal.
+#}
+{%- macro mix_bar(parts, empty_label='—', linked=false, tip='') -%}
+{%- set total = parts | sum(attribute='count') -%}
+{%- if not total -%}<span class="text-muted">{{ empty_label }}</span>
+{%- else -%}
+{%- set ns = namespace(tips=[]) -%}
+{%- for p in parts if p.count -%}
+{%- set ns.tips = ns.tips + [p.label ~ ' ' ~ (p.count | fmtnum)] -%}
+{%- endfor -%}
+{#- Two different jobs, so two different tooltips. A single-visitor bar is one
+    full band and the tooltip names the exact class — a value, not an
+    explanation, the same way a truncated chip reveals its own text. An
+    aggregate bar splits several IPs, so it says what the split is and lists the
+    counts as the evidence. -#}
+<span class="mix-bar{% if linked %} mix-bar--linked{% endif %}" {{ tip_attrs(tip) if tip else tip_attrs('How this row splits.', ns.tips | join(' · ')) }} tabindex="0">
+{%- for p in parts if p.count -%}
+{%- if linked and p.href -%}
+<a class="mix-seg" href="{{ p.href }}" style="width:{{ (p.count * 100.0 / total) | round(2) }}%;background:{{ p.color }}" {{ tip_attrs(p.label ~ ' — ' ~ (p.count | fmtnum) ~ (' IP.' if p.count == 1 else ' IPs.'), 'Click to filter the list to this band.') }} aria-label="Filter by {{ p.label }}"></a>
+{%- else -%}
+<span class="mix-seg" style="width:{{ (p.count * 100.0 / total) | round(2) }}%;background:{{ p.color }}"></span>
+{%- endif -%}
+{%- endfor -%}
+</span>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{#
+  mix_legend — label + count row beneath a mix_bar, for the places that have
+  room to name the segments (Overview "Who is hitting the site", map selection).
+#}
+{%- macro mix_legend(parts) -%}
+<div class="mix-legend">
+  {%- for p in parts if p.count -%}
+  <span class="mix-legend-item"><span class="mix-legend-dot" style="background:{{ p.color }}"></span>{{ p.label }}<strong>{{ p.count | fmtnum }}</strong></span>
+  {%- endfor -%}
+</div>
+{%- endmacro -%}
+
+
+{# Class-mix parts for one aggregation row — the identity groups in taxonomy
+   order, straight from TAXONOMY_GROUPS. The `<group>_ips` columns are generated
+   from the same list in queries._AGG_GROUP_IP_COUNTS, so the bar and the query
+   cannot drift apart. Colors come from the taxonomy globals only. #}
+{%- macro class_mix_cell(r) -%}
+{%- set parts = [] -%}
+{%- for g in TAXONOMY_GROUPS -%}
+{%- set _ = parts.append({'label': g | title, 'count': r[g ~ '_ips'] or 0,
+                          'color': GROUP_COLOR_VARS[g]}) -%}
+{%- endfor -%}
+<td data-label="Class mix" data-col="class_mix">{{ mix_bar(parts) }}</td>
+{%- endmacro -%}
+
+
+{# Status mix — same bar, HTTP status classes instead of taxonomy groups. #}
+{%- macro status_mix_cell(r) -%}
+{%- set parts = [
+    {'label': '2xx success', 'count': r.s2xx or 0, 'color': 'var(--green)'},
+    {'label': '3xx redirect', 'count': r.s3xx or 0, 'color': 'var(--text-muted)'},
+    {'label': '4xx client error', 'count': r.s4xx or 0, 'color': 'var(--yellow)'},
+    {'label': '5xx server error', 'count': r.s5xx or 0, 'color': 'var(--red)'}] -%}
+<td data-label="Status mix" data-col="status_mix">{{ mix_bar(parts) }}</td>
+{%- endmacro -%}
+
+
+{# Signal-mix parts for one aggregation row — the signals in registry
+   order. The `<alias>_ips` columns are generated from the same registry in
+   queries._AGG_SIGNAL_IP_COUNTS, so bar and query cannot drift apart. #}
+{%- macro signal_mix_cell(r) -%}
+{%- set parts = [] -%}
+{%- for s in SIGNALS -%}
+{%- set _ = parts.append({'label': s.label, 'count': r[s.alias ~ '_ips'] or 0,
+                          'color': s.color_var}) -%}
+{%- endfor -%}
+<td data-label="Signals" data-col="signal_mix">{{ mix_bar(parts) }}</td>
+{%- endmacro -%}

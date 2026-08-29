@@ -1,0 +1,128 @@
+/*
+  docs.css — the rendered markdown of a docs/ page.
+
+  Loaded only by docs.html. Markdown output carries no project classes, so every
+  element needs a rule here; scoping them under .doc-body keeps them off the
+  dashboard's own markup. Colours, spacing and type come from tokens.css only —
+  a literal here would be the one place the two themes stop agreeing.
+*/
+
+/* The body takes the panel. Only running text is held back: at a wide window a
+   line would otherwise run past 160 characters and the eye loses the return
+   sweep. Tables and code are the reason this file exists in the first place and
+   get the full width. */
+.doc-body {
+  color: var(--text);
+  font-size: var(--font-sm);
+  line-height: 1.65;
+}
+.doc-body p,
+.doc-body ul,
+.doc-body ol,
+.doc-body blockquote {
+  max-width: 95ch;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────────── */
+/* The document's own h1 repeats the nav entry that led here, so it is hidden
+   rather than removed from the source: the .md files are read on GitHub too,
+   where the title is the first thing on the page. */
+.doc-body > h1:first-child { display: none; }
+
+.doc-body h1,
+.doc-body h2,
+.doc-body h3,
+.doc-body h4 {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: var(--space-lg) 0 var(--space-sm);
+}
+.doc-body h1 { font-size: var(--font-lg); }
+.doc-body h2 {
+  font-size: var(--font-md);
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.doc-body h3 { font-size: var(--font-base); }
+.doc-body h4 { font-size: var(--font-sm); color: var(--text-muted); }
+.doc-body > :first-child { margin-top: 0; }
+
+/* ── Prose ───────────────────────────────────────────────────────────────── */
+.doc-body p { margin: 0 0 var(--space-md); }
+.doc-body ul,
+.doc-body ol { margin: 0 0 var(--space-md); padding-left: 1.3rem; }
+.doc-body li { margin-bottom: 0.3rem; }
+.doc-body li > ul,
+.doc-body li > ol { margin: 0.3rem 0 0; }
+.doc-body a { color: var(--accent); text-decoration: none; }
+.doc-body a:hover { text-decoration: underline; }
+.doc-body strong { color: var(--text); font-weight: 600; }
+.doc-body hr {
+  height: 0;
+  margin: var(--space-lg) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.doc-body blockquote {
+  margin: 0 0 var(--space-md);
+  padding: 0.1rem 0 0.1rem var(--space-md);
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* ── Code ────────────────────────────────────────────────────────────────── */
+/* Inline code is deliberately absent here. base.css styles `code` once — mono
+   face, --text, 0.95em so it tracks the size of whatever text it sits in — and
+   that rule was consolidated out of six that disagreed. Re-declaring the face
+   or pinning a step off the type scale here would start the seventh.
+
+   A fenced block is a different thing and does need rules. It sits on --bg
+   inside a --bg-panel card: the same 1.08:1 separation .panel itself has
+   against the page, read the other way round — recessed rather than raised.
+   The border delimits it, as everywhere else in the system. */
+.doc-body pre {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+/* Scrolls rather than wraps: the docs hold box-drawing trees and shell lines
+   where a wrap would change what the reader is looking at. */
+.doc-body pre code { white-space: pre; }
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+/* A real table, filling the panel and wrapping inside its cells. It used to be
+   display:block with width:max-content, which made every wide table its own
+   horizontal scroller — the panel was capped at 78ch, so that was most of them.
+   `table-layout: auto` lets the columns divide the width by content. */
+.doc-body table {
+  width: 100%;
+  table-layout: auto;
+  margin: 0 0 var(--space-md);
+  border-collapse: collapse;
+  font-size: var(--font-xs);
+}
+.doc-body pre { width: 100%; }
+.doc-body th,
+.doc-body td {
+  padding: 0.4rem var(--space-sm);
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.doc-body th {
+  background: var(--bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* A cell wraps rather than widening the table. Without this one unbreakable
+   token — a long path or URL inside `code` — sets the column width and pushes
+   the table past the panel again, which is the whole fault being fixed here. */
+.doc-body td { overflow-wrap: anywhere; }
+/* Backstop for a window narrow enough that even wrapped cells do not fit: the
+   body scrolls, never the page. */
+.doc-body { overflow-x: auto; }

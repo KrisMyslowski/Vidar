@@ -1,0 +1,112 @@
+{#
+  macros/layout.html — Page frame: the header, the tab strips, and the two empty states.
+
+  Imported through _macros.html, which re-exports every block; no page needs
+  to know which file a block lives in.
+#}
+{% from 'macros/_tip.html' import tip_attrs %}
+{%- macro page_header(title, count_label='', refresh=true) -%}
+<div class="page-header">
+  <h2>{{ title }}</h2>
+  {%- if count_label %}<span class="page-header-count">{{ count_label }}</span>{% endif %}
+  {%- if refresh or caller is defined %}
+  <div class="page-header-actions">
+    {%- if caller is defined %}{{ caller() }}{% endif %}
+    {%- if refresh %}<button class="btn-refresh" data-reload>↻ Refresh</button>{% endif %}
+  </div>
+  {%- endif %}
+</div>
+{%- endmacro -%}
+
+
+{#
+  empty_state — names the filter that caused the empty result and offers exactly
+  that step back. One pattern for every table and for the map.
+  noun: what is missing ("network", "visitor", "host").
+  filters: list of {label, color} — the active filters, rendered as chips.
+#}
+{%- macro empty_state(noun, filters=none, clear_href='', clear_label='') -%}
+<div class="empty-state">
+  <div class="empty-state-text">
+    {%- if filters %}
+    No {{ noun }} matches
+    {%- for f in filters %} <span class="empty-state-chip" style="--clr:{{ f.color }}">{{ f.label }}</span>{% if not loop.last %} +{% endif %}{% endfor %}
+    in the selected range.
+    {%- else %}
+    {#- Nothing is filtered, so nothing was excluded: say what is actually true. -#}
+    No {{ noun }}s recorded yet.
+    {%- endif %}
+  </div>
+  {%- if clear_href %}
+  <a class="empty-state-action" href="{{ clear_href }}">{{ clear_label or 'Clear filters' }}</a>
+  {%- endif %}
+</div>
+{%- endmacro -%}
+
+
+{# empty_state inside a table body — same block, spanning the whole row. #}
+{%- macro empty_row(colspan, noun, filters=none, clear_href='', clear_label='') -%}
+<tr class="empty-state-row"><td colspan="{{ colspan }}">{{ empty_state(noun, filters, clear_href, clear_label) }}</td></tr>
+{%- endmacro -%}
+
+
+{#
+  tab_row — one renderer for every tab strip: GROUP BY, VIEW, Top-panel tabs.
+  tabs: list of {label, href, active}.
+#}
+{%- macro tab_row(label, tabs) -%}
+<div class="tab-row">
+  {%- if label %}<span class="tab-row-label">{{ label }}</span>{% endif %}
+  <div class="tab-group">
+    {%- for t in tabs %}
+    <a class="tab{% if t.active %} active{% endif %}" href="{{ t.href }}">{{ t.label }}</a>
+    {%- endfor %}
+  </div>
+</div>
+{%- endmacro -%}
+
+
+{#
+  range_tabs — All / 24h / 7d / 30d / 90d / Custom instead of two bare date
+  inputs. The presets are plain links carrying ?range=; the route resolves them
+  to a date window. Custom reveals the same two date inputs as before.
+
+  The preset list is RANGE_PRESETS from dashboard.py, not a literal here: the
+  tab and the span it stands for are one fact, and they used to live in two
+  files. The window also outlives the page — the route remembers it in a session
+  cookie, which is why `All` exists at all: without it there is no way back to
+  the unfiltered view once a range has been picked.
+#}
+{%- macro range_tabs(active, base_path, extra_params='', date_from='', date_to='', hidden_params=none) -%}
+<div class="range-tabs">
+  <div class="tab-group">
+  {%- for key, label in RANGE_PRESETS %}
+  <a class="tab{% if active == key %} active{% endif %}" href="{{ base_path }}?range={{ key }}{{ extra_params }}"
+     {{ tip_attrs('Scope every number on this page to ' ~ label ~ '.',
+        'The window is remembered across pages; a link that names one wins over it.') }}>{{ label }}</a>
+  {%- endfor %}
+  <details class="range-custom" data-popover{% if active == 'custom' %} open{% endif %}>
+    <summary class="tab{% if active == 'custom' %} active{% endif %}"
+             {{ tip_attrs('A window of your own, instead of a preset.',
+                'Entering both dates switches the range to custom and overrides the preset above.') }}>Custom</summary>
+    <form class="range-custom-form" method="get" action="{{ base_path }}">
+      {#- Same rule as the search form: the custom range must not silently drop
+          the class/signal selection, the drill-downs or the search term. -#}
+      {%- for name, value in (hidden_params or []) %}
+      <input type="hidden" name="{{ name }}" value="{{ value | e }}">
+      {%- endfor %}
+      <label class="filter-search-date-label" for="range-from">From</label>
+      <input type="date" id="range-from" name="date_from" value="{{ date_from }}" min="{{ earliest_date() }}"
+             {{ tip_attrs('First day the window includes.',
+                'Earliest selectable day is the oldest visit still in the database.') }}>
+      <label class="filter-search-date-label" for="range-to">To</label>
+      <input type="date" id="range-to" name="date_to" value="{{ date_to }}" min="{{ earliest_date() }}"
+             {{ tip_attrs('Last day the window includes.', 'Inclusive — the whole day counts.') }}>
+      <button type="submit" class="filter-btn-submit"
+              {{ tip_attrs('Apply this window.',
+                 'Replaces the preset above and marks the range as custom.') }}>Apply</button>
+    </form>
+  </details>
+  </div>
+</div>
+{%- endmacro -%}

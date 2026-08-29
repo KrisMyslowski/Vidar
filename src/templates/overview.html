@@ -1,0 +1,155 @@
+{#
+  overview.html — triage first, numbers second. Two rows of tiles, who is
+  hitting the site, the findings that need acting on, then the Top block.
+
+  Activity and Traffic Rhythm used to close this page. Both now live on
+  /visitors?view=timeline, where they answer for the current selection instead
+  of always for everything — "when did this traffic happen" is a question about
+  a selection, and this page does not have one.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, range_tabs, stat_card,
+    th_tip, mix_bar, mix_legend, bar_rows, ip_class_bar %}
+{% block title %}Overview — Vidar{% endblock %}
+
+{% block content %}
+{% call page_header('Overview') %}
+  {{ range_tabs(active_range, '/', date_from=date_from, date_to=date_to) }}
+{% endcall %}
+
+{# ── Hero tiles: the four numbers worth a glance. ── #}
+<div class="cards cards--hero">
+  {{ stat_card('Visits', total_visits | fmtnum, ('Requests logged in the selected range.',
+      'One row per nginx access-log line, after static assets and internal IPs are dropped.'), delta=visits_delta, spark=spark_visits) }}
+  {{ stat_card('Unique IPs', unique_ips | fmtnum, ('Distinct visitor IPs in the selected range.',
+      'COUNT(DISTINCT ip) over the same rows the Visits tile counts.')) }}
+  {{ stat_card('Threat IPs', threat_ips | fmtnum, ('IPs the classifier put in the Threats group.',
+      'Exploit probers and protocol abusers — judged on what they did, not where they came from.'), color_class='text-red') }}
+  {{ stat_card('Error rate', error_rate ~ '%', ('Share of requests answered with 4xx or 5xx.',
+      'The status field of the nginx log, over every request in the range.'), color_class='text-yellow', spark=spark_errors) }}
+</div>
+
+{# ── The second row of the same thing. These sat at the bottom under a "More
+     numbers" label, which put five single-glance facts below three panels and a
+     chart — the one shape on this page that is read in a second was the last
+     thing reached. No label: a second row of tiles is not a different kind of
+     content, and naming it implied it was. ── #}
+<div class="cards">
+  {{ stat_card('Countries', total_countries, ('Countries the visiting IPs geolocate to.',
+      'Distinct country codes from ip-api.com, counted over enriched IPs.')) }}
+  {{ stat_card('Bounce rate', bounce_rate ~ '%', ('Share of IPs that made exactly one request.',
+      'Counted per IP over the range, not per session — there are no sessions here.')) }}
+  {{ stat_card('HTTPS rate', https_rate ~ '%', ('Share of requests served over TLS.',
+      'Requests with an ssl_protocol in the log, over all requests.')) }}
+  {{ stat_card('Avg response', avg_response_time | fmtresptime, ('Mean time nginx took to answer a request.',
+      'The request_time field, averaged over the range.'), size_class='card-value-md') }}
+  {{ stat_card('Bandwidth', total_bandwidth | fmtbytes, ('Response bytes sent to visitors.',
+      'Sum of body_bytes_sent over the range; request bodies are not counted.'), size_class='card-value-md', spark=spark_bytes) }}
+</div>
+
+{# ── Who is hitting the site — a bar and its legend, nothing else, so it is
+     given the full width and only the height it needs. It sat in a half-width
+     panel beside Needs attention, where the tallest of the two set the height
+     and this one padded the difference with empty panel. ── #}
+<div class="panel panel--slim">
+  <div class="table-block-head">
+    <span class="table-block-title">Who is hitting the site</span>
+    <span class="table-block-count">click a group to filter Visitors</span>
+  </div>
+  {{ mix_bar(class_mix, linked=true) }}
+  {{ mix_legend(class_mix) }}
+</div>
+
+{# ── Needs attention: findings, each linking to the view that shows it.
+       The sidebar carries a red count badge for this panel. When the panel it
+       points at looked like every other panel, that badge read as a stray
+       number — so the panel takes the same red, and the count is the same chip
+       the nav uses rather than a muted "4 open". Only when something is open:
+       a permanently red-rimmed panel is a rim nobody sees any more. ── #}
+<div class="panel{% if attention %} panel--attention{% endif %}">
+  <div class="table-block-head">
+    {% if attention %}<span class="attention-dot" aria-hidden="true"></span>{% endif %}
+    <span class="table-block-title">Needs attention</span>
+    {% if attention %}
+    <span class="nav-badge">{{ attention | length }}</span>
+    <span class="table-block-count">open</span>
+    {% else %}
+    <span class="table-block-count">all clear</span>
+    {% endif %}
+  </div>
+  <div class="card-note">clicking a row opens the view with the filter applied</div>
+  {% if attention %}
+  <ul class="attention">
+    {% for a in attention %}
+    <li>
+      <a class="attention-row" href="{{ a.href }}">
+        <span class="attention-tag" style="--clr: {{ a.color }}">{{ a.tag }}</span>
+        <span class="attention-text">{{ a.text }}</span>
+        <span class="attention-value">{{ a.value | fmtnum }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Nothing needs attention right now.</p>
+  {% endif %}
+</div>
+
+{# ── Top: one tabbed block (tabs.js — the data is already on the page,
+      so switching costs no reload). ── #}
+<div class="panel" data-tabs>
+  <div class="table-block-head">
+    <span class="table-block-title">Top</span>
+    <div class="tab-row">
+      <div class="tab-group">
+        <button type="button" class="tab active" data-tab="countries">Countries</button>
+        <button type="button" class="tab" data-tab="ips">IPs</button>
+        <button type="button" class="tab" data-tab="pages">Pages</button>
+        <button type="button" class="tab" data-tab="referrers">Referrers</button>
+        <button type="button" class="tab" data-tab="browsers">Browsers</button>
+        <button type="button" class="tab" data-tab="os">OS</button>
+      </div>
+    </div>
+  </div>
+
+  <div data-tab-panel="countries">
+    {{ bar_rows(top_rows.countries, GROUP_COLOR_VARS['humans'], 'top') }}
+  </div>
+  <div data-tab-panel="ips" hidden>
+    <table class="sortable responsive-table">
+      <thead>
+        <tr>{{ th_tip('IP', ('A visiting IP address.', 'Click to open its full history.'), w='c-ip') }}{{ th_tip('Class mix', ('Which identity group this IP belongs to.',
+      'One full band: an IP has exactly one class. The class name is in the bar\'s own tooltip.'), w='c-mix') }}{{ th_tip('Country', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}{{ th_tip('Visits', ('Requests from this IP in the range.', 'Rows in the visits table, not distinct pages.'), w='c-num') }}</tr>
+      </thead>
+      <tbody>
+        {% for row in top_ips %}
+        <tr>
+          <td data-label="IP" title="{{ row.ip }}"><a href="/visitors/{{ row.ip | urlencode }}">{{ row.ip }}</a></td>
+          <td data-label="Class mix">{{ ip_class_bar(row) }}</td>
+          <td data-label="Country">{{ row.country_code or '—' }}</td>
+          <td data-label="Visits">{{ row.count | fmtnum }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div data-tab-panel="pages" hidden>
+    {{ bar_rows(top_rows.pages, GROUP_COLOR_VARS['bots'], 'top') }}
+  </div>
+  <div data-tab-panel="referrers" hidden>
+    {{ bar_rows(top_rows.referrers, GROUP_COLOR_VARS['humans'], 'top') }}
+  </div>
+  <div data-tab-panel="browsers" hidden>
+    {{ bar_rows(top_rows.browsers, GROUP_COLOR_VARS['bots'], 'top') }}
+  </div>
+  <div data-tab-panel="os" hidden>
+    {{ bar_rows(top_rows.oses, GROUP_COLOR_VARS['bots'], 'top') }}
+  </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sparkline.js?v={{ asset_v }}"></script>
+{% endblock %}

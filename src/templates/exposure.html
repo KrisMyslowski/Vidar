@@ -1,0 +1,76 @@
+{#
+  exposure.html — formerly Tools → Shodan, now a drill surface: three facets over
+  the exposure data, and the host table they describe. Facets and table share one
+  filter state, so a facet count always matches the hosts below it.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, range_tabs, facet_list, drill_pills,
+    table_block, th_tip, shodan_links, overflow_cell, empty_row, ip_class_bar %}
+{% block title %}Exposure — Vidar{% endblock %}
+
+{% block content %}
+{#- The range strip belongs here like everywhere else: this was the one page
+    where the window did not apply, so it showed every IP ever enriched next to
+    a header that named a time range on the other four pages. -#}
+{% call page_header('Exposure', (total_all | fmtnum) ~ ' of ' ~ (enriched_ips | fmtnum) ~ ' IPs enriched via Shodan InternetDB') %}
+  {{ range_tabs(active_range, '/exposure', extra_params=range_params,
+     date_from=date_from, date_to=date_to) }}
+{% endcall %}
+
+<div class="facet-grid">
+  {% for f in facets %}
+  {{ facet_list(f.title, f.note, f.entries, facet_urls[f.param], f.active,
+                facet_clear_urls[f.param], f.color) }}
+  {% endfor %}
+</div>
+
+{{ drill_pills(pills, clear_href if pills else '') }}
+
+{#- Ports and CVEs are calm mono text, not badge walls: the facets above are the
+    drill surface, so a row only has to be readable at a glance. Class is the one
+    badge per row; Tags/Hostnames/Last fetched sit behind Columns ▾. -#}
+{% call table_block('Hosts', (total | fmtnum) ~ ' matching', table_key='exposure',
+     columns=[{'key': 'tags', 'label': 'Tags'}, {'key': 'hostnames', 'label': 'Hostnames'},
+              {'key': 'fetched', 'label': 'Last fetched'}],
+     page=page, total_pages=total_pages, pager_params=pager_params) %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('IP', ('A visiting IP that Shodan has data on.', 'Click to open its full history.'), w='c-ip') }}
+      {{ th_tip('CC', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}
+      {{ th_tip('Ports', ('TCP ports open on this host.',
+          'Shodan InternetDB. Use the Open ports facet above to filter by one.'), w='c-text') }}
+      {{ th_tip('Class mix', ('What this host is when it visits the site.',
+          'The same identity bar as in Visitors; the exact class is in the bar\'s own tooltip.'), w='c-mix') }}
+      {{ th_tip('CVEs', ('Known vulnerabilities in this host\'s exposed services.',
+          'CVE identifiers from Shodan. Use the CVEs facet above to filter by one.'), w='c-text') }}
+      {{ th_tip('Visits', ('Requests this host sent to the site.',
+          'Rows in the visits table for this IP, inside the selected range.'), w='c-num') }}
+      {{ th_tip('Tags', ('What Shodan says this host is.',
+          'Its own tags, e.g. scanner, vpn, cloud — a claim about the host, not about the visit.'), col_key='tags', w='c-text') }}
+      {{ th_tip('Hostnames', ('Hostnames Shodan resolved for this IP.',
+          'From its scan record — not the reverse DNS this dashboard looks up itself.'), col_key='hostnames', w='c-text') }}
+      {{ th_tip('Last fetched', ('When this host\'s Shodan record was last read.',
+          'ip_intel.fetched_at; the enrichment worker refreshes stale rows in the background.'), col_key='fetched', w='c-date') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in hosts %}
+    <tr>
+      <td data-label="IP" title="{{ h.ip }}"><a href="/visitors/{{ h.ip | urlencode }}">{{ h.ip }}</a></td>
+      <td data-label="CC">{{ h.country_code or '—' }}</td>
+      <td data-label="Ports" class="cell-mono" title="{{ h.open_ports or '' }}">{{ (h.open_ports or '—') | replace(',', ', ') }}</td>
+      <td data-label="Class mix">{{ ip_class_bar(h) }}</td>
+      <td data-label="CVEs" class="cell-mono{% if h.vulns %} text-red{% endif %}" title="{{ h.vulns or '' }}">{{ (h.vulns or '—') | replace(',', ', ') }}</td>
+      <td data-label="Visits">{{ h.visit_count | fmtnum }}</td>
+      <td data-label="Tags" data-col="tags"><span class="cell-overflow">{{ shodan_links(h.tags, 'tag', extra=range_suffix) }}</span></td>
+      <td data-label="Hostnames" data-col="hostnames">{{ overflow_cell(h.hostnames | csv_items) }}</td>
+      <td data-label="Last Fetched" class="nowrap" data-col="fetched">{{ h.fetched_at | fmtdate }}</td>
+    </tr>
+    {% else %}
+    {{ empty_row(9, 'host', filter_chips, clear_href if filter_chips else '', 'Clear filters') }}
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% endblock %}

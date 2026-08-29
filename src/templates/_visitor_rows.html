@@ -1,0 +1,47 @@
+{#
+  _visitor_rows.html — slide-over body: the IPs behind one aggregation row.
+  Served as a fragment by /visitors/rows and injected by drawer.js; no page
+  change, so the drill-down stays a pill on the page underneath.
+#}
+{% from '_macros.html' import th_tip, ip_class_bar, ip_signal_bar %}
+<div class="drawer-head">
+  <div>
+    <span class="drawer-title">{{ kind }}</span>
+    {% if value %}<code class="drawer-value">{{ value }}</code>{% endif %}
+  </div>
+  <div class="drawer-head-actions">
+    <span class="table-block-count">{{ total | fmtnum }} IP{{ '' if total == 1 else 's' }}{% if total > limit %} · showing top {{ limit }}{% endif %}</span>
+    <button type="button" class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+</div>
+
+{% if rows %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('IP', ('A visiting IP address.', 'Click to open its full history.'), w='c-ip') }}
+      {{ th_tip('CC', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}
+      {{ th_tip('Class mix', ('Which identity group this IP belongs to.',
+                'One full band: an IP has exactly one class.'), w='c-mix') }}
+      {{ th_tip('Signals', ('What is known about this IP, beyond what it is.',
+                'Tor, proxy, hosting, blocklist and Shodan, each independent of the class.'), w='c-mix') }}
+      {{ th_tip('Visits', ('Requests from this IP in the range.',
+                'Rows in the visits table, not distinct pages.'), w='c-num') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in rows %}
+    <tr>
+      <td data-label="IP"><a href="/visitors/{{ v.ip | urlencode }}">{{ v.ip }}</a></td>
+      <td data-label="CC">{{ v.country_code or '—' }}</td>
+      <td data-label="Class mix">{{ ip_class_bar(v) }}</td>
+      <td data-label="Signals">{{ ip_signal_bar(v) }}</td>
+      <td data-label="Visits">{{ v.visit_count | fmtnum }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<a class="drawer-full-link" href="{{ full_href }}">Open as a filtered list →</a>
+{% else %}
+<p class="text-muted">No IPs behind this row in the selected range.</p>
+{% endif %}

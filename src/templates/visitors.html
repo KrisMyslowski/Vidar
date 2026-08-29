@@ -1,0 +1,296 @@
+{#
+  visitors.html — the one visitor surface. ?group= selects the grouping
+  (ip / asn / country / client / path), ?view= selects table or map. Replaces
+  the former All, Networks, Countries, Clients, Paths and Geomap pages; every
+  block on it comes from _macros.html.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, range_tabs, tab_row,
+    filter_rail, drill_pills, table_block, sortable_th, th_tip, empty_row,
+    empty_state, class_mix_cell, signal_mix_cell, status_mix_cell, mix_bar,
+    overflow_cell, visitor_row, activity_chart , tip_attrs %}
+{% block title %}{{ group_spec.title }} — Vidar{% endblock %}
+
+{% block head %}
+{% if view == 'map' %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set unit = group_spec.unit if group != 'ip' else 'IPs' %}
+{% if view == 'map' %}{% set count_label = '' %}
+{% elif view == 'timeline' %}{% set count_label = (total | fmtnum) ~ ' visits in range' %}
+{% else %}{% set count_label = (total | fmtnum) ~ ' ' ~ unit %}{% endif %}
+
+{% call page_header('Visitors', count_label) %}
+  {%- if view == 'map' %}<span class="page-header-count" id="map-count">{{ total | fmtnum }} IPs in viewport</span>{% endif %}
+  {{ range_tabs(active_range, '/visitors', extra_params=range_params,
+     date_from=date_from, date_to=date_to,
+     hidden_params=range_fields) }}
+{% endcall %}
+
+<div class="visitors-modes">
+  {#- View first: it decides whether a grouping applies at all. The map plots
+      individual IPs and the timeline aggregates by day, so neither honours
+      ?group= — showing the strip there would claim a grouping that does not. -#}
+  {{ tab_row('View', view_tabs) }}
+  {% if view == 'table' %}{{ tab_row('Group by', group_tabs) }}{% endif %}
+</div>
+
+{{ filter_rail(active_classes, active_signals, available_categories,
+    visitor_counts=visitor_counts, action='/visitors',
+    hidden_params=search_fields,
+    search_q=search_q, q_placeholder=group_spec.q_placeholder,
+    date_from=date_from, date_to=date_to,
+    search_help=search_help, search_unknown=search_unknown,
+    broad_fields=broad_fields, group_search_columns=group_search_columns) }}
+
+{{ drill_pills(drill, clear_href if drill else '') }}
+
+{% if view == 'map' %}
+  {#- Map view: same page, same filters, different presentation. The selection
+      panel and the country list are computed from what is actually in the
+      viewport, so panning and zooming *is* the selection. -#}
+  {% if markers %}
+  <div class="map-layout">
+    {#- No panel header: the map is the block. Its two controls sit on the map
+        itself, as overlays, so nothing competes with the picture. -#}
+    <div class="map-frame">
+      <div id="map"></div>
+      <div class="map-overlay map-overlay--tr">
+        <div class="tab-group">
+          <button type="button" class="tab active" data-map-mode="cluster">Cluster</button>
+          <button type="button" class="tab" data-map-mode="heat">Heat</button>
+        </div>
+      </div>
+      <div class="map-overlay map-overlay--bl map-hint">
+        Shift-drag a box to set a <strong>viewport</strong> pill
+      </div>
+    </div>
+
+    <div class="map-side">
+      <div class="panel">
+        <div class="table-block-head"><span class="table-block-title">Selection</span></div>
+        <div class="selection-stats">
+          <div><span class="card-label">IPs</span><span class="card-value card-value-md" id="sel-ips">0</span></div>
+          <div><span class="card-label">Countries</span><span class="card-value card-value-md" id="sel-countries">0</span></div>
+          <div><span class="card-label">Threats</span><span class="card-value card-value-md text-red" id="sel-threats">0</span></div>
+        </div>
+        <span class="mix-bar" id="sel-mix" tabindex="0"></span>
+        <div class="mix-legend" id="sel-legend"></div>
+      </div>
+
+      <div class="panel">
+        <div class="table-block-head">
+          <span class="table-block-title">Countries in viewport</span>
+        </div>
+        <div class="facet-rows facet-rows--code" id="sel-countries-list"></div>
+        <div class="daybars-note">Click zooms the map and sets the country filter.</div>
+      </div>
+    </div>
+  </div>
+
+  <script id="markers-data" type="application/json">{{ markers | tojson }}</script>
+  {% if server_location %}<script id="server-location-data" type="application/json">{{ server_location | tojson }}</script>{% endif %}
+  {% else %}
+  {{ empty_state('mapped IP', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters') }}
+  {% endif %}
+
+{% elif view == 'timeline' %}
+  {#- Timeline view: the same selection over time. Two shapes of the one
+      question — when did this traffic happen. Activity puts it on a date axis
+      and carries the selection into its own zoom requests; Traffic Rhythm folds
+      the same rows onto weekday × hour, which is where a daily cron or an
+      office-hours pattern shows up and a date axis cannot.
+
+      Both answer for the current filters. The heatmap used to live on the
+      Overview, where it was all-time by definition; here it takes the class,
+      signal and search filters like everything else on the page, so the two
+      blocks below can never disagree about what is being counted. -#}
+  {% if activity_days %}
+  <div class="panel">
+    <div class="table-block-head">
+      <span class="table-block-title">Activity</span>
+      <span class="table-block-count">visits per {{ activity_bucket }}, split by identity group</span>
+      {#- No series legend. The group chips at the top of the page carry the same
+          five colours and actually filter; a legend under them repeated the
+          key and did nothing when clicked. -#}
+    </div>
+    {{ activity_chart(activity_days, activity_series, chart_params,
+                      bucket=activity_bucket, hour_switch=hour_switch_days) }}
+  </div>
+
+  <div class="panel">
+    <div class="table-block-head">
+      <span class="table-block-title">Traffic Rhythm</span>
+      <span class="table-block-count">hour × weekday, UTC — same selection</span>
+    </div>
+    {#- No group toggle above the grid. It was this block's own way of slicing by
+        identity group, from when the heatmap sat on the Overview and could not
+        be filtered at all. The page's group chips do that now, for every block
+        at once — two controls for one thing, and the one up top is the one that
+        also narrows the chart and the tables. -#}
+    {% if heatmap_max.total %}
+    <div class="heatmap">
+      <div></div>
+      {% for h in range(24) %}<div class="heatmap-hour">{% if h % 3 == 0 %}{{ '%02d' % h }}{% endif %}</div>{% endfor %}
+      {% for row in heatmap_grid %}
+      <div class="heatmap-day">{{ row.label }}</div>
+      {% for c in row.cells %}
+      {% if c.total %}<div class="heatmap-cell label-help" style="--hm: {{ (c.total / heatmap_max.total) | round(3) }}"
+           {{ tip_attrs(row.label ~ ' ' ~ ('%02d' % loop.index0) ~ ':00 — ' ~ (c.total | fmtnum) ~ ' visits') }}></div>
+      {% else %}<div class="heatmap-cell heatmap-cell--zero"></div>{% endif %}
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">No visits in this selection.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  {{ empty_state('visit', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters') }}
+  {% endif %}
+
+{% elif group == 'ip' %}
+  {#- IP rows keep their own columns: one IP has exactly one class, so a mix bar
+      would carry nothing the class badge doesn't already show. -#}
+  {#- Seven columns by default. City, Pages, Port, Browser and OS are real detail
+      but rarely the reason someone opens this table, and carrying all twelve left
+      every flexible column at ~4 rem — too narrow for "Mobile Safari 13.2.3" no
+      matter how it is rendered. They stay one click away under Columns ▾. -#}
+  {% call table_block('Visitors', (total | fmtnum) ~ ' IPs', table_key='visitors-ip',
+       columns=[{'key': 'isp', 'label': 'ISP'},
+                {'key': 'city', 'label': 'City', 'off': true},
+                {'key': 'pages', 'label': 'Pages', 'off': true},
+                {'key': 'port', 'label': 'Port', 'off': true},
+                {'key': 'browser', 'label': 'Browser', 'off': true},
+                {'key': 'os', 'label': 'OS', 'off': true}],
+       page=page, total_pages=total_pages, pager_params=pager_params) %}
+  <table class="sortable server-sort responsive-table visitor-table">
+    <thead>
+      <tr>
+        {{ sortable_th('ip',            'IP',        ('A visiting IP address.', 'Click to open its full history.'), sort, order, sort_suffix, w='c-ip') }}
+        {{ sortable_th('country',       'Country',   ('Where the IP geolocates to.', 'Country from ip-api.com, resolved once per IP.'), sort, order, sort_suffix, w='c-cc') }}
+        {{ sortable_th('city',          'City',      ('Approximate city of the IP.', 'ip-api.com; noticeably less reliable than the country.'), sort, order, sort_suffix, col_key='city', w='c-city') }}
+        {{ sortable_th('isp',           'ISP',       ('The provider announcing this IP.', 'ip-api.com isp field. A cloud operator here is what sets the Hosting signal.'), sort, order, sort_suffix, col_key='isp', w='c-text') }}
+        {{ th_tip('Signals', ('What is known about this IP, beyond what it is.',
+            'Tor, proxy, hosting, blocklist and Shodan, each independent of the class — a bot can be on Tor.'), col_key='signal_mix', w='c-mix') }}
+        {{ sortable_th('visitor_class', 'Class mix', ('Which identity group this IP belongs to.',
+           'One full band: an IP has exactly one class. Network origin is a signal, shown separately.'), sort, order, sort_suffix, default_order='ASC', col_key='class_mix', w='c-mix') }}
+        {{ sortable_th('visit_count',   'Visits',    ('Requests from this IP in the range.',
+           'Rows in the visits table. Many requests across few paths is the scanner shape.'), sort, order, sort_suffix, w='c-num') }}
+        {{ sortable_th('unique_pages',  'Pages',     ('Distinct paths this IP requested.',
+           'Content paths only — protocol errors and the port-80 redirect are excluded.'), sort, order, sort_suffix, col_key='pages', w='c-num') }}
+        {{ sortable_th('ports',         'Port',      ('Which of our ports the IP connected to.',
+           'server_port from the log: 80 is plain HTTP, 443 is TLS. Not a port on the visitor.'), sort, order, sort_suffix, col_key='port', w='c-port') }}
+        {{ sortable_th('browsers',      'Browser',   ('Browser named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, sort_suffix, col_key='browser', w='c-client') }}
+        {{ sortable_th('oses',          'OS',        ('Operating system named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, sort_suffix, col_key='os', w='c-client') }}
+        {{ sortable_th('last_seen',     'Last seen', ('The IP\'s most recent request.', 'MAX(timestamp) over its visits inside the range.'), sort, order, sort_suffix, w='c-date') }}
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in rows %}
+      {{ visitor_row(v) }}
+      {% else %}
+      {{ empty_row(12, 'visitor', active_filter_chips, clear_href, 'Clear filters') }}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+
+{% else %}
+  {#- The four aggregations share one frame; only the leading dimension columns
+      differ. Class mix and Signals are the same two mix bars everywhere. -#}
+  {% set span = {'asn': 8, 'country': 6, 'client': 8, 'path': 7}[group] %}
+  {% call table_block(group_spec.title, (total | fmtnum) ~ ' ' ~ group_spec.unit,
+       table_key='visitors-' ~ group,
+       columns=[{'key': 'class_mix', 'label': 'Class mix'}, {'key': 'signal_mix', 'label': 'Signals'},
+                {'key': 'last_seen', 'label': 'Last seen'}],
+       page=page, total_pages=total_pages, pager_params=pager_params) %}
+  <table class="sortable server-sort responsive-table">
+    <thead>
+      <tr>
+        {% if group == 'asn' %}
+          {{ sortable_th('asn', 'ASN', ('The network this IP is announced from.', 'ASN from ip-api.com. Click to list the IPs inside it.'), sort, order, sort_suffix, w='c-badge') }}
+          {{ sortable_th('org', 'Org', ('Who owns the network.', 'ip-api.com org field.'), sort, order, sort_suffix, w='c-text') }}
+          {{ th_tip('ISP', ('The provider operating the network.', 'ip-api.com isp field; often the same name as Org.'), w='c-text') }}
+          {{ th_tip('Countries', ('How many countries this network appeared from.', 'Distinct country codes across the IPs in the row.'), w='c-badge') }}
+        {% elif group == 'country' %}
+          {{ sortable_th('country', 'Country', ('Where the IPs in this row geolocate to.', 'ip-api.com. Click to list the IPs behind it.'), sort, order, sort_suffix, default_order='ASC', w='c-text') }}
+        {% elif group == 'client' %}
+          {{ sortable_th('browser', 'Browser', ('Browser named by the User-Agent.', 'Parsed from the UA string. Click to list the IPs behind it.'), sort, order, sort_suffix, default_order='ASC', w='c-client') }}
+          {{ sortable_th('os', 'OS', ('Operating system named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, sort_suffix, default_order='ASC', w='c-client') }}
+          {{ sortable_th('device', 'Device', ('Device class named by the User-Agent.', 'Desktop, Mobile or Bot, as the UA parser read it.'), sort, order, sort_suffix, default_order='ASC', w='c-badge') }}
+        {% elif group == 'path' %}
+          {{ sortable_th('path', 'Path', ('The path that was requested.', 'request_uri from the log, query string removed. Click to list the IPs.'), sort, order, sort_suffix, default_order='ASC', w='c-wide') }}
+          {{ th_tip('Status mix', ('How this path was answered.',
+              'Share of 2xx, 3xx, 4xx and 5xx across its requests.'), col_key='status_mix', w='c-mix') }}
+        {% endif %}
+        {{ th_tip('Class mix', ('Which identity groups the IPs in this row belong to.',
+            'Share of distinct IPs per group; the counts are in the bar\'s own tooltip.'), col_key='class_mix', w='c-mix') }}
+        {{ th_tip('Signals', ('What is known about the IPs in this row.',
+            'Share of distinct IPs carrying each signal. An IP can carry several.'), col_key='signal_mix', w='c-mix') }}
+        {{ sortable_th('unique_ips', 'IPs', ('How many distinct IPs this row stands for.', 'COUNT(DISTINCT ip) inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
+        {{ sortable_th('visits', 'Visits', ('Requests from all IPs in this row.', 'Rows in the visits table inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
+        {{ sortable_th('last_seen', 'Last seen', ('The row\'s most recent request.', 'MAX(timestamp) across the IPs behind it.'), sort, order, sort_suffix, col_key='last_seen', w='c-date') }}
+      </tr>
+    </thead>
+    <tbody>
+      {#- Row click opens the IPs behind the row in a slide-over (drawer.js);
+          the links inside the row keep their own targets. -#}
+      {% set drill_key = {'asn': 'asn', 'country': 'country', 'client': 'browser', 'path': 'path'}[group] %}
+      {% for r in rows %}
+      {% set drill_val = {'asn': r.asn, 'country': r.country_code, 'client': r.browser, 'path': r.path}[group] %}
+      <tr{% if drill_val %} data-drawer-src="/visitors/rows?{{ drill_key }}={{ drill_val | urlencode }}{{ rows_params }}"{% endif %}>
+        {% if group == 'asn' %}
+          <td data-label="ASN" title="{{ r.asn }}"><a href="/visitors?asn={{ r.asn | urlencode }}">{{ r.asn }}</a></td>
+          <td data-label="Org" title="{{ r.org or '' }}">{{ r.org or '—' }}</td>
+          <td data-label="ISP" title="{{ r.isp or '' }}">{{ r.isp or '—' }}</td>
+          <td data-label="Countries">{{ r.country_count | fmtnum }}</td>
+        {% elif group == 'country' %}
+          <td data-label="Country" title="{{ r.country_code }} {{ r.country or '' }}">
+            <a href="/visitors?country={{ r.country_code | urlencode }}"><strong>{{ r.country_code }}</strong></a>
+            <span class="text-muted">{{ r.country or '' }}</span>
+          </td>
+        {% elif group == 'client' %}
+          <td data-label="Browser" title="{{ r.browser or '' }}">
+            {% if r.browser %}<a href="/visitors?browser={{ r.browser | urlencode }}">{{ r.browser }}</a>{% else %}—{% endif %}
+          </td>
+          <td data-label="OS" title="{{ r.os or '' }}">{{ r.os or '—' }}</td>
+          <td data-label="Device">{{ r.device or '—' }}</td>
+        {% elif group == 'path' %}
+          {% set tip = r.path | path_tip %}
+          <td data-label="Path" class="col-path"><a href="/visitors?path={{ r.path | urlencode }}"{{ tip_attrs(tip) }}>{{ r.path }}</a></td>
+          {{ status_mix_cell(r) }}
+        {% endif %}
+        {{ class_mix_cell(r) }}
+        {{ signal_mix_cell(r) }}
+        <td data-label="IPs">{{ r.unique_ips | fmtnum }}</td>
+        <td data-label="Visits">{{ r.visits | fmtnum }}</td>
+        <td data-label="Last Seen" class="nowrap" data-col="last_seen">{{ r.last_seen | fmtdate }}</td>
+      </tr>
+      {% else %}
+      {{ empty_row(span, group_spec.noun, active_filter_chips, clear_href, 'Clear filters') }}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if view == 'map' and markers %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
+  {%- if carto_api_key() %}
+  {#- The basemap key, for map.js. Here rather than in base.html: only the
+      two pages with a map need it, and a documentation page carrying a
+      tile key is exposure for nothing. -#}
+  <script type="application/json" id="map-tile-data">{{ {"key": carto_api_key()} | tojson }}</script>
+  {%- endif %}
+<script src="/static/js/map.js?v={{ asset_v }}"></script>
+{% endif %}
+{% endblock %}

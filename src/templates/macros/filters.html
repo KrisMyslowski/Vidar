@@ -1,0 +1,258 @@
+{#
+  macros/filters.html — The filter rail, the pills that show what is filtered, and the Shodan
+  links.
+
+  Imported through _macros.html, which re-exports every block; no page needs
+  to know which file a block lives in.
+#}
+{% from 'macros/_tip.html' import tip_attrs %}
+
+
+{#
+  shodan_links — render a comma-separated Shodan field (ports/tags/vulns) as badge
+  links to /exposure?<param>=<value> (every host sharing that value). Emits
+  just the anchors; wrap in <span class="cell-overflow"> on table rows so
+  overflow.js collapses them to a [+N], or use bare (kv rows) to show all.
+#}
+{#- extra: the caller's time window as a URL suffix ("&range=24h"). Exposure
+    passes it; the IP detail page has no window and passes nothing. Without it a
+    tag badge dropped the reader back onto the default range — the same trap as
+    a facet link built without the range, just one macro further out. -#}
+{%- macro shodan_links(csv, param, badge='badge-muted', extra='') -%}
+{%- set parts = (csv or '').split(',') | map('trim') | reject('equalto', '') | list -%}
+{%- if not parts -%}—{%- else -%}
+{%- for p in parts -%}<a class="badge {{ badge }}" href="/exposure?{{ param }}={{ p | urlencode }}{{ extra }}"
+   {{ tip_attrs('Shodan ' ~ param ~ ': ' ~ p ~ '.', 'Opens Exposure, listing every host that shares it.') }}>{{ p }}</a>{% endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
+
+{#
+  drill_pills — active exact-match drill-downs (from a table row, the map, or
+  the matrix) as removable pills. Every drill-down lands here, in one row.
+  pills: list of {kind, value, href} — href removes that one pill.
+#}
+{%- macro drill_pills(pills, clear_href='') -%}
+{%- if pills %}
+<div class="drill-pills">
+  <span class="drill-pills-label">Active</span>
+  {%- for p in pills %}
+  <span class="drill-pill{% if p.color %} drill-pill--tinted{% endif %}"{% if p.color %} style="--clr: {{ p.color }}"{% endif %}
+        {{ tip_attrs('This list is narrowed to one ' ~ p.kind ~ '.',
+           'An exact match, unlike a search term, which matches anywhere in the value.') }}><strong>{{ p.kind }}</strong><code>{{ p.value }}</code><a href="{{ p.href }}" title="Remove filter" aria-label="Remove {{ p.kind }} filter {{ p.value }}">✕</a></span>
+  {%- endfor %}
+  {%- if clear_href %}<a class="drill-pills-clear" href="{{ clear_href }}">clear all</a>{% endif %}
+</div>
+{%- endif %}
+{%- endmacro -%}
+
+
+{#
+  filter_rail — the ONE filter row: identity groups as chips, classes and
+  signals behind disclosures, free-text search on the right. Replaces the five
+  stacked chip columns of visitor_filter_bar.
+  Keeps the .visitor-filter-bar container class and the
+  .filter-toggle[data-filter-value|data-signal-value] contract, so filters.js
+  drives it unchanged.
+#}
+{%- macro filter_rail(active_classes, active_signals, available_categories,
+                       visitor_counts=none, action='', hidden_params=none,
+                       search_q='', q_placeholder='', date_from='', date_to='',
+                       search_help=none, search_unknown=none,
+                       broad_fields=none, group_search_columns='') -%}
+<div class="panel visitor-filter-bar filter-rail">
+  <div class="filter-rail-row">
+    <button type="button" class="filter-toggle filter-toggle--all{% if not active_classes and not active_signals %} active{% endif %}"
+            aria-pressed="{{ 'true' if not active_classes and not active_signals else 'false' }}"
+            {{ tip_attrs('Every visitor, with no class or signal selected.',
+               'Clears the chips only — a drill-down, a search term or the date range stay.') }}>All{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get('all', 0) | fmtnum }}</strong>{% endif %}</button>
+
+    {#- Group chips. Each group carries its own subclasses, so the taxonomy is
+        read where it lives instead of in one flat "Classes" list that mixed all
+        five groups together. The summary itself has no data-filter-value — it
+        only opens the menu; "All" inside it is the group filter, which keeps
+        filters.js binding to data-filter-value alone. -#}
+    {%- for group, cats in available_categories %}
+    {%- set gkey = group %}
+    {%- set gval = group %}
+    {%- set gtip = GROUP_TIPS.get(gkey, ('', '')) %}
+    {%- set glabel = group | title %}
+    {%- set subs = [] %}
+    {%- for cat in cats if '/' in cat %}{% set _ = subs.append(cat) %}{% endfor %}
+    {%- set ns = namespace(active = gval in active_classes) %}
+    {%- for cat in subs %}{% if cat in active_classes %}{% set ns.active = true %}{% endif %}{% endfor %}
+    {%- if subs %}
+    <details class="group-filter" data-popover>
+      <summary class="filter-toggle{% if ns.active %} active{% endif %}"
+               style="--clr: {{ GROUP_COLOR_VARS[group] }}"
+{{ tip_attrs(gtip) }}>
+        <span class="filter-dot"></span>{{ glabel }}{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get(gval, 0) | fmtnum }}</strong>{% endif %} ▾
+      </summary>
+      <div class="filter-disclosure-menu">
+        <button type="button" class="filter-toggle{% if gval in active_classes %} active{% endif %}"
+                style="--clr: {{ GROUP_COLOR_VARS[group] }}"
+                data-filter-value="{{ gval | e }}"
+{{ tip_attrs(gtip) }}>
+          <span class="filter-dot"></span>All {{ glabel }}{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get(gval, 0) | fmtnum }}</strong>{% endif %}
+        </button>
+        {#- Counts on the subclasses too: without them the menu says which
+            classes exist but not which ones the data actually has, so a reader
+            picks a filter to find out it returns nothing. get_visitor_ip_counts
+            already keys full class strings — this only renders them. -#}
+        {%- for cat in subs %}
+        {%- set tip = CLASS_TIPS.get(cat, ('', '')) %}
+        <button type="button" class="filter-toggle{% if cat in active_classes %} active{% endif %}"
+                style="--clr: {{ GROUP_COLOR_VARS[group] }}"
+                data-filter-value="{{ cat | e }}"
+{{ tip_attrs(tip) }}>
+          <span class="filter-dot"></span>{{ cat.split('/')[1] }}{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get(cat, 0) | fmtnum }}</strong>{% endif %}
+        </button>
+        {%- endfor %}
+      </div>
+    </details>
+    {%- else %}
+    {#- A group with no subclasses (unknown) stays a plain filter chip. -#}
+    <button type="button" class="filter-toggle{% if gval in active_classes %} active{% endif %}"
+            style="--clr: {{ GROUP_COLOR_VARS[group] }}"
+            data-filter-value="{{ gval | e }}"
+{{ tip_attrs(gtip) }}>
+      <span class="filter-dot"></span>{{ glabel }}{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get(gval, 0) | fmtnum }}</strong>{% endif %}
+    </button>
+    {%- endif %}
+    {%- endfor %}
+
+    <details class="filter-disclosure" data-popover>
+      <summary{{ tip_attrs('What is known about an IP, beyond what it is.',
+                'Independent of the class — a human on a VPN keeps its class and carries the proxy signal.') }}>Signals ▾</summary>
+      <div class="filter-disclosure-menu">
+        {#- Straight from SIGNAL_LABELS so a new signal shows up here by itself. -#}
+        {%- for sig in SIGNAL_LABELS %}
+        <button type="button" class="filter-toggle{% if sig in active_signals %} active{% endif %}"
+                style="--clr: {{ SIGNAL_COLOR_VARS[sig] }}"
+                data-signal-value="{{ sig }}"
+{{ tip_attrs(SIGNAL_TIPS.get(sig)) }}>
+          <span class="filter-dot"></span>{{ SIGNAL_LABELS[sig] }}
+        </button>
+        {%- endfor %}
+      </div>
+    </details>
+
+  </div>
+
+    {%- if action %}
+  <div class="filter-rail-row filter-rail-searchrow">
+    {#- Hidden inputs carry every other active filter, so submitting a search
+        narrows the current selection instead of resetting it. -#}
+    <form class="filter-rail-search" method="get" action="{{ action }}">
+      {%- for name, value in (hidden_params or []) %}
+      <input type="hidden" name="{{ name }}" value="{{ value | e }}">
+      {%- endfor %}
+      <input type="search" name="q" value="{{ search_q }}" placeholder="{{ q_placeholder or 'Search…' }}"
+             aria-label="{{ q_placeholder or 'Search' }}"
+             {{ tip_attrs('Free-text search across this grouping.',
+                'field:value narrows to one field; bare terms match several. See Help for the fields.') }}>
+      {%- if search_unknown %}
+      {#- Covers both shapes now: a field name nobody knows, and a known field
+          given a value outside its enumeration. Both are dropped, and being
+          told is the whole point — a silently dropped term means the page
+          filters differently than the reader believes. -#}
+      <span class="search-unknown" role="alert">Ignored, no such field or value: <code>{{ search_unknown | join(', ') }}</code></span>
+      {%- endif %}
+    </form>
+    {#- Help. The panel is a *sibling* of the <details>, not its content: that
+        keeps the button inline beside the search box while the tables still
+        span the full row below it. As the details' content it would drag the
+        button onto its own line, and as an overlay it would cover the tables.
+
+        Three tabs, because the rail asks three things of a reader — what to
+        type, what the class chips mean, and what the signal chips mean — and
+        the last two had no answer anywhere except the tooltip on each chip,
+        one at a time. Both lists are generated from the taxonomy registry, so
+        a class or signal added there documents itself here. -#}
+    {%- if search_help %}
+    <details class="search-help">
+      <summary class="filter-disclosure-summary" title="Search syntax, classes and signals"
+               aria-controls="search-syntax">Help ▾</summary>
+    </details>
+    <div class="search-help-panel" id="search-syntax" data-tabs>
+      <div class="tab-row">
+        <div class="tab-group">
+          <button type="button" class="tab active" data-tab="syntax"{{ tip_attrs('How to write a search term.', 'The fields you can name, and what a bare term matches.') }}>Syntax</button>
+          <button type="button" class="tab" data-tab="classes"{{ tip_attrs('What each identity class means.', 'Generated from the taxonomy — the value ?class= takes, and how it is decided.') }}>Classes</button>
+          <button type="button" class="tab" data-tab="signals"{{ tip_attrs('What each signal means.', 'Generated from the registry — the value ?signal= takes, and where it comes from.') }}>Signals</button>
+        </div>
+      </div>
+
+      <div data-tab-panel="syntax">
+        <p class="search-help-lead">Type <code>field:value</code> to search one thing. Terms are combined with AND; <code>"quote a phrase"</code> to keep spaces.</p>
+        <table class="search-help-table">
+          {%- for row in search_help %}
+          <tr>
+            <td><code>{{ row.example }}</code></td>
+            <td>{{ row.label }}{% if row.aliases %} <span class="text-muted">({{ row.aliases }})</span>{% endif %}{% if row.note %} — <span class="text-muted">{{ row.note }}</span>{% endif %}</td>
+          </tr>
+          {%- endfor %}
+        </table>
+        <p class="search-help-lead">Without a field, an unmistakable shape is recognized on its own: <code>DE</code> a country, <code>AS13335</code> a network, <code>/.env</code> a path, <code>192.0.2.</code> an IP, <code>404</code> a status. Name a field to override one — <code>path:de</code> searches paths again.</p>
+        {#- Which fields a bare term reaches, read out of the code rather than
+            described. The sentence here used to name five categories on every
+            grouping — one of them ("geo") not a field at all — while the IP
+            grouping searched eleven and each aggregation searched two or
+            three. One grouping, one answer. -#}
+        {%- if group_search_columns %}
+        <p class="search-help-lead">Anything else searches {{ group_search_columns }} — the columns this grouping is built from.</p>
+        {%- else %}
+        <p class="search-help-lead">Anything else is matched against
+          {%- for f in broad_fields %}{{ ' ' }}<code>{{ f }}</code>{{ '.' if loop.last else ',' }}{%- endfor %}</p>
+        {%- endif %}
+      </div>
+
+      {#- Identity: what a visitor *is*. One row per class, grouped, with the
+          value ?class= takes — the group prefix is part of it, and leaving it
+          out is the most common way a hand-built URL filters nothing. -#}
+      <div data-tab-panel="classes" hidden>
+        <p class="search-help-lead">What a visitor <em>is</em>. Exactly one per IP, decided from its whole history and re-judged when its behavior changes. Filter with <code>class:&lt;value&gt;</code> or the chips above — a group value selects every class under it.</p>
+        {#- One table for every group, not one per group: a table sizes its own
+            columns, so five of them put the description column in five
+            different places. -#}
+        <table class="search-help-table">
+          {%- for grp in TAXONOMY_GROUPS %}
+          {%- set classes = TAXONOMY_DATA.class_groups.get(grp) %}
+          <tr class="search-help-group">
+            <td><code style="color: {{ GROUP_COLOR_VARS[grp] }}">{{ grp }}</code></td>
+            <td>{{ GROUP_TIPS[grp][0] if grp in GROUP_TIPS else '' }}</td>
+          </tr>
+          {%- for cls in classes %}
+          <tr>
+            <td><code>{{ cls }}</code></td>
+            <td>{{ CLASS_TIPS[cls][0] if cls in CLASS_TIPS else '' }}
+              {%- if cls in CLASS_TIPS %} <span class="text-muted">{{ CLASS_TIPS[cls][1] }}</span>{% endif %}</td>
+          </tr>
+          {%- endfor %}
+          {%- endfor %}
+        </table>
+      </div>
+
+      {#- Signals: orthogonal to identity. A human on a VPN keeps its class and
+          carries the proxy signal — which is the thing the two-dimensional
+          model is for, and the thing nobody can guess from the chips alone. -#}
+      <div data-tab-panel="signals" hidden>
+        <p class="search-help-lead">What is <em>known about</em> an IP, independent of what it is. Any number of them, on any class — a human on a VPN keeps <code>humans/*</code> and carries the proxy signal. Filter with <code>signal:&lt;value&gt;</code> or the Signals menu above.</p>
+        <table class="search-help-table">
+          {%- for s in SIGNALS %}
+          <tr>
+            <td><code style="color: {{ s.color_var }}">{{ s.key }}</code></td>
+            <td>{{ s.label }} — {{ s.tip[0] if s.tip else '' }}
+              {%- if s.tip %} <span class="text-muted">{{ s.tip[1] }}</span>{% endif %}</td>
+          </tr>
+          {%- endfor %}
+        </table>
+        <p class="search-help-lead">Short forms work as search terms: <code>{{ SIGNALS | map(attribute='alias') | join(', ') }}</code>.</p>
+      </div>
+    </div>
+    {%- endif %}
+    {%- endif %}
+  </div>
+  {%- if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{%- endmacro -%}

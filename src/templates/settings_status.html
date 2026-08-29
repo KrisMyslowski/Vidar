@@ -1,0 +1,126 @@
+{#
+  settings_status.html — what the service is doing, and what it was configured
+  with. Everything on this page used to need an SSH session: `docker logs` for
+  the first half, `cat /srv/vidar/.env` for the second.
+#}
+{% extends "subnav_base.html" %}
+{% from '_macros.html' import kv_table, kv_row %}
+{% block title %}Status — Vidar{% endblock %}
+
+{% block settings_content %}
+
+{%- if unset_site_settings %}
+{#- The same list the startup log line names. That line scrolls away; the
+    weaker classification it announced does not, so it is repeated here. -#}
+<div class="settings-warning">
+  <strong>Site-specific settings are unset, so classification is weaker than it could be.</strong>
+  <ul>
+    {%- for item in unset_site_settings %}
+    <li>{{ item }}</li>
+    {%- endfor %}
+  </ul>
+  See <code>.env.example</code>, or the deployment guide.
+</div>
+{%- endif %}
+
+<div class="panel">
+  <h3>Ingestion</h3>
+  {% call kv_table() %}
+    {% call kv_row('Log file') %}<code>{{ log_path }}</code>{% endcall %}
+    {% call kv_row('Readable', ('Whether the service can open the log at all.',
+                   'Not readable means nothing is being ingested, whatever the rest of this page says.')) %}
+      {% if demo_mode() %}<span class="label-muted">not read — DEMO_MODE</span>
+      {%- elif log.ok %}yes, {{ log.size | fmtbytes }}
+      {%- else %}<strong>no — {{ log.reason }}</strong>{% endif %}
+    {% endcall %}
+    {% call kv_row('Read position', ('How far into the log the tailer has got.',
+                   'Stored as file_offset, so a restart resumes rather than re-counting.')) %}
+      {% if state.offset %}{{ state.offset | int | fmtbytes }}{% else %}nothing read yet{% endif %}
+    {% endcall %}
+    {% call kv_row('Inode', ('Identifies the file itself.',
+                   'A change means the log was rotated and the tailer followed it.')) %}
+      {{ state.inode or '—' }}
+    {% endcall %}
+    {% call kv_row('Classifier version', ('Bumped when the rules change.',
+                   'A bump reclassifies every address once at startup.')) %}
+      {{ state.classifier_version or '—' }}
+    {% endcall %}
+  {% endcall %}
+</div>
+
+<div class="panel">
+  <h3>Enrichment</h3>
+  {% call kv_table() %}
+    {% call kv_row('Queue', ('Addresses waiting to be handed to the providers.',
+                   'Bounded by ENRICHMENT_QUEUE_MAXSIZE; when full, an address is picked up later.')) %}
+      {% if queue_depth is none %}not running{% else %}{{ queue_depth }} / {{ queue_max }}{% endif %}
+    {% endcall %}
+    {% call kv_row('Never enriched', ('Addresses seen in visits with no intel row yet.',
+                   'The worker drains these at the ip-api rate cap, so a burst takes a while.')) %}
+      {{ state.unenriched }}
+    {% endcall %}
+    {% call kv_row('Stale', ('Enriched longer ago than the cache TTL.',
+                   'Refreshed in the background; a backlog here is not an error.')) %}
+      {{ state.stale }}
+    {% endcall %}
+    {% call kv_row('Shodan') %}
+      {% if enricher.shodan_cooling_down %}cooling down after a 429
+      {%- elif enricher.shodan_rate_limited %}rate limited
+      {%- else %}ok{% endif %}
+    {% endcall %}
+    {% call kv_row('Tor exit list', ('Downloaded whole and held in memory.',
+                   'Fetched with the first enrichment batch, then refreshed on the interval in TOR_CACHE_TTL_SECONDS.')) %}
+      {% if enricher.tor_exits %}{{ enricher.tor_exits | fmtnum }} exits{% if enricher.tor_age_seconds %},
+        {{ (enricher.tor_age_seconds / 3600) | round(1) }} h old{% endif %}
+      {%- else %}<span class="label-muted">downloads with the first enrichment batch</span>{% endif %}
+    {% endcall %}
+    {% call kv_row('DNSBL') %}
+      {% if not dnsbl_enabled %}disabled
+      {%- elif not dnsbl_key_set %}<strong>no DQS key — the signal records nothing</strong>
+      {%- else %}{{ dnsbl_providers | join(', ') }}{% endif %}
+    {% endcall %}
+  {% endcall %}
+</div>
+
+<div class="panel">
+  <h3>Daily passes</h3>
+  {% call kv_table() %}
+    {% call kv_row('Retention') %}{{ state.retention_last_run or 'has not run yet' }}{% endcall %}
+    {% call kv_row('Snapshot') %}{{ state.backup_last_run or 'has not run yet' }}{% endcall %}
+  {% endcall %}
+  <p class="text-muted">
+    Both run inside the application, not from cron. The window they enforce, the
+    archives and the snapshots themselves are on
+    <a href="/settings/storage">Storage &amp; Retention</a>.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>Configuration</h3>
+  <p class="text-muted">
+    What the service actually loaded, which is not always what the file says —
+    an environment variable overrides it. Read-only: everything here comes from
+    the <code>.env</code> at the deploy root and is read once at startup, so a
+    change needs a redeploy. Retention is the exception and lives on Storage.
+    Running version {{ version }}.
+  </p>
+  <table class="config-table">
+    <tbody>
+      {%- for title, rows in config_groups %}
+      <tr class="config-group"><th colspan="2">{{ title }}</th></tr>
+      {%- for row in rows %}
+      <tr>
+        <td>{{ row.env }}</td>
+        <td>
+          {%- if row.secret %}{{ row.value }}
+          {%- elif row.empty %}<span class="label-muted">(empty)</span>
+          {%- else %}<code>{{ row.value }}</code>{% endif %}
+        </td>
+      </tr>
+      {%- endfor %}
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

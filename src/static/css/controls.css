@@ -1,0 +1,170 @@
+/* controls.css — Form controls, the sidebar nav list, the settings sub-nav and the rich
+   tooltip.
+
+   These four sections sit after the media queries in the original and stay
+   there: moving them earlier would change which rule wins at equal
+   specificity. Their being last is cascade, not filing.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+/* ── Form controls (range picker, search inputs) ── */
+.filter-search-date-label { font-size: var(--font-xs); color: var(--text-muted); }
+.filter-btn-submit {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  height: 26px;
+  font-size: var(--font-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.filter-btn-submit:hover { background: color-mix(in srgb, var(--accent) 80%, var(--bg)); }
+
+/* ── Sidebar nav ─────────────────────────────────────────────────────────── */
+.sidebar-nav { list-style: none; padding: 0.5rem 0; flex: 1; overflow-y: auto; }
+
+
+/* ── Settings: sub-nav beside the panel ──────────────────────────────────── */
+.settings-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-lg);
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 11rem;
+  gap: 2px;
+}
+/* Same states as the main nav — muted, brighter on hover, accent when active —
+   so the second level reads as nav and not as links inside the panel. */
+.settings-nav a {
+  padding: 0.5rem var(--space-sm);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-nav a:hover { background: var(--border); color: var(--text); }
+.settings-nav a.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* min-width: 0 or a long <code> run in a row would push the panel wider than
+   the flex line instead of wrapping inside it. */
+.settings-panel { flex: 1; min-width: 0; }
+/* Explanatory prose on a settings page. .text-muted sets colour and nothing
+   else, so these paragraphs ran at the body's 1rem beside .settings-warning
+   below at 0.8rem — the same role, a quarter apart. */
+.settings-panel .text-muted {
+  max-width: 62ch;
+  margin-bottom: var(--space-md);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+.settings-panel code { color: var(--text); }
+.settings-panel .tab-row { margin-bottom: var(--space-md); }
+/* Lifetime retention is the one setting here that can fill a disk. Yellow, the
+   signal system's "look at this" — red belongs to threats. */
+.settings-warning {
+  max-width: 62ch;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--sig-hosting) 45%, transparent);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--sig-hosting) 10%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+.settings-warning strong { color: var(--text); }
+/* Download is a link, the other actions are forms — the row keeps them on one
+   line and the same height regardless. */
+.storage-actions { display: flex; align-items: center; gap: var(--space-xs); }
+.storage-actions form { margin: 0; }
+.storage-window {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+.storage-window input {
+  width: 4.5rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+/* Destructive actions read as destructive only on approach — a permanently red
+   row of Delete buttons would make the whole table look like a warning. */
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--grp-threats) 18%, var(--bg-card));
+  border-color: var(--grp-threats);
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .settings-layout { flex-direction: column; }
+  .settings-nav { flex: none; flex-direction: row; flex-wrap: wrap; width: 100%; }
+}
+
+
+/* ── Rich two-part tooltip ── */
+.rich-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 1000;
+  background: var(--bg-opaque);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  max-width: 42ch;
+  pointer-events: none;
+  box-shadow: var(--pop-shadow);
+}
+.rt-row { display: flex; gap: var(--space-xs); align-items: baseline; }
+.rt-row + .rt-row { margin-top: var(--space-2xs); }
+.rt-label { font-weight: 600; color: var(--text-muted); min-width: 2.8rem; flex-shrink: 0; }
+
+
+/* ── Status: the configuration listing ───────────────────────────────────────
+   One table, not one per group. Eight separate kv-tables each sized their own
+   columns, so the value column landed somewhere different in every block —
+   /logs/access.log at one indent, 1.0 at another, 30 at a third. A fixed layout
+   with the name column pinned puts every value on the same line. */
+.config-table {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 60rem;
+}
+.config-table td:first-child {
+  width: 22rem;
+  color: var(--text-muted);
+}
+.config-table td { overflow-wrap: anywhere; }
+/* The group name rides in the table so it cannot drift out of step with the
+   rows under it. */
+.config-table .config-group th {
+  padding-top: var(--space-md);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--font-sm);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.config-table .config-group:first-child th { padding-top: 0; }

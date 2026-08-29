@@ -1,0 +1,27 @@
+{#
+  subnav_base.html — the shell for a page with a second nav down its left: the
+  page header, that nav, and the panel each page fills. Settings and the docs
+  pages both extend it; it was settings_base.html while Settings was the only
+  one.
+
+  The entries come from `nav`, so a page and its nav entry are declared once.
+  Settings builds them in _settings_nav() from _SETTINGS_PAGES, docs.py from
+  the files on disk. `nav_title` names the header and defaults to Settings.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header %}
+
+{% block content %}
+{{ page_header(nav_title | default('Settings'), refresh=false) }}
+
+<div class="settings-layout">
+  <nav class="settings-nav">
+    {%- for item in nav %}
+    <a href="{{ item.href }}"{% if item.active %} class="active"{% endif %}>{{ item.label }}</a>
+    {%- endfor %}
+  </nav>
+  <div class="settings-panel">
+    {% block settings_content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

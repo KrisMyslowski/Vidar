@@ -1,0 +1,146 @@
+/* base.css — Reset, the page frame, the sidebar and the theme toggle.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+}
+.sidebar-header {
+  padding: 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-header h1 { font-size: var(--font-md); font-weight: 600; }
+/* Rides the h1 baseline rather than sitting on its own line: the header
+   is a fixed 1.5rem/1rem box and a second line would push the nav down. */
+.sidebar-header h1 .version {
+  font-size: var(--font-xs);
+  font-weight: 400;
+  color: var(--text-muted);
+  /* It is a link to the tag it names, but it reads as a label until pointed at —
+     an underlined version beside the product name looks like a warning. */
+  text-decoration: none;
+}
+.sidebar-header h1 .version:hover,
+.sidebar-header h1 .version:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+.sidebar li a {
+  display: block;
+  padding: 0.6rem var(--space-md);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
+}
+.sidebar li a:hover { background: var(--border); color: var(--text); }
+.sidebar li a.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* Three columns, not a flex row with auto margins. The gear, the book and the
+   toggle each own a column, so the book sits on the footer's true centre —
+   auto margins would have split the free space into thirds and put it near it
+   but not on it. */
+.sidebar-footer {
+  padding: var(--space-md);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+.sidebar-footer a { color: var(--text-muted); font-size: var(--font-sm); text-decoration: none; }
+.sidebar-footer a:hover { color: var(--text); }
+/* The gear leads, the book takes the middle, the theme toggle closes the row.
+   Both links share one rule set: they are the same control in two places, and
+   a second copy is how the two would drift apart. */
+.sidebar-settings,
+.sidebar-docs {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+.sidebar-settings { justify-self: start; }
+.sidebar-docs { justify-self: center; }
+.sidebar-settings:hover,
+.sidebar-docs:hover { color: var(--text); }
+/* Same box as .theme-icon, so the three footer icons sit on one baseline. */
+.sidebar-settings svg,
+.sidebar-docs svg { display: block; width: 20px; height: 20px; }
+.sidebar-settings.active,
+.sidebar-docs.active { color: var(--accent); }
+.sidebar-settings:focus-visible,
+.sidebar-docs:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  justify-self: end;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+.theme-toggle:hover,
+.theme-toggle:focus-visible { color: var(--text); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.theme-icon { display: block; width: 20px; height: 20px; }
+
+/* ── Main content ── */
+.content {
+  margin-left: var(--sidebar-w);
+  padding: var(--space-xl);
+  flex: 1;
+  width: calc(100% - var(--sidebar-w));
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Inline code, once. There were six rules for it and not one set a size; the
+   colour said --text four times, --text-muted once, var(--clr) once and nothing
+   once. The family matters more than it looks: the UA stylesheet gives `code`
+   its own monospace face, and that beats any font-family inherited from a
+   parent — which is why the search help's example column rendered in the
+   browser default while the prose directly above it used the token face.
+   0.95em rather than a step on the scale: code sits inside running text and
+   should track whatever size that text is. */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text);
+}
+
+h2 { font-size: var(--font-lg); margin-bottom: var(--space-lg); font-weight: 600; }
+h3 { font-size: var(--font-base); margin-bottom: var(--space-sm); font-weight: 500; }
+

@@ -1,0 +1,126 @@
+/* responsive.css — Every media query the dashboard has.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  :root { --sidebar-w: 180px; }
+  /* .label-help::after was the CSS-only tooltip, replaced by tooltip.js and
+     .rich-tooltip long ago; nothing has generated that pseudo-element since.
+     The live tooltip caps itself at 42ch. */
+}
+
+@media (max-width: 1100px) {
+  .responsive-table thead {
+    display: none;
+  }
+
+  .responsive-table,
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-table {
+    border: none;
+    background: transparent;
+  }
+
+  .responsive-table tbody {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .responsive-table tr {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 0.55rem 0.8rem;
+    overflow: hidden;
+  }
+
+  .responsive-table td {
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
+    padding: 0.45rem 0;
+    display: grid;
+    grid-template-columns: minmax(110px, 36%) 1fr;
+    gap: 0.8rem;
+    align-items: start;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .responsive-table td:last-child {
+    border-bottom: none;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: normal;
+  }
+
+  .responsive-table td.nowrap,
+  .responsive-table .nowrap,
+  .responsive-table .cell-truncate {
+    white-space: normal;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .responsive-table .badge {
+    margin-bottom: 0.2rem;
+  }
+
+  .kv-table,
+  .kv-table tbody,
+  .kv-table tr,
+  .kv-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .kv-table tr {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  }
+
+  .kv-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .kv-table td {
+    border: none;
+    padding: 0;
+  }
+
+  .kv-table td + td {
+    margin-top: 0.18rem;
+  }
+
+  .kv-table td:first-child {
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+}
+
+@media (max-width: 640px) {
+  .responsive-table td {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}
+

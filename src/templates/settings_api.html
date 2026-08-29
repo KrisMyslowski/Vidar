@@ -1,0 +1,45 @@
+{#
+  settings_api.html — the four JSON endpoints. The sidebar used to carry a bare
+  "API" link to /api/stats, which named one endpoint and hid the other three.
+#}
+{% extends "subnav_base.html" %}
+{% from '_macros.html' import kv_table, kv_row %}
+{% block title %}API — Vidar{% endblock %}
+
+{% block settings_content %}
+<div class="panel">
+  <h3>JSON endpoints</h3>
+  <p class="text-muted">
+    The same data the dashboard renders, unstyled. Reachable only through the
+    SSH tunnel, like the rest of the service.
+  </p>
+  {% call kv_table() %}
+    {% call kv_row('/api/stats', ('Summary numbers as JSON.',
+                          'Takes the same from/to window as the dashboard; without one the answer is all-time.')) %}
+      Summary counts behind the Overview tiles.
+      <a href="/api/stats" target="_blank">Open</a>
+    {% endcall %}
+    {% call kv_row('/api/activity', ('Visits per bucket, split by identity group.',
+                             'bucket=day or hour, plus the same class, signal and search filters as /visitors.')) %}
+      Visits per bucket, split by identity group — the activity chart's data.
+      Takes <code>from</code>, <code>to</code>, <code>bucket=day|hour</code>,
+      and the page filters <code>class</code>, <code>signal</code>, <code>q</code>.
+      <a href="/api/activity" target="_blank">Open</a>
+    {% endcall %}
+    {% call kv_row('/api/visits', ('The raw visit rows, paginated.',
+                           'page and limit, with optional ip and country filters.')) %}
+      Paginated raw visits. Takes <code>page</code>, <code>limit</code> (max 500),
+      <code>sort</code>, <code>order</code>, <code>ip</code>, <code>country</code>.
+      <a href="/api/visits" target="_blank">Open</a>
+    {% endcall %}
+    {% call kv_row('/api/export', ('Every visit as JSON or CSV, streamed.',
+                           'format=json|csv with an optional date window. Rate-limited per hour.')) %}
+      The whole visit table as CSV or JSON, streamed. Takes <code>format</code>
+      and a <code>from</code>/<code>to</code> date range, and is rate-limited.
+      Per-month zips are on <a href="/settings/storage">Storage &amp; Retention</a>.
+      <a href="/api/export?format=csv" target="_blank">CSV</a>
+      <a href="/api/export?format=json" target="_blank">JSON</a>
+    {% endcall %}
+  {% endcall %}
+</div>
+{% endblock %}

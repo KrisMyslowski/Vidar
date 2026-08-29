@@ -1,0 +1,128 @@
+:root {
+  --sidebar-w: 220px;
+
+  /* ── Core appearance — web dark values ──────────────── */
+  --bg:          #0d0d0d;
+  --bg-card:     #171717;
+  --bg-panel:    #171717;
+  --border:      #2e2e2e;
+  --text:        #f1f1f1;
+  --text-muted:  #b9b9b9;
+  --accent:      #ffffff;
+  --accent-soft: #dcdcdc;
+
+  /* ── Shadows & FX ────────────────────────────────────── */
+  --shadow:              0 22px 40px -28px rgba(0, 0, 0, 0.8);
+  --halo-shadow:         0 0 0 4px rgba(0, 0, 0, 0.35);   /* map cluster ring */
+  --pop-shadow:          0 8px 20px rgba(0, 0, 0, 0.25);  /* tooltip overlay  */
+  --hover-shadow:        0 18px 28px -22px rgba(255, 255, 255, 0.9);
+  --mix-anchor:          black;
+  --scanline:            rgba(255, 255, 255, 0.14);
+  --divider-line:        rgba(255, 255, 255, 0.08);
+  --divider-line-strong: rgba(255, 255, 255, 0.14);
+
+  /* ── Overlay ─────────────────────────────────────────── */
+  --bg-opaque: rgba(13, 13, 13, 0.95);
+
+  /* ── Semantic / data-viz colors ──────────────────────────
+     Categorical identity set (teal/blue/yellow/red) is validator-snapped for
+     the dark surface (#171717): OKLCH lightness band, chroma floor, CVD
+     separation, 3:1 mark contrast (dataviz-skill validate_palette.js). */
+  --red:    #ef4444;
+  --orange: #f97316;
+  --yellow: #a16207;
+  --blue:   #3b82f6;
+  --green:  #22c55e;
+  --teal:   #0d9488;
+  --purple: #a855f7;
+
+  /* ── Visitor-taxonomy identity colors (single source of truth) ──
+     Mirrors GROUP_BADGES/SIGNAL_BADGES in src/taxonomy.py. var() indirection
+     re-resolves per theme, so one definition covers dark and light.
+     teal is exclusive to humans; unknown = muted ("no statement");
+     each signal has its own hue (proxy red vs. dnsbl orange). */
+  --grp-humans:    var(--teal);
+  --grp-bots:      var(--blue);
+  --grp-automated: var(--yellow);
+  --grp-threats:   var(--red);
+  --grp-unknown:   var(--text-muted);
+
+  --sig-tor:     var(--purple);
+  --sig-proxy:   var(--red);
+  --sig-hosting: var(--yellow);
+  --sig-dnsbl:   var(--orange);
+  --sig-tags:    var(--text-muted);
+  /* Blue is the one hue no other signal claims. It also carries the bots
+     identity group, but the two never meet: identity colours a row label,
+     signals colour a chip or a column head. */
+  --sig-mobile:  var(--blue);
+  /* Clean is the absence of the four above — green, and never teal:
+     teal is reserved for the humans identity group. */
+  --sig-clean:   var(--green);
+  /* Heat map density ramp. One hue, because density is one number: shade is the
+     IP count per cell, and the identity colours stay with the cluster view. */
+  --heat:        var(--blue);
+
+  /* ── Spacing scale ───────────────────────────────────── */
+  /* Below --space-xs everything was a literal, which is why 1px, 2px, 3px, 6px
+     and 0.3rem all appear in the type surfaces for the same "a hair apart". */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  /* ── Type families ───────────────────────────────────── */
+  /* --font-sans was a literal on body and the only family outside the tokens. */
+  --font-sans: "Avenir Next", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Typography scale ────────────────────────────────── */
+  /* --font-mono used to sit in the middle of this, between xs and sm, so the
+     scale did not read as one. */
+  --font-xxs:  0.65rem;
+  --font-xs:   0.7rem;
+  --font-sm:   0.8rem;
+  --font-base: 1rem;
+  --font-md:   1.2rem;
+  --font-lg:   1.4rem;
+  --font-xl:   1.6rem;
+
+  /* ── Border radius ───────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+[data-theme="light"] {
+  --bg:          #e9edf2;
+  --bg-card:     #fdfefe;
+  --bg-panel:    #fdfefe;
+  --border:      #8395a4;
+  --text:        #17202a;
+  --text-muted:  #4d5e70;
+  --accent:      #0e1620;
+  --accent-soft: #314455;
+
+  --shadow:              0 22px 40px -30px rgba(20, 28, 36, 0.42);
+  --hover-shadow:        0 18px 28px -22px rgba(0, 0, 0, 0.42);
+  --mix-anchor:          white;
+  --scanline:            rgba(17, 29, 42, 0.11);
+  --divider-line:        rgba(16, 24, 32, 0.3);
+  --divider-line-strong: rgba(16, 24, 32, 0.44);
+
+  --bg-opaque: rgba(253, 254, 254, 0.97);
+
+  /* Semantic colors — darker shades for light surfaces. Categorical identity
+     set validator-snapped for #fdfefe (yellow #ca8a04 sits at 2.91:1 — the
+     documented relief: badges/chips always carry visible text labels and
+     every chart has a table view). */
+  --red:    #dc2626;
+  --orange: #ea6c00;
+  --yellow: #ca8a04;
+  --blue:   #1d4ed8;
+  --green:  #15803d;
+  --teal:   #0d9488;
+  --purple: #7c3aed;
+}

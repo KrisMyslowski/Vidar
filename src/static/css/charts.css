@@ -1,0 +1,438 @@
+/* charts.css — The activity timeline that timeline.js draws into.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+/* ── Activity timeline (timeline.js draws the SVG) ─────────────────────────
+   One line per identity group. The plot box owns the height so the SVG can be
+   sized from it; the tooltip and the zoom chip are positioned against it. */
+.timeline { position: relative; }
+.timeline-plot { height: 190px; cursor: crosshair; user-select: none; }
+.tl-svg { display: block; width: 100%; height: 100%; }
+.tl-grid { stroke: var(--border); stroke-width: 1; }
+.tl-axis { fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono); }
+.tl-line { stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.tl-cursor { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+/* The drag band: what the reader is about to zoom into. */
+.tl-band { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
+.timeline-tip {
+  line-height: 1.5;
+  position: absolute;
+  top: 0;
+  transform: translateX(8px);
+  pointer-events: none;
+  z-index: 20;
+  min-width: 9rem;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-opaque);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--pop-shadow);
+  font-size: var(--font-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* Near the right edge the tooltip would run out of the panel. */
+.tl-tip--flip { transform: translateX(calc(-100% - 8px)); }
+.tl-tip-total { color: var(--text-muted); margin-bottom: var(--space-2xs); }
+.tl-tip-row { display: flex; align-items: center; gap: 5px; }
+.tl-tip-row strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+.tl-tip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* Zoom controls, where the zoom chip used to sit. The chip spelled out the
+   window it had zoomed to and carried the only way back; these say it with two
+   states instead — a disabled minus is "you are looking at everything", a
+   disabled plus is "there is nothing finer here". */
+.timeline-zoombar { position: absolute; right: 0; top: -2rem; display: flex; gap: 4px; }
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-icon svg { width: 14px; height: 14px; }
+.btn-icon:hover:not(:disabled) { background: var(--border); color: var(--text); }
+.btn-icon:disabled { opacity: 0.35; cursor: default; }
+
+.daybars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 160px;
+  padding-top: var(--space-xs);
+}
+.daybar {
+  flex: 1 1 0;
+  min-width: 3px;
+  height: var(--h, 0%);
+  min-height: 2px;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  cursor: help;
+}
+.daybar-seg { display: block; width: 100%; }
+.daybars-note {
+  margin-top: var(--space-xs);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.series-legend { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-xs); }
+.series-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  text-decoration: none;
+}
+a.series-chip:hover { color: var(--text); text-decoration: none; }
+.series-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--clr, var(--text-muted)); }
+
+/* Overview — hero tiles, needs-attention findings, class-mix links. */
+.cards--hero { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.nav-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 22%, transparent);
+  color: var(--red);
+  font-size: var(--font-xxs);
+  font-weight: 700;
+}
+
+/* A panel whose whole content is one bar and its legend. It only ever needs the
+   height of those two, so it does not get a full panel's padding: the class-mix
+   block sat in a half-width grid cell where the taller neighbour set the height
+   and the remainder was empty panel. Full width, and as tall as its content. */
+.panel--slim { padding: 0.875rem 1.25rem; }
+.panel--slim .table-block-head { margin-bottom: var(--space-sm); }
+
+/* The panel the sidebar's red count badge points at, while it has something to
+   point at. Same hue as the badge and the dot, at the weakest strength that
+   still separates it from the panel beside it: this marks a panel, it does not
+   raise an alarm. Falls back to the plain --border where color-mix is not
+   supported, which is the normal panel. */
+.panel--attention {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+  background: color-mix(in srgb, var(--red) 4%, var(--bg-panel));
+}
+
+.attention { list-style: none; margin: 0; padding: 0; }
+.attention-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: none;
+}
+/* The tag chip is only as wide as its word — no fixed column stealing space. */
+.attention-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: var(--font-sm);
+}
+.attention li:last-child .attention-row { border-bottom: none; }
+.attention-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); text-decoration: none; }
+.attention-tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--clr, var(--text-muted)) 18%, transparent);
+  color: var(--clr, var(--text-muted));
+  font-size: var(--font-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.attention-text { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.attention-value { font-variant-numeric: tabular-nums; }
+
+/* Visitor detail — breadcrumb, verdict head, classifier evidence. */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  font-size: var(--font-sm);
+}
+.breadcrumb a { color: var(--text-muted); text-decoration: none; }
+.breadcrumb a:hover { color: var(--text); }
+.breadcrumb-sep { color: var(--text-muted); opacity: 0.5; }
+.breadcrumb-current { font-family: var(--font-mono); color: var(--text); }
+
+.verdict-head { display: flex; align-items: baseline; gap: var(--space-sm); flex-wrap: wrap; }
+.verdict-ip { font-family: var(--font-mono); font-size: var(--font-lg); font-weight: 600; }
+.verdict-class {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--clr, var(--text-muted));
+}
+.verdict-class::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--clr, var(--text-muted));
+}
+.verdict-sub {
+  margin: 4px 0 var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.evidence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.evidence-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+.evidence-row:last-child { border-bottom: none; }
+/* The rule that actually assigned the class carries the weight. */
+.evidence-row.decisive { color: var(--text); font-weight: 500; }
+.evidence-row.decisive .evidence-text::before {
+  content: '→ ';
+  color: var(--text-muted);
+}
+.evidence-source {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+.detail-map-toggle > summary {
+  cursor: pointer;
+  margin-top: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+.detail-map-toggle > summary:hover { color: var(--text); }
+
+/* Identity × Signals heat grid: a 132px label column, six equal signal columns
+   and an 80px total, with every cell its own spaced tile. ONE neutral ramp for
+   every row so cells stay comparable across rows; the group color appears in the
+   row label only, never in the data. --shade is the per-cell share (template). */
+.matrix {
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+.matrix th, .matrix td { border-bottom: 0; padding: 0.35rem 0.5rem; }
+.matrix th { text-align: center; }
+.matrix th:first-child { text-align: left; }
+.matrix th:last-child, .matrix td:last-child { text-align: right; }
+.matrix .matrix-cell {
+  text-align: center;
+  height: 36px;
+  border-radius: 3px;
+}
+.matrix .matrix-cell.filled {
+  background: color-mix(in srgb, var(--text) var(--shade, 0%), transparent);
+}
+.matrix .matrix-zero { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
+/* The cells carry their own shade, which *is* the data. Hovering must not tint
+   them — highlighting the empty ones in particular made a "·" read as a value. */
+.matrix tbody tr:hover > td { background: none; }
+.matrix-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--clr, var(--text));
+}
+.matrix-label::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--clr, var(--text-muted));
+}
+
+/* Exposure facets — clickable value distributions sharing the table's filter. */
+.facet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.facet-grid > .panel { margin-bottom: 0; }
+/* One bar-row renderer, four sets of proportions. The context sets --label-w /
+   --count-w / --label-align on the .facet-rows container; the row itself never
+   guesses, so a 2-letter country code and a full request path both sit right. */
+.facet-rows { display: flex; flex-direction: column; gap: 2px; }
+.facet-row {
+  display: grid;
+  grid-template-columns: minmax(0, var(--label-w, 6.5rem)) minmax(0, 1fr) var(--count-w, 3rem);
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: var(--font-xs);
+}
+.facet-rows--top    { --label-w: 11rem; --count-w: 3.5rem; }
+/* Eight entries in two columns, so a bar never stretches across a whole panel. */
+.facet-rows--split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  column-gap: var(--space-xl);
+  row-gap: 0;
+}
+.facet-rows--split > .facet-row { border-bottom: 1px solid var(--border); border-radius: 0; }
+.facet-rows--card   { --label-w: 5.5rem; --count-w: 2.9rem; --label-align: right; }
+.facet-rows--code   { --label-w: 2.2rem; --count-w: 3rem; }
+.facet-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); text-decoration: none; }
+.facet-row.active { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.facet-label {
+  font-family: var(--font-mono);
+  text-align: var(--label-align, left);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facet-bar {
+  height: 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  overflow: hidden;
+}
+.facet-bar-fill { display: block; height: 100%; }
+.facet-count { font-variant-numeric: tabular-nums; }
+
+/* Slide-over — the IPs behind an aggregation row, without a page change. */
+tr[data-drawer-src] { cursor: pointer; }
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--mix-anchor) 45%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 41;
+  width: min(46rem, 92vw);
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translateX(100%);
+  transition: transform 0.18s ease;
+}
+.drawer.open { transform: translateX(0); }
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+}
+.drawer-head-actions { display: flex; align-items: center; gap: var(--space-sm); }
+.drawer-title { font-size: var(--font-md); font-weight: 500; }
+.drawer-value { font-family: var(--font-mono); color: var(--text-muted); margin-left: var(--space-xs); }
+.drawer-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.drawer-close:hover { color: var(--text); }
+.drawer-loading { color: var(--text-muted); font-size: var(--font-sm); }
+.drawer-full-link {
+  display: inline-block;
+  margin-top: var(--space-md);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: var(--font-sm);
+}
+.drawer-full-link:hover { text-decoration: underline; }
+
+/* Color utilities */
+.text-orange { color: var(--orange); }
+
+/* Leaflet legend overlay */
+.map-legend {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text);
+  line-height: 1.8;
+}
+.map-legend b { display: block; margin-bottom: 4px; color: var(--text-muted); font-weight: 600; }
+/* Heat legend: the shade ramp with its two ends named, since the cells carry a
+   count rather than a category. */
+.heat-scale { display: flex; gap: 2px; margin: 2px 0 4px; }
+.heat-step { display: block; width: 22px; height: 10px; border-radius: 2px; }
+.heat-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-xxs);
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+.ldot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.mcluster {
+  background: var(--bg-card);
+  border: 2px solid;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: var(--halo-shadow);
+}
+.server-marker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="Vidar">
+  <title>Vidar</title>
+  <!--
+    A V. Two strokes, nothing to date and nothing to lose at 16px, and it speaks
+    the same language as the gear and the book in the sidebar: stroked, round
+    caps, no fill.
+
+    The colour inverts with the browser because the product has no brand hue.
+    It is near-black on light and white on dark, so a single value would go
+    invisible on one of the two tab strips. The default is the light-mode
+    stroke, so a browser ignoring the media query still shows the mark.
+  -->
+  <style>
+    .mark { stroke: #0e1620; }
+    @media (prefers-color-scheme: dark) { .mark { stroke: #f1f1f1; } }
+  </style>
+  <path class="mark" d="M7 8 L16 24 L25 8" fill="none" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

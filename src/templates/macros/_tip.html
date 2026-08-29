@@ -1,0 +1,31 @@
+{#
+  macros/_tip.html — the one place that decides what a tooltip is made of.
+
+  Every explanation in the dashboard goes through tip_attrs(). Nothing writes
+  data-tip or data-tip-what by hand any more, which is what let the two forms
+  drift apart in the first place: the filter chips grew What/How pairs while
+  stat_card and th_tip hard-wired the single line, and analysis.html ended up
+  rebuilding <th> markup by hand just to get a pair out of a macro that had none.
+
+  Accepts three call shapes, because the pair arrives both ways — from the
+  registry as a tuple, and written out at the call site as two arguments:
+    tip_attrs('One sentence.')                     -> data-tip
+    tip_attrs(('What it is.', 'How it is known.')) -> data-tip-what + -source
+    tip_attrs('What it is.', 'How it is known.')   -> the same
+
+  The pair is the target everywhere. The string form is still understood so the
+  ~120 call sites can move over file by file instead of in one commit; a test
+  will forbid it once they have.
+
+  TIP_TITLES (a Jinja global, src/routes/_app.py) additionally writes a native
+  title= carrying the same text. It is off: with it on, the browser draws its own
+  delayed box next to the styled one, saying the same thing in a different place.
+  Both are implemented; flipping the global is the whole switch.
+#}
+{%- macro tip_attrs(tip, how='') -%}
+{%- set pair = (tip, how) if how else ((tip, '') if tip is string else (tip or ('', ''))) -%}
+{%- if pair[0] -%}
+{{ ' ' }}{% if pair[1] %}data-tip-what="{{ pair[0] | e }}" data-tip-source="{{ pair[1] | e }}"{% else %}data-tip="{{ pair[0] | e }}"{% endif %}
+{%- if TIP_TITLES %} title="{{ pair[0] }}{% if pair[1] %} — {{ pair[1] }}{% endif %}"{% endif %}
+{%- endif -%}
+{%- endmacro -%}

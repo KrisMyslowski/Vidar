@@ -1,0 +1,158 @@
+{#
+  macros/table.html — Tables — the block wrapper, its header cells, pagination, and the
+  key/value and visitor rows that go inside one.
+
+  Imported through _macros.html, which re-exports every block; no page needs
+  to know which file a block lives in.
+#}
+{% from 'macros/mix.html' import ip_class_bar, ip_signal_bar %}
+{% from 'macros/_tip.html' import tip_attrs %}
+
+
+{#
+  overflow_cell — canonical multi-value cell. Renders every item on one line
+  inside .cell-overflow; overflow.js hides the items that don't fit and appends
+  a teal [+N] chip whose tooltip lists them. One renderer for every multi-value
+  column (Signals, Class mix, Status mix, Flags, Port/Browser/OS, Shodan).
+  items: list of dicts {label, cls (badge CSS class), tip?, href?}.
+#}
+{%- macro overflow_cell(items) -%}
+{%- if items -%}
+<span class="cell-overflow">
+{%- for it in items -%}
+{%- if it.href -%}<a class="badge {{ it.cls }}{% if it.tip %} label-help{% endif %}" href="{{ it.href }}"{{ tip_attrs(it.tip) }}>{{ it.label }}</a>
+{%- else -%}<span class="badge {{ it.cls }}{% if it.tip %} label-help{% endif %}"{{ tip_attrs(it.tip) }}>{{ it.label }}</span>{%- endif -%}
+{%- endfor -%}
+</span>
+{%- else -%}—{%- endif -%}
+{%- endmacro -%}
+
+
+{#
+  visitor_row — single <tr> in a visitor list table.
+  Port, Browser and OS are enumerations the reader scans, not values they click:
+  plain mono text with the full list in the title beats a badge row, which spent
+  its width on chrome and then had to collapse into a "+N" nobody could read.
+  Every optional cell carries data-col so the column picker can hide it — the
+  <col> and <th> alone would leave the body behind and skew the table.
+#}
+{%- macro visitor_row(v) -%}
+<tr>
+  <td data-label="IP" title="{{ v.ip }}"><a href="/visitors/{{ v.ip | urlencode }}">{{ v.ip }}</a></td>
+  <td data-label="Country">{{ v.country_code or '—' }}</td>
+  <td data-col="city" data-label="City" title="{{ v.city or '' }}">{{ v.city or '—' }}</td>
+  <td data-col="isp" data-label="ISP" title="{{ v.isp or '' }}">{{ v.isp or '—' }}</td>
+  <td data-col="signal_mix" data-label="Signals">{{ ip_signal_bar(v) }}</td>
+  <td data-col="class_mix" data-label="Class mix">{{ ip_class_bar(v) }}</td>
+  <td data-label="Visits">{{ v.visit_count | fmtnum }}</td>
+  <td data-col="pages" data-label="Pages">{{ v.unique_pages | fmtnum }}</td>
+  <td data-col="port" data-label="Port" class="cell-mono" title="{{ v.ports or '' }}">{{ (v.ports or '—') | replace(',', ', ') }}</td>
+  <td data-col="browser" data-label="Browser" class="cell-mono" title="{{ v.browsers or '' }}">{{ (v.browsers or '—') | replace(',', ', ') }}</td>
+  <td data-col="os" data-label="OS" class="cell-mono" title="{{ v.oses or '' }}">{{ (v.oses or '—') | replace(',', ', ') }}</td>
+  <td data-label="Last Seen" class="nowrap">{{ v.last_seen | fmtdate }}</td>
+</tr>
+{%- endmacro -%}
+
+
+{#
+  th_tip — a table header cell with a hover tooltip. The ONE way to give a
+  non-sortable header a tooltip (sortable headers pass their tip to sortable_th).
+  Keeps every column head self-describing and visually uniform.
+#}
+{%- macro th_tip(label, tip, col_key='', w='') -%}
+<th{% if col_key %} data-col="{{ col_key }}"{% endif %}{% if w %} class="{{ w }}"{% endif %}><span class="label-help"{{ tip_attrs(tip) }} tabindex="0">{{ label }}</span></th>
+{%- endmacro -%}
+
+{#
+  pagination — prev/next page controls.
+  extra_params: the query string tail after ?page=N (e.g. "&sort=last_seen&order=DESC&country=&ip=").
+  Only renders when there are multiple pages.
+#}
+{%- macro pagination(page, total_pages, extra_params='') -%}
+{% if total_pages > 1 or page > 1 %}
+<div class="pagination">
+  {% if page > 1 %}<a href="?page={{ page - 1 }}{{ extra_params }}">&laquo; Prev</a>{% endif %}
+  <span>Page {{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?page={{ page + 1 }}{{ extra_params }}">Next &raquo;</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro -%}
+
+
+{#
+  sortable_th — <th> with sort-asc/sort-desc state and toggle link.
+  suffix_params: query string appended after &order=N (e.g. '&country=DE&ip=1.2.3.4').
+  default_order: direction when column is not active.
+  tip='': renders a plain <a> with no tooltip markup.
+  (Tooltip placement is tooltip.js's job — it clamps the overlay to the
+  viewport, so a header needs no alignment hint of its own.)
+  col_key: emits data-col so column_picker/columns.js can hide this column.
+#}
+{%- macro sortable_th(col, label, tip, sort, order, suffix_params='', default_order='DESC', col_key='', w='') -%}
+{% if sort == col %}{% if order == 'ASC' %}{% set next_order = 'DESC' %}{% else %}{% set next_order = 'ASC' %}{% endif %}{% else %}{% set next_order = default_order %}{% endif %}
+<th{% if col_key %} data-col="{{ col_key }}"{% endif %} class="{{ w }}{% if sort == col and order == 'ASC' %} sort-asc{% elif sort == col and order == 'DESC' %} sort-desc{% endif %}"><a{% if tip %} class="label-help"{% endif %}{{ tip_attrs(tip) }} href="?page=1&sort={{ col }}&order={{ next_order }}{{ suffix_params }}">{{ label }}</a></th>
+{%- endmacro -%}
+
+
+{#
+  kv_table / kv_row — key-value table with consistent label styling.
+  Usage:
+    {% call kv_table() %}
+      {% call kv_row('Label', 'Tooltip.') %}{{ value }}{% endcall %}
+    {% endcall %}
+  Rows needing special <td> attributes (e.g. cell-truncate) can be raw <tr> HTML
+  inside the {% call kv_table() %} block.
+#}
+{%- macro kv_table() -%}
+<table class="kv-table"><tbody>{{ caller() }}</tbody></table>
+{%- endmacro -%}
+
+{%- macro kv_row(label, tip='') -%}
+<tr>
+  <td>{% if tip %}<span class="label-help label-muted"{{ tip_attrs(tip) }} tabindex="0">{{ label }}</span>{% else %}<span class="label-muted">{{ label }}</span>{% endif %}</td>
+  <td>{{ caller() }}</td>
+</tr>
+{%- endmacro -%}
+
+
+{#
+  column_picker — per-table column visibility, persisted per user in
+  localStorage under vidar.cols.<table_key> (columns.js). Columns are addressed by
+  the data-col attribute their <col>/<th>/<td> carry.
+  columns: list of {key, label, off?} — only the optional ones; columns absent
+  from the list can never be hidden. `off: true` starts hidden: a table wider
+  than the viewport squeezes every column into illegibility, so the detail a
+  reader rarely needs waits here instead of crowding what they always need.
+  The user's choice wins over the default and persists.
+#}
+{%- macro column_picker(table_key, columns) -%}
+<details class="col-picker" data-popover data-col-picker="{{ table_key }}">
+  <summary>Columns ▾</summary>
+  <div class="col-picker-menu">
+    {%- for c in columns %}
+    <label><input type="checkbox" data-col-toggle="{{ c.key }}"{% if not c.off %} checked{% endif %}{% if c.off %} data-col-default-off{% endif %}> {{ c.label }}</label>
+    {%- endfor %}
+  </div>
+</details>
+{%- endmacro -%}
+
+
+{#
+  table_block — the frame every table sits in: title, row count, column picker,
+  the table itself (caller), and pagination. Replaces the hand-rolled
+  .data-table + heading + pagination trio on each page.
+#}
+{%- macro table_block(title, count_label='', table_key='', columns=none,
+                       page=none, total_pages=none, pager_params='') -%}
+<div class="table-block"{% if table_key %} data-table-key="{{ table_key }}"{% endif %}>
+  <div class="table-block-head">
+    <span class="table-block-title">{{ title }}</span>
+    {%- if count_label %}<span class="table-block-count">{{ count_label }}</span>{% endif %}
+    {%- if columns %}{{ column_picker(table_key, columns) }}{% endif %}
+  </div>
+  <div class="data-table">{{ caller() }}</div>
+  {%- if page is not none and total_pages is not none %}
+  {{ pagination(page, total_pages, pager_params) }}
+  {%- endif %}
+</div>
+{%- endmacro -%}

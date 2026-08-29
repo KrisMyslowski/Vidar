@@ -1,0 +1,129 @@
+/* layout.css — Page header, cards, grids and the weekday x hour heatmap.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+/* ── Page header bar (title + refresh) ── */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+.page-header h2 { margin-bottom: 0; }
+.page-header-count { font-size: var(--font-sm); color: var(--text-muted); }
+.page-header-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-xs); }
+
+
+/* Group-by / View tab strips above the filter rail. */
+.visitors-modes {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-sm);
+}
+
+.btn-refresh {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-refresh:hover { background: var(--border); color: var(--text); }
+
+/* ── Cards ── */
+.cards {
+  display: grid;
+  /* auto-fit, not auto-fill: auto-fill lays down as many 180px tracks as fit
+     and leaves the surplus ones empty, so a row of five tiles in space for
+     seven stopped short and left a gap at the right. auto-fit collapses the
+     empty tracks and the tiles share the full width. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) 1.25rem;
+  min-width: 0;
+}
+.card-label { font-size: var(--font-sm); color: var(--text-muted); margin-bottom: 0.25rem; }
+.card-value { font-size: var(--font-xl); font-weight: 700; }
+
+/* ── Hover label help ── */
+.label-help {
+  display: inline-block;
+  cursor: help;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+.label-muted { color: var(--text-muted); }
+
+/* ── Grid layouts ── */
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  min-width: 0;
+  margin-bottom: var(--space-lg);
+}
+
+.grid-2 > .panel { margin-bottom: 0; }
+
+
+/* Stat-card sparkline + trend delta (overview KPI row). */
+.card-delta { font-size: var(--font-xs); margin-top: 0.2rem; }
+.card-spark { margin-top: 0.4rem; }
+.card-spark svg { display: block; width: 100%; height: 28px; }
+
+/* ── Hour × weekday heatmap (sequential one-hue ramp on --hm-color) ──────────
+   HTML grid, no chart lib: 7 day rows × 24 hour cells; cell intensity comes
+   from the 0..1 --hm custom property (mixed into the panel surface so the
+   ramp adapts to both themes). One hue, --hm-color: the grid answers for the
+   page's own group filter, so a cell has no group of its own to colour by.
+   2px gaps between fills; zero cells stay near-invisible so the rhythm reads
+   instantly. Tooltip via data-tip. */
+.heatmap {
+  --hm-color: var(--blue);
+  display: grid;
+  grid-template-columns: 2.6rem repeat(24, 1fr);
+  gap: 2px;
+  align-items: center;
+}
+.heatmap-hour {
+  font-size: var(--font-xxs);
+  color: var(--text-muted);
+  text-align: left;
+}
+.heatmap-day {
+  font-size: var(--font-xxs);
+  color: var(--text-muted);
+  padding-right: 6px;
+  text-align: right;
+}
+.heatmap-cell {
+  aspect-ratio: 1 / 1;
+  min-height: 12px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--hm-color) calc(10% + 85% * var(--hm, 0)), var(--bg-panel));
+}
+.heatmap-cell.label-help { display: block; border-bottom: none; }
+.heatmap-cell--zero { background: color-mix(in srgb, var(--text) 4%, transparent); }
+
+

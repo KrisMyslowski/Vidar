@@ -1,0 +1,56 @@
+{#
+  _macros.html — the block set the Vidar dashboard is assembled from.
+  Every block is defined here once, in all its states, and used unchanged on
+  every page. Import what a page needs:
+    {% from '_macros.html' import page_header, filter_rail, table_block, ... %}
+
+  The blocks themselves live in macros/, one file per kind. This file is the
+  re-export surface, so which file a block sits in stays internal and no page
+  is touched when one moves.
+
+  It has to be `import ... as` plus `set`, not `from ... import`: Jinja exports
+  only what a template defines itself — macros and top-level sets. A name that
+  merely arrived by `from` is local, and importing it onward fails with
+  "does not export the requested name". The leading underscore keeps the five
+  module handles themselves private, so `from '_macros.html' import _layout`
+  is not a thing anyone can do by accident.
+#}
+{% import 'macros/_tip.html' as _tip %}
+{% import 'macros/layout.html' as _layout %}
+{% import 'macros/table.html' as _table %}
+{% import 'macros/mix.html' as _mix %}
+{% import 'macros/charts.html' as _charts %}
+{% import 'macros/filters.html' as _filters %}
+
+{% set tip_attrs = _tip.tip_attrs %}
+{% set page_header = _layout.page_header %}
+{% set empty_state = _layout.empty_state %}
+{% set empty_row = _layout.empty_row %}
+{% set tab_row = _layout.tab_row %}
+{% set range_tabs = _layout.range_tabs %}
+{% set overflow_cell = _table.overflow_cell %}
+{% set visitor_row = _table.visitor_row %}
+{% set th_tip = _table.th_tip %}
+{% set pagination = _table.pagination %}
+{% set sortable_th = _table.sortable_th %}
+{% set kv_table = _table.kv_table %}
+{% set kv_row = _table.kv_row %}
+{% set column_picker = _table.column_picker %}
+{% set table_block = _table.table_block %}
+{% set ip_class_bar = _mix.ip_class_bar %}
+{% set ip_signal_bar = _mix.ip_signal_bar %}
+{% set mix_bar = _mix.mix_bar %}
+{% set mix_legend = _mix.mix_legend %}
+{% set class_mix_cell = _mix.class_mix_cell %}
+{% set status_mix_cell = _mix.status_mix_cell %}
+{% set signal_mix_cell = _mix.signal_mix_cell %}
+{% set stat_card = _charts.stat_card %}
+{% set stacked_bars = _charts.stacked_bars %}
+{% set activity_chart = _charts.activity_chart %}
+{% set series_legend = _charts.series_legend %}
+{% set bar_rows = _charts.bar_rows %}
+{% set chart_card = _charts.chart_card %}
+{% set facet_list = _charts.facet_list %}
+{% set shodan_links = _filters.shodan_links %}
+{% set drill_pills = _filters.drill_pills %}
+{% set filter_rail = _filters.filter_rail %}

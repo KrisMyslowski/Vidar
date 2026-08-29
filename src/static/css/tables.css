@@ -1,0 +1,262 @@
+/* tables.css — The table system: the cell rules, the per-column widths, badges,
+   pagination and the table utilities.
+ *
+ * One of seven parts split out of dashboard.css. base.html loads them in
+ * the order they were cut out, so the cascade is the single file's cascade.
+ * Moving a rule between parts moves it in the cascade.
+ */
+/* ── Tables ── */
+table { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
+th, td { padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  /* Fixed layout clips cells but not headers: without this a long label runs
+     across its neighbour instead of ellipsising inside its own column. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+td a { color: var(--accent); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+/* A sortable header is a header first — it must never read as a body link.
+   Its color comes from the <th> (muted, or --text once the column is active). */
+th a { color: inherit; text-decoration: none; }
+th a:hover { color: var(--text); }
+.nowrap { white-space: nowrap; }
+
+.data-table {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  /* Scroll, don't clip. A fixed-layout table is at least as wide as its column
+     widths add up to — `width: 100%` cannot shrink it below that — so a reader
+     who switches on every optional column asks for more table than fits. With
+     `overflow: hidden` the surplus was simply gone: switching on all twelve
+     columns removed Last Seen from the page with no way to reach it. Squeezing
+     twelve columns into 996px instead would only trade one unreadable state
+     for another. */
+  overflow-x: auto;
+  width: 100%;
+}
+.data-table th { background: color-mix(in srgb, var(--text) 3%, transparent); }
+/* Totals row of the Identity × Signal matrix — set off from the data rows. */
+.data-table tr.matrix-totals td {
+  border-top: 2px solid var(--border);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+/* ── Unified table-cell system ─────────────────────────────────────────────
+   Data tables use fixed layout so no column can push the table past its
+   container — no horizontal scroll, no overlap. ONE
+   truncation rule: every cell is single-line with text-overflow:ellipsis, so a
+   value that doesn't fit its column gets a "…" (full value in the cell's title).
+   Multi-value cells instead collapse via overflow.js into a [+n] chip. Paths are
+   the exception (.col-path) and wrap so the full path always shows. The mobile
+   card layout (max-width:1100px, below) overrides this to stack + wrap.
+*/
+.responsive-table,
+table.data-table { table-layout: fixed; }
+
+/* ── Column-type widths (on the header cell) ───────────────────────────────
+   With table-layout:fixed the FIRST ROW defines every column's width, so the
+   <th> is the width — there is no <colgroup>. That is deliberate: widths on a
+   <col> are a third structure beside <th> and <td>, and hiding a column then
+   has to keep all three in step. It didn't. Cells hidden with display:none are
+   matched to the remaining <col>s in order, so every column after a hidden one
+   inherited its predecessor's width (measured: ISP 0px, Signals 602px instead
+   of 144px). On the header the question cannot arise — a hidden <th> takes its
+   width with it.
+
+   One class per column TYPE, so the same kind of column is the same width on
+   every page. Widths are ratios, not promises: a fixed-layout table spreads the
+   leftover space over its columns in proportion to these values, and scales
+   them all down together when they don't fit. Which is why every column in a
+   table with a column picker carries a class — one unsized column would swallow
+   the entire leftover (a 600px ISP column beside a truncated date). Tables
+   without a picker (the Identity × Signals matrix) may leave their equal data
+   columns unsized: nothing there can disappear. */
+th.c-num   { width: 4.5rem; }  /* short counts: Visits, IPs, Pages, Hits, Status */
+th.c-cc    { width: 4rem; }    /* country code */
+th.c-port  { width: 5.5rem; }  /* "80, 443" as text */
+th.c-badge { width: 6.5rem; }  /* Method, Device, Rate Limit + long-headed counts */
+th.c-date  { width: 8rem; }    /* Last Seen, Last Fetched, Time */
+th.c-ip    { width: 10rem; }   /* full IPv4; IPv6 ellipsises (title attr has it) */
+th.c-mix   { width: 9rem; }    /* a class-mix / signal-mix bar */
+th.c-city  { width: 8rem; }
+th.c-text  { width: 12rem; }   /* free text: ISP, Org, Path on a dense table */
+th.c-textsm{ width: 8rem; }    /* free text in a crowded table: Referer, Cipher */
+th.c-client{ width: 11rem; }   /* "Mobile Safari 13.2.3" — opt-in, so it may claim room */
+th.c-group { width: 132px; }   /* taxonomy group label (Identity × Signals) */
+th.c-total { width: 5rem; }    /* row total beside equal-width data columns */
+th.c-wide  { width: 20rem; }   /* dominant text column (Path on ?group=path) */
+/* The row-actions column, and the only one without a width: table-layout:fixed
+   hands the leftover space to the columns that declare none, so the declared
+   ones keep exactly their width. Two tables with the same first three columns
+   line up even when one of them has four columns more — which is the whole
+   point on the Storage page, where "Months held" and "Archived months" sit one
+   above the other and used to spread their shared columns differently. */
+th.c-actions { width: auto; }
+
+.responsive-table td,
+table.data-table td,
+.visitor-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* consistent "…" whenever a value is cut */
+}
+
+/* Enumerations that are read, not clicked (ports, CVE lists): mono, one line,
+   ellipsised — the full value stays in the cell's title attribute. */
+td.cell-mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+td.cell-mono.text-red { color: var(--red); }
+
+/* Paths: never truncated or collapsed — wrap to always show the full value. */
+td.col-path {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* kv-table detail cells (SSL Ciphers, XFF Chain in visitor_detail): the kv-table
+   sits outside the fixed-layout system above, and both values are unbounded
+   (XFF is client-supplied) — cap + ellipsise. Full value stays in the title attr. */
+.cell-truncate {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Multi-value cell: items on one line; overflow.js hides the ones that don't
+   fit and appends a teal [+n] chip that lists them on hover. */
+.cell-overflow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  min-width: 0;
+}
+/* Items never shrink so overflow.js can measure what fits; the +N chip is
+   also fixed-size so it stays visible. Items that don't fit are hidden (never
+   truncated with "…") and added to the +N tooltip. */
+.cell-overflow > * { flex: 0 0 auto; }
+.ov-more { flex: 0 0 auto; cursor: help; }
+/* Last resort: when even the single remaining item is wider than its column,
+   it ellipsises instead of being cut mid-glyph — and that is what keeps the
+   +N chip whole. A counter announcing "there is more" must never be the thing
+   that gets clipped. overflow.js sets this class. */
+.cell-overflow > .ov-shrink {
+  flex: 0 1 auto;
+  min-width: 2.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+tbody tr:hover > td { background: color-mix(in srgb, var(--text) 5%, transparent); }
+
+/* Sortable table headers. Sorting lives in the header: the inactive state
+   carries a muted ↕ so a sortable column is recognisable before it is used,
+   the active column is light and carries the direction arrow. */
+table.sortable th { cursor: pointer; user-select: none; }
+table.sortable th:hover { color: var(--text); }
+table.sortable:not(.server-sort) th:not(.sort-asc):not(.sort-desc)::after,
+table.sortable.server-sort th:not(.sort-asc):not(.sort-desc):has(a)::after {
+  content: ' ↕';
+  font-size: 0.6rem;
+  color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+table.sortable th.sort-asc, table.sortable th.sort-desc { color: var(--text); }
+table.sortable th.sort-asc::after { content: ' ▲'; font-size: 0.6rem; }
+table.sortable th.sort-desc::after { content: ' ▼'; font-size: 0.6rem; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.badge-red    { background: color-mix(in srgb, var(--red)    20%, transparent); color: var(--red); }
+.badge-yellow { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
+.badge-blue   { background: color-mix(in srgb, var(--blue)   20%, transparent); color: var(--blue); }
+.badge-purple { background: color-mix(in srgb, var(--purple) 20%, transparent); color: var(--purple); }
+.badge-muted  { background: color-mix(in srgb, var(--text)    8%, transparent); color: var(--text-muted); font-weight: 500; }
+.badge-green  { background: color-mix(in srgb, var(--green)  20%, transparent); color: var(--green); }
+.badge-teal   { background: color-mix(in srgb, var(--teal)   20%, transparent); color: var(--teal); }
+.badge-orange { background: color-mix(in srgb, var(--orange) 20%, transparent); color: var(--orange); }
+.badge.label-help { border-bottom: none; cursor: help; }
+/* Table headers stay visually uniform: no dotted hover-underline on any <th>
+   tooltip (sortable or not). The tooltip still opens on hover (cursor:help),
+   and sort arrows mark the sortable columns; sortable links keep the pointer. */
+th .label-help,
+th.label-help { border-bottom: none; }
+th a.label-help { cursor: pointer; }
+
+/* Visitor detail — identity strip */
+.detail-identity { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+.detail-identity-divider { width: 1px; height: 1.2em; background: var(--border); flex-shrink: 0; }
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  font-size: 0.85rem;
+}
+.pagination a { color: var(--accent); text-decoration: none; }
+.pagination a:hover { text-decoration: underline; }
+
+/* ── Utilities ── */
+.text-muted { color: var(--text-muted); }
+.text-success { color: var(--green); }
+.text-red { color: var(--red); }
+.text-yellow { color: var(--yellow); }
+.text-purple { color: var(--purple); }
+
+.card-value-md { font-size: var(--font-md); }
+.card-value-sm { font-size: var(--font-base); }
+
+
+hr.divider { margin: var(--space-xl) 0; border: none; height: 1px; background: var(--border); }
+
+.section-label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: var(--space-xl) 0 var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.break-all { word-break: break-all; }
+.text-sm { font-size: var(--font-sm); }
+/* Muted count next to a panel <h3>, e.g. "Scanner Paths (123)". */
+
+
+/* .empty-state lives in blocks.css, which loads after this file and wins.
+   The copy that used to stand here was unreachable — editing it did nothing. */
+
+

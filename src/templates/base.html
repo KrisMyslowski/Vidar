@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Vidar{% endblock %}</title>
+  {# The only inline script left, and it has to stay inline: it must run before
+     the first paint or the page flashes dark before switching to light. That is
+     what the CSP nonce is for — see security_headers() in main.py. #}
+  <script nonce="{{ request.state.csp_nonce }}">(function(){var t=localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}());</script>
+  <link rel="icon" href="/static/img/favicon.svg?v={{ asset_v }}" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/tokens.css?v={{ asset_v }}">
+  {# dashboard.css, in the seven contiguous parts it was cut into. The order is
+     the order they were cut, which is what keeps the cascade identical to the
+     single file — see the header in each. tokens.css stays first. #}
+  <link rel="stylesheet" href="/static/css/base.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/layout.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/tables.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/blocks.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/charts.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/responsive.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/controls.css?v={{ asset_v }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1>Vidar <a class="version" href="{{ REPO_URL }}/releases/tag/v{{ VERSION }}"
+             target="_blank" rel="noopener noreferrer">v{{ VERSION }}</a></h1>
+    </div>
+    {#- Four entries. Networks/Countries/Clients/Paths are groupings of
+        /visitors, the map is a view of it — none of them is a route. -#}
+    <ul class="sidebar-nav">
+      {#- Named for the nav only: a bare `attention` would shadow the Overview's
+          findings list, which is passed into the content block below. -#}
+      {%- set nav_attention = attention_count() %}
+      <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Overview{% if nav_attention %}<span class="nav-badge" title="{{ nav_attention }} finding{{ '' if nav_attention == 1 else 's' }} to look at">{{ nav_attention }}</span>{% endif %}</a></li>
+      <li><a href="/visitors" class="{% if request.url.path.startswith('/visitors') %}active{% endif %}">Visitors</a></li>
+      <li><a href="/analysis" class="{% if request.url.path == '/analysis' %}active{% endif %}">Analysis</a></li>
+      <li><a href="/exposure" class="{% if request.url.path == '/exposure' %}active{% endif %}">Exposure</a></li>
+    </ul>
+    {#- API and the two export links moved to Settings. The exports pulled the
+        whole database from a footer that gave no hint of it, and API was a bare
+        link to one of four endpoints. Both are pages now, behind the gear. -#}
+    <div class="sidebar-footer">
+      {#- <a href="/api/stats" target="_blank">API</a>
+          <a href="/api/export?format=csv">CSV</a>
+          <a href="/api/export?format=json">JSON</a> -#}
+      {#- Inline SVG, not a ⚙ glyph: an emoji renders at whatever size and style
+          the platform font decides, which put a small black cog next to a 20px
+          themed moon. A cog, eight teeth around a wide hub hole, filled in
+          currentColor and stroked with round joins — a fill alone renders the
+          corners sharp. Kept deliberately light: the hole is wide and the teeth
+          shallow, so the ring carries about as much ink as the moon's crescent
+          beside it. A solid cog with fat teeth outweighed it. -#}
+      <a class="sidebar-settings{% if request.url.path.startswith('/settings') %} active{% endif %}"
+         href="/settings/storage" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"
+             fill-rule="evenodd" stroke="currentColor" stroke-width="0.6"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M 10.52 3.53 L 10.70 1.68 L 13.30 1.68 L 13.48 3.53 A 8.6 8.6 0 0 1 16.95 4.96 L 18.37 3.78 L 20.22 5.63 L 19.04 7.05 A 8.6 8.6 0 0 1 20.47 10.52 L 22.32 10.70 L 22.32 13.30 L 20.47 13.48 A 8.6 8.6 0 0 1 19.04 16.95 L 20.22 18.37 L 18.37 20.22 L 16.95 19.04 A 8.6 8.6 0 0 1 13.48 20.47 L 13.30 22.32 L 10.70 22.32 L 10.52 20.47 A 8.6 8.6 0 0 1 7.05 19.04 L 5.63 20.22 L 3.78 18.37 L 4.96 16.95 A 8.6 8.6 0 0 1 3.53 13.48 L 1.68 13.30 L 1.68 10.70 L 3.53 10.52 A 8.6 8.6 0 0 1 4.96 7.05 L 3.78 5.63 L 5.63 3.78 L 7.05 4.96 A 8.6 8.6 0 0 1 10.52 3.53 Z M 6.60 12.00 a 5.4 5.4 0 1 0 10.8 0 a 5.4 5.4 0 1 0 -10.8 0 Z"></path>
+        </svg>
+      </a>
+      {#- Inline SVG for the same reason the gear is one, and drawn to the same
+          weight: an open book as two outlined leaves over a spine, stroked
+          rather than filled so it carries about as much ink as the cog's ring
+          and the moon's crescent either side of it. -#}
+      <a class="sidebar-docs{% if request.url.path.startswith('/docs') %} active{% endif %}"
+         href="/docs" title="Documentation" aria-label="Documentation">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+             stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 6.5 A 7 7 0 0 0 3.5 5.2 V 18 A 7 7 0 0 1 12 19.3"></path>
+          <path d="M12 6.5 A 7 7 0 0 1 20.5 5.2 V 18 A 7 7 0 0 0 12 19.3"></path>
+          <path d="M12 6.5 V 19.3"></path>
+        </svg>
+      </a>
+      <button class="theme-toggle" id="themeToggle" type="button"
+              aria-label="Switch to light theme" title="Switch to light theme">
+        <canvas class="theme-icon" width="20" height="20" aria-hidden="true"></canvas>
+      </button>
+    </div>
+  </nav>
+  <main class="content">
+    {%- if demo_mode() %}
+    <div class="settings-warning">
+      <strong>Demo mode.</strong> Every visit on this dashboard is synthetic, generated
+      from <code>src/demo.py</code>; the addresses are RFC 5737 documentation ranges and
+      belong to nobody. No log is being read and no provider is being called. Turn
+      <code>DEMO_MODE</code> off to watch a real site.
+    </div>
+    {%- endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script type="application/json" id="taxonomy-data">{{ TAXONOMY_DATA | tojson }}</script>
+  <script src="/static/js/utils.js?v={{ asset_v }}"></script>
+  <script src="/static/js/sort.js?v={{ asset_v }}"></script>
+  <script src="/static/js/filters.js?v={{ asset_v }}"></script>
+  <script src="/static/js/tooltip.js?v={{ asset_v }}"></script>
+  <script src="/static/js/overflow.js?v={{ asset_v }}"></script>
+  <script src="/static/js/columns.js?v={{ asset_v }}"></script>
+  <script src="/static/js/popover.js?v={{ asset_v }}"></script>
+  <script src="/static/js/timeline.js?v={{ asset_v }}"></script>
+  <script src="/static/js/drawer.js?v={{ asset_v }}"></script>
+  {# Two blocks use tab panels now: the Overview's Top and the filter rail's
+     help. Page-specific was right while there was one. #}
+  <script src="/static/js/tabs.js?v={{ asset_v }}"></script>
+  <script src="/static/js/theme.js?v={{ asset_v }}" defer></script>
+  <script src="/static/js/actions.js?v={{ asset_v }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

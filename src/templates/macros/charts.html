@@ -1,0 +1,190 @@
+{#
+  macros/charts.html — Charts and the cards they sit in: bar rows, facets, stacked columns,
+  the activity chart and its legend, and the stat card.
+
+  Imported through _macros.html, which re-exports every block; no page needs
+  to know which file a block lives in.
+#}
+{% from 'macros/_tip.html' import tip_attrs %}
+
+
+{#
+  stat_card — single stat card. tooltip='' renders plain label text.
+  spark: comma-joined number series — sparkline.js renders an inline SVG into
+  .card-spark. delta: short trend note under the value (e.g. "↗ +12% vs prior week").
+#}
+{%- macro stat_card(label, value, tooltip='', color_class='', size_class='', spark='', delta='') -%}
+<div class="card"{% if spark %} data-spark="{{ spark }}"{% endif %}>
+  <div class="card-label">{% if tooltip %}<span class="label-help"{{ tip_attrs(tooltip) }} tabindex="0">{{ label }}</span>{% else %}{{ label }}{% endif %}</div>
+  <div class="card-value{% if color_class %} {{ color_class }}{% endif %}{% if size_class %} {{ size_class }}{% endif %}">{{ value }}</div>
+  {% if delta %}<div class="card-delta text-muted">{{ delta }}</div>{% endif %}
+  {% if spark %}<div class="card-spark" aria-hidden="true"></div>{% endif %}
+</div>
+{%- endmacro -%}
+
+
+{#
+  stacked_bars — a day-by-day column chart in plain CSS: one column per day,
+  each split into the series that make it up. The release UI draws every
+  distribution this way, so no chart library is involved and the colors come
+  straight from the taxonomy tokens.
+  days:   [{label, total, <series key>: count, …}]
+  series: [{key, label, color}] — stacking order, bottom to top.
+#}
+{%- macro stacked_bars(days, series, note='') -%}
+{%- if days %}
+{%- set peak = days | map(attribute='total') | max %}
+<div class="daybars" role="img" aria-label="{{ note or 'Daily distribution' }}">
+  {%- for d in days %}
+  {%- set tip = [] %}
+  {%- for s in series %}{% set _ = tip.append(s.label ~ ' ' ~ (d[s.key] or 0) | string) %}{% endfor %}
+  <div class="daybar"{{ tip_attrs(d.label ~ ' — ' ~ ((d.total or 0) | fmtnum) ~ ' · ' ~ (tip | join(' · '))) }}
+       style="--h: {{ ((d.total or 0) * 100.0 / peak) | round(1) if peak else 0 }}%">
+    {%- for s in series if d[s.key] %}
+    <span class="daybar-seg" style="height:{{ (d[s.key] * 100.0 / d.total) | round(2) }}%;background:{{ s.color }}"></span>
+    {%- endfor %}
+  </div>
+  {%- endfor %}
+</div>
+{%- if note %}<div class="daybars-note">{{ note }}</div>{% endif %}
+{%- else %}
+<p class="text-muted">No activity in this range.</p>
+{%- endif %}
+{%- endmacro -%}
+
+
+{#
+  activity_chart — visits per bucket as one line per identity group (timeline.js
+  draws the SVG). The daily rows ship inline, so the chart is there on first
+  paint and only a zoom deep enough to want hours costs a request.
+  Dragging zooms the picture, never the query: the date filter stays with the
+  range tabs.
+#}
+{#- `bucket` is the resolution the rows arrived in, not a preference: the route
+    picks it from the window length, and timeline.js has to be told or it labels
+    hourly rows as dates. `hour_switch` travels with it so the threshold behind
+    both decisions — which bucket to ship, and which one a zoom drops to — is
+    one number in one place (routes/_charts.HOUR_SWITCH_DAYS). -#}
+{%- macro activity_chart(days, series, params='', bucket='day', hour_switch=3) -%}
+<div class="timeline" data-endpoint="/api/activity" data-params="{{ params }}">
+  <script type="application/json">
+    {{ {'series': series, 'rows': days, 'bucket': bucket, 'hourSwitchDays': hour_switch} | tojson }}
+  </script>
+  <div class="timeline-plot"></div>
+  <div class="timeline-tip" style="display:none"></div>
+  {#- Zoom controls. Dragging a range on the chart still works and is the precise
+      way in; these are the coarse one, and the only way back out — each step out
+      undoes one step in, including the jump from days to hours. Disabled is the
+      honest state at either end, rather than a button that does nothing. -#}
+  <div class="timeline-zoombar">
+    <button type="button" class="btn-icon" data-zoom="out" title="Zoom out" aria-label="Zoom out" disabled>
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <circle cx="6.75" cy="6.75" r="4.5"/><path d="M10.2 10.2 14 14"/><path d="M4.75 6.75h4"/>
+      </svg>
+    </button>
+    <button type="button" class="btn-icon" data-zoom="in" title="Zoom in" aria-label="Zoom in">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <circle cx="6.75" cy="6.75" r="4.5"/><path d="M10.2 10.2 14 14"/><path d="M4.75 6.75h4"/><path d="M6.75 4.75v4"/>
+      </svg>
+    </button>
+  </div>
+</div>
+{%- endmacro -%}
+
+
+{# Legend for stacked_bars / mix_bar: colored chips, optionally linking to the
+   filtered list. Same five groups, same colors, everywhere. #}
+{%- macro series_legend(series) -%}
+<div class="series-legend">
+  {%- for s in series %}
+  {%- set tag = 'a' if s.href else 'span' %}
+  <{{ tag }} class="series-chip"{% if s.href %} href="{{ s.href }}"{% endif %} style="--clr: {{ s.color }}">
+    <span class="series-dot"></span>{{ s.label }}
+  </{{ tag }}>
+  {%- endfor %}
+</div>
+{%- endmacro -%}
+
+
+{#
+  bar_rows — the ONE horizontal-bar distribution: label · bar · value per row,
+  bar width relative to the largest row. Label and number are always readable, so
+  the block is its own table view; a row may carry a link and an active state,
+  which a chart canvas cannot. Used by the Exposure facets and the Analysis cards.
+  rows: [{label, value, href?, active?, tip?}]
+#}
+{%- macro bar_rows(rows, color, variant='') -%}
+{%- if rows %}
+{%- set top = rows | map(attribute='value') | max %}
+<div class="facet-rows{% if variant %} facet-rows--{{ variant }}{% endif %}{% if variant == 'top' %} facet-rows--split{% endif %}">
+  {%- for r in rows %}
+  {%- set tag = 'a' if r.href else 'span' %}
+  <{{ tag }} class="facet-row{% if r.active %} active{% endif %}"{% if r.href %} href="{{ r.href }}"{% endif %}{{ tip_attrs(r.tip) }}>
+    <span class="facet-label">{{ r.label }}</span>
+    <span class="facet-bar"><span class="facet-bar-fill" style="width:{{ (r.value * 100.0 / top) | round(1) if top else 0 }}%;background:{{ color }}"></span></span>
+    <span class="facet-count">{{ r.value | fmtnum }}</span>
+  </{{ tag }}>
+  {%- endfor %}
+</div>
+{%- else %}
+<p class="text-muted">Nothing recorded yet.</p>
+{%- endif %}
+{%- endmacro -%}
+
+
+{#
+  chart_card — titled panel around a bar_rows distribution, with the note that
+  says what the numbers mean / what clicking does.
+  table_toggle: adds the "Table ⇄" switch (viz.js) that swaps the bars for the
+  same numbers as a plain table — the documented relief for the light-mode
+  yellow contrast, and the honest answer to "what exactly is that bar?".
+#}
+{%- macro chart_card(title, note, rows, color, table_toggle=false, variant='card') -%}
+<div class="panel"{% if table_toggle %} data-viz{% endif %}>
+  <div class="table-block-head">
+    <span class="table-block-title">{{ title }}</span>
+    {%- if table_toggle %}
+    <button type="button" class="viz-toggle" data-viz-toggle>Table ⇄</button>
+    {%- endif %}
+  </div>
+  <div{% if table_toggle %} data-viz-bars{% endif %}>{{ bar_rows(rows, color, variant) }}</div>
+  {%- if table_toggle %}
+  <div data-viz-table hidden>
+    <table class="responsive-table">
+      <thead><tr><th class="c-wide">Value</th><th class="c-num">Count</th></tr></thead>
+      <tbody>
+        {%- for r in rows %}
+        <tr>
+          <td data-label="Value">{% if r.href %}<a href="{{ r.href }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</td>
+          <td data-label="Count">{{ r.value | fmtnum }}</td>
+        </tr>
+        {%- else %}
+        <tr><td colspan="2" class="text-muted">Nothing recorded yet.</td></tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  {%- endif %}
+  {%- if note %}<div class="card-note">{{ note }}</div>{% endif %}
+</div>
+{%- endmacro -%}
+
+
+{#
+  facet_list — clickable value distribution over the Shodan child tables. The
+  active value is held and clicking it again clears the filter.
+  entries: [{value, ip_count}] from the get_top_* queries.
+#}
+{%- macro facet_list(title, note, entries, urls, active_value, clear_url, color) -%}
+{%- set rows = [] -%}
+{%- for e in entries -%}
+{%- set is_active = active_value == e.value | string -%}
+{%- set _ = rows.append({
+    'label': e.value,
+    'value': e.ip_count,
+    'href': clear_url if is_active else urls.get(e.value | string, ''),
+    'active': is_active,
+    'tip': 'Remove this filter' if is_active else 'Filter by ' ~ e.value}) -%}
+{%- endfor -%}
+{{ chart_card(title, note, rows, color) }}
+{%- endmacro -%}

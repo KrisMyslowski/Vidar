@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, stat_card, sortable_th, kv_table, kv_row, pagination, shodan_links, th_tip, table_block, tip_attrs %}
+{% block title %}{{ ip }} — Vidar{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+{% endblock %}
+
+{% block content %}
+{# Breadcrumb: back to the list, and to the network this IP belongs to. #}
+<nav class="breadcrumb">
+  <a href="/visitors">&lsaquo; Visitors</a>
+  {% if detail and detail.asn %}<span class="breadcrumb-sep">/</span><a href="/visitors?asn={{ detail.asn | urlencode }}">{{ detail.asn }}</a>{% endif %}
+  <span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{{ ip }}</span>
+</nav>
+
+{% if detail %}
+
+{# ── Verdict: what this IP is, and the one-line context around it. ──────── #}
+<div class="panel verdict">
+  <div class="verdict-head">
+    <span class="verdict-ip">{{ ip }}</span>
+    {% if detail.visitor_class %}
+    {% set grp = detail.visitor_class.split('/')[0] %}
+    {% set cls_label = detail.visitor_class.split('/')[1] if '/' in detail.visitor_class else detail.visitor_class %}
+    <span class="verdict-class" style="--clr: {{ GROUP_COLOR_VARS.get(grp, GROUP_COLOR_VARS['unknown']) }}">{{ grp | title }} · {{ cls_label }}</span>
+    {% endif %}
+  </div>
+  <div class="verdict-sub">
+    {{ detail.org or detail.isp or 'Unknown org' }}
+    {%- if detail.asn %} · {{ detail.asn }}{% endif %}
+    {%- if detail.city or detail.country_code %} · {{ detail.city or '' }}{% if detail.city and detail.country_code %}, {% endif %}{{ detail.country_code or '' }}{% endif %}
+    {%- if detail.first_seen %} · first seen {{ detail.first_seen | fmtdate }}{% endif %}
+  </div>
+  <div class="detail-identity">
+    {#- The signals this IP carries, straight from the registry: label, tooltip and
+        badge class all come from the same entry the filter chips use. Written out
+        by hand before, which is how DNSBL ended up red next to a red Proxy while
+        every other surface drew it orange. Only signals that are a column on
+        ip_intel — has_tags and clean are derived and not part of `detail`. -#}
+    {%- set sig_badges = [] -%}
+    {%- for s in SIGNALS if s.column -%}
+      {%- if detail[s.column] %}{% set _ = sig_badges.append(s) %}{% endif -%}
+    {%- endfor -%}
+    {% for s in sig_badges %}<span class="badge {{ SIGNAL_BADGES[s.key] }} label-help"{{ tip_attrs(s.tip) }} tabindex="0">{{ s.label }}</span>
+    {% endfor %}
+    {#- Mobile had its own line here while it was not a filterable signal and so
+        had no SIGNAL_BADGES entry. It has one now and the loop above draws it
+        like every other signal — a second hand-written badge rendered it
+        twice. -#}
+    {% if detail.visitor_class or sig_badges %}
+    <div class="detail-identity-divider"></div>
+    {% endif %}
+    {% set sfr = detail.sec_fetch_rate or 0 %}
+    {% if sfr >= 0.5 %}
+      <span class="badge badge-green label-help" {{ tip_attrs(((sfr * 100) | int ~ '% of requests carry Sec-Fetch headers.'),
+      'Only real browsers send them — Chrome 76+, Safari 13+, Firefox 90+.') }} tabindex="0">Verified Browser ({{ (sfr * 100) | int }}%)</span>
+    {% elif sfr > 0 %}
+      <span class="badge badge-yellow label-help" {{ tip_attrs(((sfr * 100) | int ~ '% of requests carry Sec-Fetch headers.'),
+      'Some requests look like a browser and some do not — mixed traffic.') }} tabindex="0">Partial Auth ({{ (sfr * 100) | int }}%)</span>
+    {% else %}
+      <span class="badge badge-muted label-help" {{ tip_attrs('No request carried a Sec-Fetch header.',
+      'No evidence of a real browser anywhere in this IP\'s history.') }} tabindex="0">No Browser Auth</span>
+    {% endif %}
+    {% if detail.rate_limit_events %}
+      <span class="badge badge-red label-help" {{ tip_attrs('nginx rate limiting has triggered for this IP.',
+      'limit_req_status recorded DELAYED or REJECTED on ' ~ (detail.rate_limit_events | fmtnum) ~ ' request' ~ ('' if detail.rate_limit_events == 1 else 's') ~ '.') }} tabindex="0">{{ detail.rate_limit_events | fmtnum }} × Rate Limited</span>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Summary tiles ─────────────────────────────────────────────────────── #}
+<div class="cards">
+  {{ stat_card('Requests', detail.visit_count | fmtnum, ('Requests logged from this IP.', 'All of them — the tiles here are the IP\'s full history, not the selected range.')) }}
+  {{ stat_card('Paths', detail.unique_pages | fmtnum, ('Distinct paths this IP requested.', 'Content paths only; protocol errors and the port-80 redirect are excluded.')) }}
+  {{ stat_card('4xx share', err_share ~ '%', ('Share of this IP\'s requests answered with 4xx.',
+      'Over content requests. A high share across many distinct paths is the probing shape.'), color_class='text-yellow' if err_share >= 50 else '') }}
+  {{ stat_card('Last seen', detail.last_seen | fmtdate, ('The IP\'s most recent request.', 'MAX(timestamp) across its whole history.'), size_class='card-value-sm') }}
+  {{ stat_card('Avg response', detail.avg_response_time | fmtresptime, ('Mean time nginx took to answer this IP.', 'The request_time field, averaged over its requests.'), size_class='card-value-md') }}
+  {{ stat_card('Bandwidth', detail.total_bandwidth | fmtbytes, ('Response bytes sent to this IP.', 'Sum of body_bytes_sent; request bodies are not counted.'), size_class='card-value-md') }}
+</div>
+
+{# ── Why this verdict: the classifier's own evidence, decisive rule first. ── #}
+<div class="panel">
+  <div class="table-block-head">
+    <span class="table-block-title">Why this verdict</span>
+    <span class="table-block-count">classifier evidence, in the order it was applied</span>
+  </div>
+  {% if evidence %}
+  <ul class="evidence">
+    {% for e in evidence %}
+    <li class="evidence-row{% if e.decisive %} decisive{% endif %}">
+      <span class="evidence-text">{{ e.text }}</span>
+      <span class="evidence-source">{{ e.source }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">No classifier evidence recorded for this IP.</p>
+  {% endif %}
+</div>
+
+<p class="section-label">Network &amp; exposure</p>
+
+{# ── grid-2: Geo & Network | Shodan Intelligence ───────────────────────── #}
+<div class="grid-2">
+
+  <div class="panel">
+    <h3>Geo & Network</h3>
+    {% call kv_table() %}
+      {% call kv_row('Country', ('Where this IP geolocates to.', 'ip-api.com, resolved once and cached in ip_intel.')) %}{{ detail.country or '—' }}{% if detail.country_code %} ({{ detail.country_code }}){% endif %}{% endcall %}
+      {% call kv_row('City', ('Approximate city of the IP.', 'ip-api.com; noticeably less reliable than the country.')) %}{{ detail.city or '—' }}{% endcall %}
+      {% call kv_row('ISP', ('The provider announcing this IP.', 'ip-api.com isp field.')) %}{{ detail.isp or '—' }}{% endcall %}
+      {% call kv_row('Org', ('Who owns the address range.', 'ip-api.com org field.')) %}{{ detail.org or '—' }}{% endcall %}
+      {% call kv_row('ASN', ('The network this IP is announced from.', 'ip-api.com asn field.')) %}{{ detail.asn or '—' }}{% endcall %}
+      {% call kv_row('Reverse DNS', ('The hostname this IP resolves back to.',
+          'A PTR lookup confirmed by a forward lookup to the same IP — an unconfirmed PTR proves nothing.')) %}{{ detail.reverse_dns or '—' }}{% endcall %}
+      {% call kv_row('Hostnames', ('Hostnames Shodan resolved for this host.', 'From its scan record, not from our own reverse DNS lookup.')) %}{{ detail.hostnames | badge_list }}{% endcall %}
+      {% call kv_row('Coordinates', ('Estimated position of the IP.', 'ip-api.com; a city-level estimate, not a location.')) %}{{ detail.lat or '—' }}, {{ detail.lon or '—' }}{% endcall %}
+      {% call kv_row('Intel updated', ('When this IP\'s intel was last read.', 'ip_intel.fetched_at; the enrichment worker refreshes stale rows.')) %}{{ detail.fetched_at | fmtdate }}{% endcall %}
+    {% endcall %}
+    {% if detail.lat and detail.lon %}
+    {# Collapsed by default — the coordinates above are the answer most of the time. #}
+    <details class="detail-map-toggle">
+      <summary>Show on map</summary>
+      <div id="detail-map"
+           data-lat="{{ detail.lat }}" data-lon="{{ detail.lon }}"
+           data-city="{{ detail.city or '' }}" data-country="{{ detail.country or '' }}"
+           data-ip="{{ ip }}"></div>
+    </details>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h3>Shodan Intelligence</h3>
+    {% if detail.tags or detail.open_ports or detail.cpes or detail.vulns or detail.dnsbl_listed %}
+    {% call kv_table() %}
+      {% call kv_row('Tags', ('What Shodan says this host is.', 'Its own tags. Click one to list other hosts carrying it.')) %}{{ shodan_links(detail.tags, 'tag') }}{% endcall %}
+      {% call kv_row('Open ports', ('Ports open on this host, seen from outside.',
+          'Shodan InternetDB. Click one to list other hosts with it open.')) %}{{ shodan_links(detail.open_ports, 'port') }}{% endcall %}
+      {% call kv_row('Server OS', ('Operating system Shodan fingerprinted.', 'Read from the cpe:/o: entries in its scan record.')) %}{{ detail.cpes | cpe_os }}{% endcall %}
+      {% call kv_row('Services', ('Software Shodan found running.', 'Read from the cpe:/a: entries in its scan record.')) %}{{ detail.cpes | cpe_services }}{% endcall %}
+      {% call kv_row('Vulnerabilities', ('Known vulnerabilities in those services.', 'CVE ids from Shodan. Click one to list other affected hosts.')) %}{{ shodan_links(detail.vulns, 'vuln', 'badge-red') }}{% endcall %}
+      {% if detail.dnsbl_listed %}
+      {% call kv_row('DNSBL Sources', ('Which blocklists name this IP.', 'The providers that answered with a listing code.')) %}
+        {% if detail.dnsbl_sources %}{{ detail.dnsbl_sources | badge_list({}, 'badge-red') }}{% else %}<span class="text-muted">Listed (no source detail)</span>{% endif %}
+      {% endcall %}
+      {% endif %}
+    {% endcall %}
+    {% else %}
+    <p class="text-muted">No Shodan data available for this IP.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<p class="section-label">Fingerprint</p>
+
+{# ── Client Fingerprint ────────────────────────────────────────────────── #}
+<div class="panel">
+  <h3>Client Fingerprint</h3>
+  {% call kv_table() %}
+    {% call kv_row('Browser', ('Browser named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.')) %}{{ (detail.browsers or '—') | replace(',', ', ') }}{% endcall %}
+    {% call kv_row('OS', ('Operating system named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.')) %}{{ (detail.oses or '—') | replace(',', ', ') }}{% endcall %}
+    {% call kv_row('Device', ('Device class named by the User-Agent.', 'Desktop, Mobile, Tablet or Bot, as the UA parser read it.')) %}{{ (detail.devices or '—') | replace(',', ', ') }}{% endcall %}
+    {% call kv_row('HTTP', ('HTTP versions this IP spoke.',
+        'server_protocol from the log. HTTP/1.0 is a strong bot signal; browsers prefer HTTP/2.')) %}{{ detail.http_versions | badge_list }}{% endcall %}
+    {#- The port this IP connected to, not what Shodan sees open on it (that is
+        Open Ports under Network & exposure). Plain-HTTP hits to a TLS-only site
+        are a scanner tell, which is why it is worth naming here. -#}
+    {% call kv_row('Server port', ('Which of our ports this IP connected to.',
+        '80 is plain HTTP, 443 is TLS. Not the same as the host\'s own open ports above.')) %}{{ (detail.ports or '—') | replace(',', ', ') }}{% endcall %}
+    {% call kv_row('Language', ('Language the client asked for.', 'First entry of the Accept-Language header.')) %}{{ (detail.accept_languages or '—') | primarylang }}{% endcall %}
+    {% if detail.sec_fetch_dests %}
+    {% call kv_row('Sec-Fetch', ('Fetch metadata, which only real browsers send.',
+        'Dest=document is a top-level load, Mode=navigate a user action, Site=none a direct visit.')) %}
+      <span class="badge badge-muted" title="Sec-Fetch-Dest values">dest: {{ detail.sec_fetch_dests | replace(',', ', ') }}</span>
+      {% if detail.sec_fetch_modes %}<span class="badge badge-muted" title="Sec-Fetch-Mode values">mode: {{ detail.sec_fetch_modes | replace(',', ', ') }}</span>{% endif %}
+      {% if detail.sec_fetch_sites %}<span class="badge badge-muted" title="Sec-Fetch-Site values">site: {{ detail.sec_fetch_sites | replace(',', ', ') }}</span>{% endif %}
+    {% endcall %}
+    {% endif %}
+    <tr>
+      <td><span class="label-help label-muted" {{ tip_attrs('TLS cipher suites this IP negotiated.',
+      'ssl_cipher from the nginx log; an obsolete suite points at an old or scripted client.') }} tabindex="0">SSL Ciphers</span></td>
+      <td class="cell-truncate" title="{{ detail.ssl_ciphers or '' }}">{{ (detail.ssl_ciphers or '—') | replace(',', ', ') }}</td>
+    </tr>
+    {% call kv_row('Avg request size', ('Mean size of this IP\'s requests.', 'request_length from the log. Large GETs point at payload probes.')) %}{% if detail.avg_request_length %}{{ detail.avg_request_length | int | fmtbytes }} (max {{ detail.max_request_length | fmtbytes }}){% else %}—{% endif %}{% endcall %}
+    <tr>
+      <td><span class="label-help label-muted" {{ tip_attrs('Proxy or CDN hops between the client and the server.',
+      'http_x_forwarded_for from the nginx log, as sent.') }} tabindex="0">XFF Chain</span></td>
+      <td class="cell-truncate" title="{{ detail.xff_headers or '' }}">{{ (detail.xff_headers or '—') | replace(',', ' → ') }}</td>
+    </tr>
+    {% call kv_row('User-agents', ('The UA strings this IP sent, verbatim.', 'Unparsed, as they arrived — the parsed forms are above.')) %}
+      {% if detail.user_agents %}
+        {% for ua in detail.user_agents.split(',') %}
+          {% set u = ua | trim %}
+          {% if u %}<div class="text-muted text-sm break-all">{{ u }}</div>{% endif %}
+        {% endfor %}
+      {% else %}—{% endif %}
+    {% endcall %}
+  {% endcall %}
+</div>
+
+{# ── Request log: the six columns that matter by default, the other eight
+      behind Columns ▾ (persisted per user by columns.js). ── #}
+{% call table_block('Requests', (detail.visit_count | fmtnum) ~ ' logged', table_key='visitor-requests',
+     columns=[{'key': 'bytes', 'label': 'Bytes'}, {'key': 'reqtime', 'label': 'Time (s)'},
+              {'key': 'referer', 'label': 'Referer'}, {'key': 'browser', 'label': 'Browser'},
+              {'key': 'os', 'label': 'OS'}, {'key': 'device', 'label': 'Device'},
+              {'key': 'reqsize', 'label': 'Request size'}, {'key': 'cipher', 'label': 'Cipher'}],
+     page=page, total_pages=total_pages, pager_params='&sort=' ~ sort ~ '&order=' ~ order) %}
+  <table class="sortable server-sort responsive-table">
+    <thead>
+      <tr>
+        {{ sortable_th('timestamp', 'Time', ('When the request arrived.', 'Server time, from the log line\'s own timestamp.'), sort, order, w='c-date') }}
+        {{ sortable_th('method', 'Method', ('The HTTP method used.', 'GET and POST are ordinary; PUT, DELETE and PROPFIND are probing verbs here.'), sort, order, w='c-badge') }}
+        {{ sortable_th('path', 'Path', ('The path that was requested.', 'request_uri from the log, query string removed.'), sort, order, w='c-text') }}
+        {{ sortable_th('server_port', 'Port', ('Which of our ports the request hit.', '80 is plain HTTP, 443 is TLS.'), sort, order, w='c-port') }}
+        {{ sortable_th('status', 'Status', ('What nginx answered.', 'The status field of the log line.'), sort, order, w='c-num') }}
+        {{ sortable_th('bytes_sent', 'Bytes', ('Bytes sent back for this request.', 'body_bytes_sent; headers are not counted.'), sort, order, col_key='bytes', w='c-num') }}
+        {{ sortable_th('request_time', 'Time (s)', ('How long nginx took to answer.', 'The request_time field, in seconds.'), sort, order, col_key='reqtime', w='c-num') }}
+        {{ th_tip('Referer', ('Where the client said it came from.',
+                           'The Referer header, as sent — a client sets it freely, and most send none.'),
+                 col_key='referer', w='c-textsm') }}
+        {{ sortable_th('browser', 'Browser', ('Browser named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, col_key='browser', w='c-client') }}
+        {{ sortable_th('os', 'OS', ('Operating system named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, col_key='os', w='c-client') }}
+        {{ sortable_th('device', 'Device', ('Device class named by the User-Agent.', 'Desktop, Mobile, Tablet or Bot, as the UA parser read it.'), sort, order, col_key='device', w='c-badge') }}
+        {{ sortable_th('request_length', 'Request size', ('Size of the incoming request.', 'request_length, headers included.'), sort, order, col_key='reqsize', w='c-num') }}
+        {{ sortable_th('ssl_cipher', 'Cipher', ('The TLS cipher this connection agreed on.', 'ssl_cipher from the log; an obsolete suite points at an old or scripted client.'), sort, order, col_key='cipher', w='c-textsm') }}
+        {{ sortable_th('limit_req_status', 'Rate limit', ('Whether nginx rate-limited this request.', 'limit_req_status: DELAYED was throttled, REJECTED was answered with 429.'), sort, order, w='c-badge') }}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in requests %}
+      <tr>
+        <td data-label="Time" class="nowrap">{{ r.timestamp | fmtdate }}</td>
+        <td data-label="Method">{{ r.method }}</td>
+        <td data-label="Path" class="col-path">{{ r.path }}</td>
+        <td data-label="Port">{{ r.server_port or '—' }}</td>
+        <td data-label="Status">{{ r.status }}</td>
+        <td data-col="bytes" data-label="Bytes">{{ r.bytes_sent | fmtbytes }}</td>
+        <td data-col="reqtime" data-label="Time (s)">{{ r.request_time }}</td>
+        <td data-col="referer" data-label="Referer" title="{{ r.referer or '' }}">{{ r.referer or '—' }}</td>
+        <td data-col="browser" data-label="Browser" title="{{ r.browser or '' }}">{{ r.browser or '—' }}</td>
+        <td data-col="os" data-label="OS" title="{{ r.os or '' }}">{{ r.os or '—' }}</td>
+        <td data-col="device" data-label="Device">{{ r.device or '—' }}</td>
+        <td data-col="reqsize" data-label="Req Size">{% if r.request_length %}{{ r.request_length | fmtbytes }}{% else %}—{% endif %}</td>
+        <td data-col="cipher" data-label="Cipher" title="{{ r.ssl_cipher or '' }}">{{ r.ssl_cipher or '—' }}</td>
+        <td data-label="Rate Limit">
+          {% if r.limit_req_status == 'REJECTED' %}<span class="badge badge-red">REJECTED</span>
+          {% elif r.limit_req_status == 'DELAYED' %}<span class="badge badge-yellow">DELAYED</span>
+          {% elif r.limit_req_status == 'PASSED' %}<span class="badge badge-muted">PASSED</span>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endcall %}
+
+{% else %}
+<div class="panel">
+  <p>No data found for IP <strong>{{ ip }}</strong>.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if detail and detail.lat and detail.lon %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+  {%- if carto_api_key() %}
+  {#- The basemap key, for map.js. Here rather than in base.html: only the
+      two pages with a map need it, and a documentation page carrying a
+      tile key is exposure for nothing. -#}
+  <script type="application/json" id="map-tile-data">{{ {"key": carto_api_key()} | tojson }}</script>
+  {%- endif %}
+<script src="/static/js/map.js?v={{ asset_v }}"></script>
+{% endif %}
+{% endblock %}

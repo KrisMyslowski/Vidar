@@ -1,0 +1,23 @@
+{#
+  docs.html — one rendered document from docs/, inside the same shell the
+  settings pages use. The nav down the left lists the documents; docs.py builds
+  it from the files on disk, ordered by docs/.order.
+#}
+{% extends "subnav_base.html" %}
+{% block title %}{{ doc_title }} — Vidar{% endblock %}
+
+{#- Loaded here rather than in base.html: rendered markdown carries no project
+    classes and needs its own rules, and no other page has a use for them. The
+    same tier split visitors.html and visitor_detail.html use for Leaflet. -#}
+{% block head %}
+<link rel="stylesheet" href="/static/css/docs.css?v={{ asset_v }}">
+{% endblock %}
+
+{% block settings_content %}
+{#- `body` is markdown-it output. It is marked safe because the renderer runs
+    with html=False, so anything that looked like a tag in the source arrived
+    here already escaped — see the note in routes/docs.py. -#}
+<div class="panel">
+  <article class="doc-body">{{ body | safe }}</article>
+</div>
+{% endblock %}
