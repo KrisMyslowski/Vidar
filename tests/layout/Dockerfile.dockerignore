@@ -1,0 +1,10 @@
+# BuildKit reads <dockerfile>.dockerignore in preference to the context root's,
+# and the root one is written for the runtime image: it excludes requirements/
+# dev.txt, tests/ and scripts/, all of which this image needs. Without this file
+# the build fails on a missing dev.txt.
+#
+# The image carries dependencies only — run_layout_docker.sh mounts the working
+# tree over /app — so everything but requirements/ is excluded, which keeps the
+# context at a few kilobytes.
+*
+!requirements/
