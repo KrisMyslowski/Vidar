@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vidar"
+version = "1.0.0"
+description = "Passive visitor intelligence dashboard"
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 99
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 99
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+
+[tool.ruff.lint]
+# F pyflakes · E/W pycodestyle · ARG unused arguments · B bugbear.
+# Neither black nor isort can see a dead parameter or an unreferenced symbol;
+# both shipped here before (a dead _like() parameter, an unreferenced
+# sidebar.js) and no tool would have said so.
+select = ["F", "E", "W", "ARG", "B"]
+# B905 (zip without strict=) is deliberately left on. It was off while the
+# workstation interpreter was 3.9 and zip(..., strict=) would not parse; that
+# machine is 3.12 now, so the reason expired. Every zip() in src/ pairs a list
+# with an asyncio.gather() over that same list, where a silent length mismatch
+# would write one IP's rDNS onto another.
+ignore = [
+    # FastAPI *declares* parameters by calling Query()/Form()/Depends() in the
+    # default: it is the framework's syntax, not a mutable-default mistake.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest injects fixtures by parameter name, so a test argument that is never
+# read in the body is the request itself, not dead code.
+"tests/*" = ["ARG001", "ARG002", "ARG005"]
+# Verbatim user-agent strings kept as they arrive on the wire; wrapping them
+# would make them stop being the thing under test.
+"tests/test_ua_parser.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-v --strict-markers"
+markers = [
+    "asyncio: marks tests as async",
+]

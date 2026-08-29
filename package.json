@@ -1,0 +1,12 @@
+{
+  "name": "vidar-ui",
+  "private": true,
+  "description": "Browser-side tests for the dashboard's DOM modules. The service itself needs no Node at runtime.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.8"
+  }
+}

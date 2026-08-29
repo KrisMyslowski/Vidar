@@ -1,0 +1,64 @@
+# The build context is the repository root: docker-compose.yml sets `context: ..`
+# relative to deploy/, which on the server is /srv/vidar — the directory that
+# also holds the live database, every monthly archive zip, and the production
+# .env. None of that is needed to build the image.
+#
+# BuildKit (the default since Docker 23) only transfers files a COPY actually
+# matches, so today it sends ~565 kB rather than the whole directory. This file
+# is not there to fix that number; it is there so the guarantee does not depend
+# on which builder ran. `DOCKER_BUILDKIT=0` still sends the entire context —
+# measured at 47.95 MB in a local checkout, and on the server that figure is the
+# database plus the archives. A single `COPY . .` added to the Dockerfile would
+# put them in an image layer under either builder.
+
+# Data and secrets — never part of an image, under any builder.
+# The **/ prefix is load-bearing: dockerignore patterns are anchored to the
+# context root, unlike gitignore's match-at-any-depth. A bare `.env` therefore
+# missed deploy/.env — the very file docker-compose.yml tells the operator to
+# create for NGINX_LOG_DIR/VIDAR_DATA_DIR.
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+**/.env
+**/.env.*
+.deploy.conf
+.deploy.conf.bak
+
+# History and development-only trees.
+.git/
+.gitignore
+.gitattributes
+tmp/
+# docs/ itself is NOT excluded: the dashboard renders the .md files at
+# /docs, so they ship. The screenshots do not — ~2.4 MB for the README on
+# GitHub, and no .md references an image.
+docs/img/
+tests/
+scripts/
+.github/
+# Root-level Markdown except the one that names the project. docs/*.md are not
+# matched by this — the image serves them at /docs.
+*.md
+!README.md
+pyproject.toml
+requirements/dev.txt
+node_modules/
+package.json
+package-lock.json
+vitest.config.js
+.pre-commit-config.yaml
+
+# Build and editor droppings.
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,6 @@
+# The tree is LF throughout and the format gates assume it: a checkout that
+# introduced CRLF would make black and ruff report every file as changed.
+* text=auto eol=lf
+
+# Screenshots — never line-ending-normalised, never diffed as text.
+*.png binary

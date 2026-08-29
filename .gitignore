@@ -1,0 +1,43 @@
+# ── Secrets and local config ─────────────────────────────────────────────────
+# .env.* is broad on purpose: .env.production and .env.bak were not covered by
+# an explicit list, and the one env file that must ship is un-ignored below.
+.env
+.env.*
+!.env.example
+.deploy.conf
+.deploy.conf.bak
+
+# ── Runtime data ─────────────────────────────────────────────────────────────
+# SQLite runs in WAL mode, so a database is three files, not one. Ignoring only
+# *.db left the -wal and -shm siblings staged next to it.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+# Local 3.12 virtualenv — scripts/run_tests.sh prefers it, so a workstation
+# runs the gates on the interpreter the deploy image ships.
+.venv/
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+# package-lock.json is deliberately NOT ignored: requirements/ pins Python
+# exactly, and the browser suite deserves the same guarantee. Without the
+# lockfile a fresh `npm install` can resolve different transitive versions
+# than the ones the 127 vitest tests were last green on.
+node_modules/
+
+# ── Scratch and editor droppings ─────────────────────────────────────────────
+tmp/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

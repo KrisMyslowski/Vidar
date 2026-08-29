@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  # After isort so it never reports an import-order problem isort is about to
+  # fix, before pytest so a dead symbol fails in a second rather than a minute.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      # `ruff` is a legacy alias for this; pre-commit says so on every run.
+      - id: ruff-check
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: python3 -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true

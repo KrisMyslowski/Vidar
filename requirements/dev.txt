@@ -1,0 +1,20 @@
+# Everything scripts/run_tests.sh and the pre-commit hook need, and nothing the
+# service needs. Install alongside the runtime file:
+#
+#     pip install -r requirements/runtime.txt -r requirements/dev.txt
+#
+# pytest and pytest-asyncio used to sit in the runtime file, so the production
+# image installed a test runner it can never use. black, isort and ruff were the
+# opposite problem: run_tests.sh and the commit hook both call them and no file
+# declared them, so a fresh checkout failed at the first gate with nothing to
+# point at. Versions match .pre-commit-config.yaml, so the local run and the
+# hook cannot disagree about what is formatted.
+-r runtime.txt
+
+pytest==8.2.*
+pytest-asyncio==0.24.*
+
+black==24.10.0
+isort==5.13.2
+ruff==0.16.2
+pre-commit>=3.7
