@@ -1,0 +1,65 @@
+# Builds and publishes the container image when a version tag is pushed. It does
+# nothing on its own — no tag, no run. A prerelease tag (v1.0.0-rc.1) publishes
+# only that exact version; :latest and the :major.minor alias stay where they
+# are until a release tag moves them.
+#
+# amd64 and arm64 both, because a large share of self-hosting happens on ARM
+# VPS instances and single-board machines, and an amd64-only image excludes them
+# without saying so.
+name: image
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    # The public repository publishes the public artefact. The GHCR package is
+    # reached with that repository's token, so this is also where the permission
+    # lives; anywhere else the push is refused and the tag carries a failed check
+    # for a reason that has nothing to do with the code. Naming the public repo
+    # rather than excluding a private one keeps the condition true wherever this
+    # file is read.
+    if: github.repository == 'KrisMyslowski/Vidar'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # The owner plus a fixed name, not ${{ github.repository }}. This file
+          # is maintained in a private repository and published to a public
+          # mirror under a different name, so deriving the image from the repo
+          # would name it after whichever one built it.
+          images: ghcr.io/${{ github.repository_owner }}/vidar
+          # :1.2.3 always; :1.2 and :latest only for a release. `latest=auto`
+          # withholds both from a prerelease tag, which is the point of tagging
+          # one: v1.0.0-rc.1 publishes 1.0.0-rc.1 and moves nothing else.
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

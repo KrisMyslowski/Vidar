@@ -1,0 +1,54 @@
+services:
+  vidar:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: vidar
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Loopback is not negotiable — there is no login, the tunnel is the
+    # authentication. The host port is, because 8080 is also what the documented
+    # `ssh -L 8080:localhost:8080` takes: a tunnel to one instance and a second
+    # instance on the same machine cannot both have it.
+    ports:
+      - "127.0.0.1:${VIDAR_PORT:-8080}:8080"
+    # Host paths and the port above. The defaults are what every deploy has used
+    # so far, so leaving them unset changes nothing — they are named here so a
+    # different host layout is a config change rather than an edit to this file.
+    #
+    # Set them in the shell or in deploy/.env, NOT in the deploy root's .env:
+    # compose substitutes ${...} from its own directory, so a value in the
+    # deploy root is one compose never reads — the defaults below are used
+    # instead, silently, and the container mounts a directory nobody chose.
+    # (It does no harm on the application's side: env_file hands its contents
+    # over as environment variables, and an unknown name there is ignored.)
+    #
+    # "Its own directory" is also where the project name comes from — this file
+    # lives in deploy/, so every deploy root yields the project `deploy` and the
+    # image `deploy-vidar`. Together with container_name and the fixed port that
+    # makes a second deploy root a replacement of the first, not a second
+    # instance; VIDAR_DATA_DIR is the only thing that stays per-deploy, and only
+    # if it is actually set. See architecture.md, "One instance per host".
+    volumes:
+      - ${NGINX_LOG_DIR:-/srv/nginx/logs}:/logs:ro
+      - ${VIDAR_DATA_DIR:-/srv/vidar/data}:/data:rw
+    # Resolved relative to this compose file → the deploy root's .env
+    # (e.g. /srv/vidar/.env), which the deploy script verifies and rsync preserves.
+    env_file: ../.env
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

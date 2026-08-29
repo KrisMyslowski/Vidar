@@ -1,0 +1,67 @@
+# Standalone Compose file — the install path for anyone who is not developing
+# the code. Copy this one file plus .env.example into an empty directory, fill
+# in the .env, and `docker compose up -d`. No checkout, no build, no rsync.
+#
+# deploy/docker-compose.yml is the other one and is not this: it builds from a
+# source tree and expects the layout deploy_remote.sh creates. Use that one only
+# if you are deploying your own changes.
+#
+# Pin the tag, and pin one that exists: the newest is on the repository's
+# Packages page. `latest` moves under you on the next release, and the database
+# schema migrates forward only.
+services:
+  vidar:
+    image: ghcr.io/krismyslowski/vidar:1.0.0
+    container_name: vidar
+    restart: unless-stopped
+
+    # Loopback only, and it must stay that way: there is no login. Reach it with
+    # `ssh -L 8080:localhost:8080 you@host`, or put an authenticating reverse
+    # proxy in front of this port.
+    ports:
+      # Loopback is not negotiable; the port is. 8080 is also what
+      # `ssh -L 8080:localhost:8080` takes, so a tunnel to another instance and
+      # this one cannot both have it. VIDAR_PORT goes in the .env beside *this*
+      # file — compose reads its own directory.
+      - "127.0.0.1:${VIDAR_PORT:-8080}:8080"
+
+    volumes:
+      # Left side: the directory on THIS host where nginx writes its access log.
+      # There is no useful default — set NGINX_LOG_DIR in the .env beside this
+      # file, or edit the path here. The container reads it and cannot write it.
+      - ${NGINX_LOG_DIR:?set NGINX_LOG_DIR to the directory nginx writes to}:/logs:ro
+      # The database, the monthly archives and the daily snapshots. Must be
+      # writable by UID 1000: `mkdir -p data && sudo chown 1000:1000 data`.
+      - ${VIDAR_DATA_DIR:-./data}:/data:rw
+
+    # Everything the application reads. Start from .env.example — it is the
+    # canonical list, and its three site-specific keys ship blank on purpose.
+    #
+    # The two variables above can live in this same file. Compose substitutes
+    # them from the .env beside the compose file, which is this one, and hands
+    # the rest to the container as environment variables — where a name the
+    # application does not know is simply ignored. (A .env the *application*
+    # reads as a file is the strict case: there an unknown key is fatal, which
+    # is what the deploy script's check relies on.)
+    env_file: .env
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
