@@ -209,7 +209,15 @@ def archive_dir() -> Path:
     point it somewhere else.
     """
     d = Path(settings.archive_dir)
-    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Best effort, because this is also on every *read* path. A directory
+        # that cannot be created holds no archives, and glob over a missing one
+        # yields nothing — so listing them answers "none" instead of taking the
+        # Settings page down with a 500. A write still fails, at the point of
+        # writing, and `python -m src.preflight` names the mount and the fix.
+        pass
     return d
 
 

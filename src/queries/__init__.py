@@ -8,6 +8,10 @@ the module it actually needs.
     visits        raw visit rows
     visitors      per-IP aggregation
     aggregations  the four groupings of /visitors
+    sessions      one address's visits cut into sessions
+    baseline      what an ordinary hour here holds
+    decisions     what somebody needs in order to decide, as a feed
+    incidents     sessions across addresses that ran the same program
     intel         ip_intel cache, Shodan children, state, rate limits
     stats         the Overview's numbers
     analysis      charts, facets, the exposure surface
@@ -42,6 +46,7 @@ from .aggregations import count_networks as count_networks
 from .aggregations import count_paths as count_paths
 from .aggregations import get_clients as get_clients
 from .aggregations import get_countries as get_countries
+from .aggregations import get_neighbourhood as get_neighbourhood
 from .aggregations import get_networks as get_networks
 from .aggregations import get_paths as get_paths
 from .analysis import _shodan_value_filters as _shodan_value_filters
@@ -49,10 +54,12 @@ from .analysis import count_shodan_hosts as count_shodan_hosts
 from .analysis import get_activity_timeline as get_activity_timeline
 from .analysis import get_analysis_data as get_analysis_data
 from .analysis import get_daily_kpis as get_daily_kpis
+from .analysis import get_exposures as get_exposures
 from .analysis import get_geo_data as get_geo_data
 from .analysis import get_hourly_heatmap as get_hourly_heatmap
 from .analysis import get_http_version_dist as get_http_version_dist
 from .analysis import get_identity_signal_matrix as get_identity_signal_matrix
+from .analysis import get_probe_echo as get_probe_echo
 from .analysis import get_rate_limit_timeline as get_rate_limit_timeline
 from .analysis import get_shodan_hosts as get_shodan_hosts
 from .analysis import get_status_timeline as get_status_timeline
@@ -67,6 +74,14 @@ from .archive_sql import insert_archived_visits as insert_archived_visits
 from .archive_sql import insert_missing_intel as insert_missing_intel
 from .archive_sql import purge_orphaned_intel as purge_orphaned_intel
 from .archive_sql import stream_visits_for_month as stream_visits_for_month
+from .baseline import get_hourly_baseline as get_hourly_baseline
+from .baseline import get_typical_hour as get_typical_hour
+from .decisions import DEFAULT_DAYS as DEFAULT_DAYS
+from .decisions import DEFAULT_GROUPS as DEFAULT_GROUPS
+from .decisions import MAX_ADDRESSES as MAX_ADDRESSES
+from .decisions import get_decisions as get_decisions
+from .decisions import valid_selection as valid_selection
+from .incidents import get_incidents as get_incidents
 from .intel import backfill_visitor_classes as backfill_visitor_classes
 from .intel import count_export_hits as count_export_hits
 from .intel import count_stale_ips as count_stale_ips
@@ -87,6 +102,8 @@ from .intel import set_reverse_dns as set_reverse_dns
 from .intel import set_state as set_state
 from .intel import set_visitor_class as set_visitor_class
 from .intel import upsert_ip_intel as upsert_ip_intel
+from .sessions import count_sessions as count_sessions
+from .sessions import get_sessions as get_sessions
 from .stats import get_attention_items as get_attention_items
 from .stats import get_stats as get_stats
 from .stats import get_visitor_ip_counts as get_visitor_ip_counts

@@ -232,6 +232,27 @@ def _check_dnsbl() -> Check:
     return Check("DNSBL_DQS_KEY", OK, "set")
 
 
+def _check_pattern_pack() -> Check:
+    """The pack the classifier will match on, loaded the way the service loads it.
+
+    Reported here because the alternative is finding out at startup, in a
+    container whose logs an operator has to go and fetch. The failure mode
+    without the check is worse than a crash: a pack that loads but is wrong
+    produces a dashboard where every address is unknown and nothing is broken.
+    """
+    from .classifier.pack import PackError, load
+
+    try:
+        pack, fingerprint = load(settings.patterns_path)
+    except PackError as exc:
+        return Check("pattern pack", FAIL, str(exc))
+    needles = sum(
+        len(t["entries"]) for k, t in pack.items() if isinstance(t, dict) and "entries" in t
+    )
+    where = f", plus {settings.patterns_path}" if settings.patterns_path else " (shipped only)"
+    return Check("pattern pack", OK, f"{needles} needles{where} — classifier {fingerprint}")
+
+
 def run_checks() -> list[Check]:
     """Every check, in the order an operator would hit the problems."""
     entries = _last_entries(settings.log_path)
@@ -241,6 +262,7 @@ def run_checks() -> list[Check]:
         _check_timezone(entries),
         *_check_writable(),
         *_check_site_settings(),
+        _check_pattern_pack(),
         _check_dnsbl(),
     ]
 

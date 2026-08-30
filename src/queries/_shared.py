@@ -297,17 +297,31 @@ def _like_escape(term: str) -> str:
 
 
 def _date_conditions(
-    since: str | None, until: str | None, column: str = "timestamp"
-) -> tuple[list[str], list]:
-    """The window as a list of conditions on `column`, plus their parameters."""
-    conditions, params = [], []
+    since: str | None, until: str | None, column: str = "timestamp", named: bool = False
+) -> tuple[list[str], list | dict]:
+    """The window as a list of conditions on `column`, plus their parameters.
+
+    `until` is inclusive of its whole day — that is what the '+1 day' is for,
+    and it is the reason this lives in one function rather than being written
+    out at each call site.
+
+    With `named`, the placeholders are `:since`/`:until` and the parameters come
+    back as a dict. Positional binding is safe only while a query has one set of
+    parameters in one place: get_exposures had two, bound them in the wrong
+    order, and every window it was given landed on the class list instead —
+    the page was empty under every range and every test still passed. A query
+    that spreads parameters over several CTEs should ask for named.
+    """
+    since_ph, until_ph = (":since", ":until") if named else ("?", "?")
+    conditions: list[str] = []
+    bound: dict[str, str] = {}
     if since:
-        conditions.append(f"{column} >= ?")
-        params.append(since)
+        conditions.append(f"{column} >= {since_ph}")
+        bound["since"] = since
     if until:
-        conditions.append(f"{column} < date(substr(?, 1, 10), '+1 day')")
-        params.append(until)
-    return conditions, params
+        conditions.append(f"{column} < date(substr({until_ph}, 1, 10), '+1 day')")
+        bound["until"] = until
+    return conditions, (bound if named else list(bound.values()))
 
 
 def _date_where(

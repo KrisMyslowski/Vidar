@@ -1,76 +1,150 @@
 {#
-  exposure.html — formerly Tools → Shodan, now a drill surface: three facets over
-  the exposure data, and the host table they describe. Facets and table share one
-  filter state, so a facet count always matches the hosts below it.
+  exposure.html — the other direction. Every other page describes visitors;
+  this describes what they got.
+
+  A finding is a path that answered 2xx and that no human and no crawler ever
+  asked for. The probe echo is not a finding at all: a static server ignores
+  query strings, so a probe URL gets the homepage and a 200 that means nothing.
+  It is a tile rather than rows, because listing 125 of them would have buried
+  the single real finding.
+
+  Below the table, one panel per family present — the same panel-and-h3 shape
+  the visitor detail uses for everything descriptive. The explanation hangs on
+  the family and not the path: three findings under .git/ are one thing to fix.
 #}
 {% extends "base.html" %}
-{% from '_macros.html' import page_header, range_tabs, facet_list, drill_pills,
-    table_block, th_tip, shodan_links, overflow_cell, empty_row, ip_class_bar %}
+{% from '_macros.html' import page_header, range_tabs, table_block, th_tip,
+    stat_card, empty_row, kv_table, kv_row %}
 {% block title %}Exposure — Vidar{% endblock %}
 
 {% block content %}
-{#- The range strip belongs here like everywhere else: this was the one page
-    where the window did not apply, so it showed every IP ever enriched next to
-    a header that named a time range on the other four pages. -#}
-{% call page_header('Exposure', (total_all | fmtnum) ~ ' of ' ~ (enriched_ips | fmtnum) ~ ' IPs enriched via Shodan InternetDB') %}
+{% call page_header('Exposure',
+     (findings | length | fmtnum) ~ (' path' if findings | length == 1 else ' paths')
+     ~ ' this server handed out') %}
   {{ range_tabs(active_range, '/exposure', extra_params=range_params,
      date_from=date_from, date_to=date_to) }}
 {% endcall %}
 
-<div class="facet-grid">
-  {% for f in facets %}
-  {{ facet_list(f.title, f.note, f.entries, facet_urls[f.param], f.active,
-                facet_clear_urls[f.param], f.color) }}
-  {% endfor %}
+<div class="cards">
+  {{ stat_card('Handed out', findings | length | fmtnum,
+     ('Paths that answered 2xx and that no human and no crawler ever requested.',
+      'Crawlers follow links, robots.txt and sitemaps, so a path none of them reached is not
+       part of the site as published.')) }}
+  {{ stat_card('Addresses', totals.ips | fmtnum,
+     ('How many distinct addresses got one of them.',
+      'A path drops off this list once two humans or crawlers have fetched it.')) }}
+  {{ stat_card('Largest', totals.bytes_sent | fmtbytes,
+     ('The biggest single response among them.',), size_class='card-value-md') }}
+  {{ stat_card('Described', described ~ ' of ' ~ (findings | length | fmtnum),
+     ('How many findings a family describes.',
+      'Most will not be: the registry covers the accidents that recur, not every file anybody
+       might leave in a web root.'), size_class='card-value-md') }}
+  {{ stat_card('Probe echo', echo.urls | fmtnum,
+     ('Query-string probe URLs that got a 200 meaning nothing.',
+      'The server ignores the query string and returns the homepage, so the scanner reads it as
+       a working endpoint. Nothing was exposed; it is counted because it explains why the same
+       probes keep arriving.')) }}
 </div>
 
-{{ drill_pills(pills, clear_href if pills else '') }}
-
-{#- Ports and CVEs are calm mono text, not badge walls: the facets above are the
-    drill surface, so a row only has to be readable at a glance. Class is the one
-    badge per row; Tags/Hostnames/Last fetched sit behind Columns ▾. -#}
-{% call table_block('Hosts', (total | fmtnum) ~ ' matching', table_key='exposure',
-     columns=[{'key': 'tags', 'label': 'Tags'}, {'key': 'hostnames', 'label': 'Hostnames'},
-              {'key': 'fetched', 'label': 'Last fetched'}],
-     page=page, total_pages=total_pages, pager_params=pager_params) %}
+{% call table_block('Handed out',
+     (findings | length | fmtnum) ~ (' path' if findings | length == 1 else ' paths')) %}
 <table class="responsive-table">
   <thead>
     <tr>
-      {{ th_tip('IP', ('A visiting IP that Shodan has data on.', 'Click to open its full history.'), w='c-ip') }}
-      {{ th_tip('CC', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}
-      {{ th_tip('Ports', ('TCP ports open on this host.',
-          'Shodan InternetDB. Use the Open ports facet above to filter by one.'), w='c-text') }}
-      {{ th_tip('Class mix', ('What this host is when it visits the site.',
-          'The same identity bar as in Visitors; the exact class is in the bar\'s own tooltip.'), w='c-mix') }}
-      {{ th_tip('CVEs', ('Known vulnerabilities in this host\'s exposed services.',
-          'CVE identifiers from Shodan. Use the CVEs facet above to filter by one.'), w='c-text') }}
-      {{ th_tip('Visits', ('Requests this host sent to the site.',
-          'Rows in the visits table for this IP, inside the selected range.'), w='c-num') }}
-      {{ th_tip('Tags', ('What Shodan says this host is.',
-          'Its own tags, e.g. scanner, vpn, cloud — a claim about the host, not about the visit.'), col_key='tags', w='c-text') }}
-      {{ th_tip('Hostnames', ('Hostnames Shodan resolved for this IP.',
-          'From its scan record — not the reverse DNS this dashboard looks up itself.'), col_key='hostnames', w='c-text') }}
-      {{ th_tip('Last fetched', ('When this host\'s Shodan record was last read.',
-          'ip_intel.fetched_at; the enrichment worker refreshes stale rows in the background.'), col_key='fetched', w='c-date') }}
+      {{ th_tip('Path', ('A path that answered 2xx. Redirects, query strings and the
+                          conventional paths (robots.txt, /.well-known/, favicons) are
+                          never counted.',
+                         'Percent-encoded spellings of the same path are folded together.'),
+                col_key='path', w='c-wide') }}
+      {{ th_tip('Family', ('What kind of file this is, where Vidar recognises it.',
+                           'The explanation is below the table. Blank is normal — the registry
+                            covers the accidents that recur, not everything.'),
+                col_key='family', w='c-text') }}
+      {{ th_tip('Addresses', ('How many distinct addresses got it.',
+                              'A path drops off this list once two humans or crawlers have
+                               fetched it. Where one has, it is counted here.'),
+                col_key='addresses', w='c-num') }}
+      {{ th_tip('Requests', ('How often, in the selected window.',), col_key='requests', w='c-num') }}
+      {{ th_tip('Size', ('Bytes of the largest response.',), col_key='size', w='c-num') }}
+      {{ th_tip('First seen', ('When it was first handed out.',), col_key='first', w='c-date') }}
+      {{ th_tip('Last seen', ('The most recent time.',), col_key='last', w='c-date') }}
     </tr>
   </thead>
   <tbody>
-    {% for h in hosts %}
+    {% for f in findings %}
     <tr>
-      <td data-label="IP" title="{{ h.ip }}"><a href="/visitors/{{ h.ip | urlencode }}">{{ h.ip }}</a></td>
-      <td data-label="CC">{{ h.country_code or '—' }}</td>
-      <td data-label="Ports" class="cell-mono" title="{{ h.open_ports or '' }}">{{ (h.open_ports or '—') | replace(',', ', ') }}</td>
-      <td data-label="Class mix">{{ ip_class_bar(h) }}</td>
-      <td data-label="CVEs" class="cell-mono{% if h.vulns %} text-red{% endif %}" title="{{ h.vulns or '' }}">{{ (h.vulns or '—') | replace(',', ', ') }}</td>
-      <td data-label="Visits">{{ h.visit_count | fmtnum }}</td>
-      <td data-label="Tags" data-col="tags"><span class="cell-overflow">{{ shodan_links(h.tags, 'tag', extra=range_suffix) }}</span></td>
-      <td data-label="Hostnames" data-col="hostnames">{{ overflow_cell(h.hostnames | csv_items) }}</td>
-      <td data-label="Last Fetched" class="nowrap" data-col="fetched">{{ h.fetched_at | fmtdate }}</td>
+      <td data-label="Path" data-col="path">
+        <code>{{ f.path }}</code>
+        {%- if f.spellings | length > 1 %}
+          <span class="text-muted">· also {{ f.spellings | reject('equalto', f.path) | join(', ') }}</span>
+        {% endif %}
+      </td>
+      <td data-label="Family" data-col="family">
+        {%- if f.family_title %}{{ f.family_title }}
+        {%- else %}<span class="text-muted">—</span>{% endif %}
+      </td>
+      <td data-label="Addresses" data-col="addresses" class="num">
+        {{ f.ips | fmtnum }}
+        {%- if f.benign_ips %}<span class="text-muted"> ({{ f.benign_ips }})</span>{% endif %}
+      </td>
+      <td data-label="Requests" data-col="requests" class="num">{{ f.hits | fmtnum }}</td>
+      <td data-label="Size" data-col="size" class="num">{{ f.bytes_sent | filesizeformat }}</td>
+      <td data-label="First seen" data-col="first">{{ f.first_seen | fmtdate }}</td>
+      <td data-label="Last seen" data-col="last">{{ f.last_seen | fmtdate }}</td>
     </tr>
     {% else %}
-    {{ empty_row(9, 'host', filter_chips, clear_href if filter_chips else '', 'Clear filters') }}
+    {{ empty_row(7, 'exposed path') }}
     {% endfor %}
   </tbody>
 </table>
 {% endcall %}
+
+{% if families or unexplained %}
+<p class="section-label">What these are</p>
+
+{% for family, paths in families %}
+<div class="panel">
+  <h3>{{ family.title }}</h3>
+  {% call kv_table('family-table') %}
+    {% call kv_row('Found at') %}
+      {% for path in paths %}<code>{{ path }}</code>{{ ', ' if not loop.last }}{% endfor %}
+    {% endcall %}
+    {% call kv_row('What it is') %}{{ family.what | inline_code }}{% endcall %}
+    {% call kv_row('Why it was asked for') %}{{ family.why | inline_code }}{% endcall %}
+    {% call kv_row('Check it yourself') %}<code>{{ family.check }}</code>{% endcall %}
+    {% call kv_row('How to stop serving it') %}{{ family.fix | inline_code }}{% endcall %}
+  {% endcall %}
+</div>
+{% endfor %}
+
+{% if unexplained %}
+{#- No description, on purpose: a sentence broad enough to cover any file says
+    nothing about this one, and once it sits under every unrecognised finding it
+    gets skipped along with the real ones. The command is still worth having —
+    it is derived from the path and needs to know nothing about the file. -#}
+{% call table_block('Not described here',
+     (unexplained | length | fmtnum) ~ (' path' if unexplained | length == 1 else ' paths')) %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Path', ('A finding no family in the registry describes.',
+                         'Most will be. The registry covers the accidents that recur.'),
+                col_key='path', w='c-wide') }}
+      {{ th_tip('Go and look', ('The one piece of advice that needs no knowledge of the file.',
+                                'Headers only — an unknown response could be a database export.'),
+                col_key='check', w='c-wide') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for path, check in unexplained %}
+    <tr>
+      <td data-label="Path" data-col="path"><code>{{ path }}</code></td>
+      <td data-label="Go and look" data-col="check"><code>{{ check }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% endif %}
+{% endif %}
 {% endblock %}

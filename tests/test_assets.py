@@ -146,3 +146,23 @@ def test_no_script_formats_a_number_in_the_viewer_s_locale():
         if "toLocaleString()" in line
     ]
     assert bare == [], f"bare toLocaleString() follows the viewer's locale: {bare}"
+
+
+def test_every_responsive_cell_names_its_column():
+    """Below 1100px a table becomes cards, and the field name comes from
+    `data-label` — `.responsive-table td::before { content: attr(data-label) }`.
+
+    Without it a card is a stack of bare values: a date, three numbers and two
+    badge rows with nothing saying which is which. Three tables shipped that
+    way, and nothing caught it: the structure suite checks that `data-col`
+    agrees between header and body, and the layout suite only measures the
+    widths a card layout does not have.
+    """
+    missing = []
+    for template in sorted((SRC / "templates").rglob("*.html")):
+        text = template.read_text()
+        for table in re.findall(r'<table[^>]*class="[^"]*responsive-table.*?</table>', text, re.S):
+            for cell in re.findall(r"<td\b[^>]*>", table):
+                if "data-col=" in cell and "data-label=" not in cell:
+                    missing.append(f"{template.name}: {cell}")
+    assert not missing, "cells with no name in card layout:\n" + "\n".join(missing)

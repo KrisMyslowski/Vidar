@@ -10,7 +10,7 @@
 
 {#
   shodan_links — render a comma-separated Shodan field (ports/tags/vulns) as badge
-  links to /exposure?<param>=<value> (every host sharing that value). Emits
+  links to /shodan?<param>=<value> (every host sharing that value). Emits
   just the anchors; wrap in <span class="cell-overflow"> on table rows so
   overflow.js collapses them to a [+N], or use bare (kv rows) to show all.
 #}
@@ -21,7 +21,7 @@
 {%- macro shodan_links(csv, param, badge='badge-muted', extra='') -%}
 {%- set parts = (csv or '').split(',') | map('trim') | reject('equalto', '') | list -%}
 {%- if not parts -%}—{%- else -%}
-{%- for p in parts -%}<a class="badge {{ badge }}" href="/exposure?{{ param }}={{ p | urlencode }}{{ extra }}"
+{%- for p in parts -%}<a class="badge {{ badge }}" href="/shodan?{{ param }}={{ p | urlencode }}{{ extra }}"
    {{ tip_attrs('Shodan ' ~ param ~ ': ' ~ p ~ '.', 'Opens Exposure, listing every host that shares it.') }}>{{ p }}</a>{% endfor -%}
 {%- endif -%}
 {%- endmacro -%}

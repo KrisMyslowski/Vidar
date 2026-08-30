@@ -165,7 +165,10 @@ HTML, not JSON. Listed so the URL surface is documented in one place.
 | `GET /visitors/{ip}` | One IP in full — verdict, classifier evidence, network and exposure, request log |
 | `GET /visitors/rows` | HTML **fragment**, not a page: the IPs behind one aggregation row, loaded into the slide-over |
 | `GET /analysis` | Identity × signals matrix, status and HTTP-version distributions, rate limiting |
-| `GET /exposure` | Shodan facets (ports, tags, CVEs) over the host set below them; `port`, `vuln`, `tag` narrow both |
+| `GET /api/decisions` | The addresses matching a stated selection, with the evidence for each. `format=txt\|json`, `class`, `group`, `from`/`to`. Vidar does not decide what is blocked |
+| `GET /incidents` | What happened: addresses that ran the same program at the same time |
+| `GET /exposure` | What the site gave away: paths that answered 2xx and that fewer than two benign addresses ever fetched, each with what it is and how to stop serving it |
+| `GET /shodan` | Shodan facets (ports, tags, CVEs) over the host set below them; `port`, `vuln`, `tag` narrow both |
 | `GET /settings/status` | What the service is doing, and the configuration it loaded |
 | `GET /settings/storage` | Retention mode, archives, snapshots |
 | `GET /settings/api` | This endpoint list, in the UI |
@@ -194,7 +197,7 @@ than erroring. `group=ip` additionally takes the exact-match drill-downs (`asn`,
 
 **301 redirects.** Six routes became parameters — `/visitors/networks`, `/visitors/countries`,
 `/visitors/clients`, `/visitors/paths` → `?group=`; `/visitors/geo` → `?view=map`;
-`/visitors/analysis` and `/visitors/analyse` → `/analysis`; `/tools/shodan` → `/exposure` —
+`/visitors/analysis` and `/visitors/analyse` → `/analysis`; `/tools/shodan` → `/shodan` —
 alongside older ones: `/humans`, `/not-humans`, `/visitors/humans`, `/visitors/not-humans`,
 `/visitors/requests` → `?group=path&status=4xx`, `/timeline`, `/visitors/timeline`, `/geo`,
 `/analyse`, `/threats`, `/settings/exports` → `/settings/storage`, and `/settings` →

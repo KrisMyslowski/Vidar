@@ -6,6 +6,16 @@
  */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Links in ordinary content. Every link that lives inside a component sets its
+   own colour and overrides this by specificity — the sidebar, the drill pills,
+   the breadcrumb — so this only reaches the ones that do not: a link in a
+   paragraph, or in a kv-table cell. There was no such rule, so those fell back
+   to the browser's blue-and-purple, which is the one pair of colours the theme
+   does not own. Underline on hover rather than always, to match the rest. */
+a { color: var(--accent); text-decoration: none; }
+a:visited { color: var(--accent); }
+a:hover { text-decoration: underline; }
+
 html, body {
   max-width: 100%;
   overflow-x: hidden;

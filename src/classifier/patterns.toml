@@ -1,0 +1,311 @@
+# Vidar pattern pack — the needles the classifier matches on.
+#
+# These are the parts of the classifier that go stale because the internet
+# changes, not because the rules do: which operators run crawlers, what the
+# scanning tools call themselves, which paths a scanner asks for. They live in
+# a file so that adding a newly announced AI crawler is an edit rather than a
+# code change, a version bump and a release.
+#
+# WHAT IS NOT HERE: the thresholds. Those are calibration — each carries a
+# measurement against a real log and is meaningless apart from the rule that
+# reads it — and they stay in patterns.py where the reasoning sits beside them.
+# Moving a number here would invite tuning it without the measurement.
+#
+# AN OPERATOR PACK CAN ADD TO THIS FILE, never remove from it. Set PATTERNS_PATH
+# to a second file with the same shape and its entries are appended per table.
+# Additive on purpose: a deployment that wants to *stop* matching something is
+# describing a rule change, and a rule change belongs in a rule.
+#
+# EDITING THIS CHANGES EVERY STORED VERDICT. The classifier version carries a
+# hash of the effective pack, so the next start reclassifies every address —
+# measured at 5.8 s per million visits. That is the intended behaviour and the
+# reason the hash exists: without it, an operator file would silently apply to
+# new addresses only, and the dashboard would hold two vintages of judgement
+# with no way to tell them apart.
+#
+# The schema is checked at load and a broken file stops the service with the
+# table and the reason named. `python -m src.preflight` reports the same thing
+# without starting it.
+
+# Schema version of this file, not of the classifier. Bumped only when the
+# shape changes — a reader that does not know the number refuses to guess.
+schema = 1
+
+[scanner_paths]
+# The probe paths that mark a request as scanning. Defined once: the classifier
+# counts them per IP, the Overview's "Needs attention" ranks them by distinct IPs.
+#
+# Site-specific by design: this site is fully static and has no login, so '%.php%',
+# '%/login%' and '%/admin%' cannot match anything legitimate here. On a deployment
+# that actually serves PHP or an admin area, drop those three.
+entries = [
+  "%/.env%",
+  "%/.git/%",
+  "%actuator%",
+  "%wp-admin%",
+  "%wp-config%",
+  "%wp-login%",
+  "%/wp-json/%",
+  "%rest_route%",
+  "%xmlrpc%",
+  "%/cgi-bin/%",
+  "%phpinfo%",
+  "%phpmyadmin%",
+  "%/.aws/%",
+  "%.sql%",
+  "%docker-compose%",
+  "%kubernetes%",
+  "%terraform%",
+  "%credentials%",
+  "%database.yml%",
+  "%/boaform/%",
+  "%hnap1%",
+  "%/geoserver%",
+  "%/solr/%",
+  "%/jenkins%",
+  "%/telnet%",
+  "%.php%",
+  "%/login%",
+  "%/admin%",
+  "%/mcp%",
+  "%/sse%",
+]
+
+[payload_abuse]
+# Non-HTTP request bodies that carry an actual payload rather than a protocol error.
+# nginx cannot parse these into method/URI, so log_processor stores the raw line as
+# the path — that is where the shell command or dropper URL ends up.
+entries = [
+  "%wget%",
+  "%curl %",
+  "%chmod%",
+  "%busybox%",
+  "%/bin/sh%",
+  "%rm+-rf%",
+  "%rm -rf%",
+  "%mozi%",
+  "%gpon%",
+  "%jsonrpc%",
+  "%/shell%",
+  "%t3 1%",
+]
+
+[dropper_suffixes]
+# Multi-architecture dropper filenames — a request for one is a botnet trying to
+# fetch its payload from a host it believes is already compromised.
+entries = [
+  "arm",
+  "arm5",
+  "arm6",
+  "arm7",
+  "mips",
+  "mpsl",
+  "x86",
+  "x86_64",
+  "m68k",
+  "sh4",
+  "spc",
+  "arc",
+  "ppc",
+]
+
+[convention_404]
+# Well-known convention files. Asking for one and getting a 404 is protocol, not
+# probing: security.txt is RFC 9116, ads.txt is an IAB standard, llms.txt an AI-crawler
+# convention, and /.well-known/ is the reserved namespace (RFC 8615). Counting these
+# toward the error rate labelled 42 production IPs as vulnerability-probers whose only
+# "offence" was asking politely where to report a vulnerability.
+entries = [
+  "%security.txt",
+  "%ads.txt",
+  "%llms.txt",
+  "%humans.txt",
+  "%robots.txt",
+  "%sitemap%.xml",
+  "/.well-known/%",
+  "/favicon.ico",
+  "/apple-touch-icon%",
+]
+
+[cloud_isps]
+# ip-api's `hosting` flag misses whole operators: against a live log it did not
+# flag Akamai (which now carries Linode's VPS ranges), Server Mania, PureVoltage or
+# Cherry Servers, so 29 rented boxes sat in humans/*. These names supplement the flag.
+#
+# Cloudflare is deliberately ABSENT. Its ranges carry WARP, a consumer VPN: all 32
+# Cloudflare IPs in the human cohort were proxy-flagged, 23 fetched the JS-only page
+# fragments and 22 sent Sec-Fetch — that is a person, not a rented box. Matching a bare
+# "cloud" substring would have swept every one of them up.
+entries = [
+  "amazon",
+  "aws",
+  "google",
+  "microsoft",
+  "azure",
+  "digitalocean",
+  "ovh",
+  "hetzner",
+  "linode",
+  "akamai",
+  "oracle",
+  "alibaba",
+  "tencent",
+  "huawei cloud",
+  "datacamp",
+  "m247",
+  "vultr",
+  "contabo",
+  "leaseweb",
+  "choopa",
+  "scaleway",
+  "upcloud",
+  "cherry servers",
+  "server mania",
+  "purevoltage",
+  "hostinger",
+  "ionos",
+]
+
+[researcher_rdns]
+# Named organisations that publish their scanning identity — attribution, not tooling.
+entries = [
+  "shodan",
+  "censys",
+  "shadowserver",
+  "internet-census",
+  "leakix",
+]
+
+[researcher_uas]
+entries = [
+  "censysinspect",
+  "shodan",
+  "l9explore",
+  "leakix",
+  "palo alto",
+  "expanse",
+  "modatscanner",
+  "internet-measurement",
+  "bitsight",
+  "netsystemsresearch",
+]
+
+[scanning_tool_uas]
+# Tools anyone can run. They name the software, so that is all we claim.
+entries = [
+  "zgrab",
+  "masscan",
+  "libredtail",
+  "nmap",
+  "zmap",
+  "nuclei",
+]
+
+[search_rdns]
+entries = [
+  "googlebot",
+  "bingbot",
+  "yandex",
+  "duckduck",
+  "baidu",
+  "seznam",
+  "msn.com",
+]
+
+[search_uas]
+entries = [
+  "googlebot",
+  "bingbot",
+  "yandexbot",
+  "baiduspider",
+  "duckduckbot",
+  "seznambot",
+  "sogou",
+  "petalbot",
+]
+
+[ai_rdns]
+# Matched against reverse DNS on its own, before any UA claim, so a needle here
+# has to be unambiguous as a hostname: applebot.apple.com and not "apple",
+# because the match is a substring one and the full host is what Apple publishes
+# (17-x-x-x.applebot.apple.com). Corroborating a UA claim is a separate, wider
+# question — see _CRAWLER_ORIGINS.
+entries = [
+  "openai",
+  "anthropic",
+  "bytedance",
+  "perplexity",
+  "applebot.apple.com",
+]
+
+[ai_uas]
+entries = [
+  "gptbot",
+  "claudebot",
+  "bytespider",
+  "perplexitybot",
+  "ccbot",
+  "applebot",
+  "oai-search",
+]
+
+[seo_uas]
+entries = [
+  "ahrefsbot",
+  "semrushbot",
+  "mj12bot",
+  "dotbot",
+  "rogerbot",
+  "blexbot",
+  "seokicks",
+]
+
+[http_client_uas]
+# UAs that name an HTTP client library. "How the request was made", not "who made it".
+entries = [
+  "curl/",
+  "wget/",
+  "go-http-client",
+  "python-requests",
+  "python-urllib",
+  "java/",
+  "okhttp",
+  "libwww-perl",
+  "guzzlehttp",
+  "axios/",
+  "node-fetch",
+]
+
+[crawler_origins]
+# Where each declared crawler legitimately runs, matched against the network owner
+# (ip-api's org and ASN) when reverse DNS cannot decide.
+#
+# Reverse DNS alone was the whole verification until v6, and it disqualified the
+# operators who publish no PTR record — which turned out to be most of the large
+# ones. Of 91 addresses filed as impersonators, 88 were the real crawler: 41
+# OpenAI (GPTBot and OAI-SearchBot, crawling from Azure), 22 Applebot, 10
+# ClaudeBot on AWS under Anthropic's own org, 4 SeznamBot, 1 DuckDuckBot on Azure.
+# The org field named the operator in every one of those cases.
+#
+# Two kinds of needle, and the difference matters when reading a verdict:
+# operator-owned networks (google, yandex, seznam, apple, anthropic) prove the
+# claim, while the provider-level ones — microsoft for the crawlers that run on
+# Azure, amazon for CommonCrawl — only place the address on the right platform.
+# A forged GPTBot UA from any Azure box passes on that second kind. Narrowing it
+# needs the operators' published IP ranges, i.e. a network dependency this
+# service does not take.
+googlebot = ["googlebot.com", "google"]
+bingbot = ["search.msn.com", "microsoft", "bing"]
+yandexbot = ["yandex"]
+baiduspider = ["baidu"]
+duckduckbot = ["duckduckgo", "microsoft"]
+seznambot = ["seznam"]
+sogou = ["sogou"]
+petalbot = ["petalsearch", "huawei"]
+gptbot = ["openai", "microsoft"]
+oai-search = ["openai", "microsoft"]
+claudebot = ["anthropic"]
+bytespider = ["bytedance"]
+perplexitybot = ["perplexity"]
+ccbot = ["commoncrawl", "amazon"]
+applebot = ["apple"]

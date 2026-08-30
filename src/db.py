@@ -9,6 +9,7 @@ Three responsibilities, kept intentionally separate from query logic (see querie
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -384,6 +385,40 @@ async def run_db(work, *args):
         raise
 
 
+# ── The neighbourhood an address sits in ─────────────────────────────────────
+
+# /24 for IPv4 and /64 for IPv6, which is not a symmetry — it is the unit each
+# family is actually handed out in. A /24 is the smallest range routinely
+# delegated to one customer; a /64 is one interface's subnet, and an address
+# rotating through it is the same machine, not a new visitor.
+_NEIGHBOURHOOD_PREFIX = {4: 24, 6: 64}
+
+
+def network_of(ip: str | None) -> str | None:
+    """The neighbourhood key for an address, or None if it is not one.
+
+    SQLite has no notion of a network, and string surgery on the stored text
+    only works for IPv4: `2001:db8::1` and `2001:0db8:0:0:0:0:0:1` are one
+    address written two ways, and nginx logs whichever the client presented.
+    Parsing is the only thing that gets both families right, so this is
+    registered as a SQL function rather than open-coded into a LIKE.
+
+    None for anything unparseable, so a malformed value groups with nothing
+    instead of forming a neighbourhood of its own.
+    """
+    if not ip:
+        return None
+    try:
+        prefix = _NEIGHBOURHOOD_PREFIX[ipaddress.ip_address(ip).version]
+        return str(ipaddress.ip_network(f"{ip}/{prefix}", strict=False))
+    except (ValueError, TypeError):
+        # Both calls are inside the try, not only the first. ip_address accepts
+        # an int and a bytes object as valid addresses, so a non-text column
+        # would pass it and then fail on the string form below — raising out of
+        # a SQL function, which fails the whole query rather than one row.
+        return None
+
+
 @contextmanager
 def get_conn(db_path: Path | None = None):
     """Yield a SQLite connection with WAL mode and foreign keys.
@@ -403,6 +438,9 @@ def get_conn(db_path: Path | None = None):
         # and made that setting dead config.
         conn.execute(f"PRAGMA busy_timeout={int(settings.db_connection_timeout * 1000)}")
         conn.execute("PRAGMA foreign_keys=ON")
+        # net(ip) — see network_of(). Deterministic, so SQLite may cache it
+        # within a statement rather than re-parsing the same address per row.
+        conn.create_function("net", 1, network_of, deterministic=True)
         yield conn
         conn.commit()
     except Exception:

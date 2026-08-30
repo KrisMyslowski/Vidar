@@ -59,7 +59,9 @@ PAGES = [
     "/visitors?group=client",
     "/visitors?group=path",
     "/analysis",
-    "/exposure",
+    "/shodan",
+    "/exposure?range=all",
+    "/incidents?range=all",
     "/visitors/203.0.113.10",
 ]
 # Below 1100px the tables become a card layout — a different system with no
@@ -112,6 +114,37 @@ def server(_node, tmp_path_factory):
                     browser="Mobile Safari 13.2.3",
                     os="iOS 13.2",
                 )
+        # An exposure finding and one incident, so those two pages have rows to
+        # measure instead of an empty table with nothing in it to size.
+        tool = ["/.env", "/.git/config", "/wp-login.php", "/admin/", "/phpinfo.php"]
+        for n in range(2):
+            probe_ip = f"198.51.100.{n + 1}"
+            upsert_ip_intel(conn, _intel(probe_ip, isp="Hosting Co"))
+            set_visitor_class(conn, probe_ip, "bots/vulnerability-probers")
+            insert_visit(
+                conn,
+                ip=probe_ip,
+                timestamp="2026-07-25T10:00:00+00:00",
+                method="GET",
+                path="/.DS_Store",
+                status=200,
+                bytes_sent=6148,
+            )
+        for n in range(3):
+            member = f"198.51.101.{n + 1}"
+            upsert_ip_intel(conn, _intel(member, isp="Hosting Co"))
+            set_visitor_class(conn, member, "bots/vulnerability-probers")
+            for k, probe_path in enumerate(tool):
+                insert_visit(
+                    conn,
+                    ip=member,
+                    timestamp=f"2026-07-25T11:{n * 5:02d}:{k * 3:02d}+00:00",
+                    method="GET",
+                    path=probe_path,
+                    status=404,
+                    bytes_sent=0,
+                )
+
         # Three continents, so the heat grid has more than one cell to shade.
         upsert_ip_intel(
             conn,

@@ -5,12 +5,12 @@ Four routes carry the whole dashboard:
   GET /visitors       — every visitor surface: ?group=ip|asn|country|client|path
                         selects the grouping, ?view=table|map the presentation
   GET /analysis       — identity×signal matrix, distributions, rate limits
-  GET /exposure       — Shodan InternetDB exposure facets + host table
+  GET /shodan       — Shodan InternetDB exposure facets + host table
   GET /visitors/{ip}  — single-IP detail + paginated request log
 
 Backward-compat redirects (301) — the six routes that became parameters:
   /visitors/networks /visitors/countries /visitors/clients /visitors/paths → ?group=
-  /visitors/geo → ?view=map · /visitors/analysis → /analysis · /tools/shodan → /exposure
+  /visitors/geo → ?view=map · /visitors/analysis → /analysis · /tools/shodan → /shodan
   /humans /not-humans /visitors/humans /visitors/not-humans /geo /analyse /threats
   /visitors/requests (merged into ?group=path&status=4xx)
   /timeline /visitors/timeline (merged into the Overview)
@@ -41,6 +41,8 @@ from . import (
     _range,
     analysis,
     docs,
+    exposure,
+    incidents,
     overview,
     redirects,
     settings,
@@ -59,7 +61,9 @@ _MODULES = (
     overview,  # /
     visitors,  # /visitors, /visitors/rows
     redirects,  # every 301, incl. the literal /visitors/* paths
-    analysis,  # /analysis, /exposure
+    analysis,  # /analysis, /shodan
+    exposure,  # /exposure
+    incidents,  # /incidents
     settings,  # /settings/*
     docs,  # /docs, /docs/{slug}
     visitor_detail,  # /visitors/{ip} — catch-all, so last

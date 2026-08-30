@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     # startup, and the deploy script refuses to ship without it.
     site_base_url: str = ""
 
+    # An optional second pattern pack, merged on top of the shipped one. Same
+    # shape as src/classifier/patterns.toml, and additive: it can add needles,
+    # never remove them, because removing one describes a rule change and a rule
+    # change belongs in a rule.
+    #
+    # Empty by default, and empty is the normal state — the shipped pack is the
+    # whole pack for almost every deployment. A path that does not load stops
+    # the service with the file and the reason named, rather than starting with
+    # no patterns and a dashboard where nothing is ever wrong.
+    #
+    # Changing it reclassifies every stored address on the next start: the
+    # fingerprint of the effective pack is part of CLASSIFIER_VERSION.
+    patterns_path: str = ""
+
     # Log processor polling interval
     poll_interval_seconds: float = 1.0
 

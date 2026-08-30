@@ -14,6 +14,7 @@ from .. import __version__, archive, backup, enricher
 from ..archive import LAST_RUN_KEY
 from ..config import Settings, settings, unset_site_settings
 from ..db import run_db
+from ..preflight import FAIL, _check_writable
 from ..queries import count_stale_ips, count_unenriched_ips, get_state, get_visit_months
 from ..validators import valid_month
 from ._app import templates
@@ -284,6 +285,10 @@ async def settings_storage(request: Request):
         _load
     )
     snapshots = backup.list_snapshots()
+    # Asked here rather than trusted: the directories are created on first use
+    # and that create can fail — a read-only mount, the wrong uid — after which
+    # every button on this page fails and the archive list is simply empty.
+    storage_problems = [c for c in _check_writable() if c.status == FAIL]
     today = datetime.now(timezone.utc)
     start = archive.window_start(today, rolling_months)
     disk = _disk_usage()
@@ -292,6 +297,7 @@ async def settings_storage(request: Request):
         "settings_storage.html",
         {
             "nav": _settings_nav("storage"),
+            "storage_problems": storage_problems,
             "mode": mode,
             "rolling_months": rolling_months,
             "max_rolling_months": archive.MAX_ROLLING_MONTHS,
@@ -444,5 +450,11 @@ async def settings_storage_snapshot(name: str):
 
 @router.get("/settings/api")
 async def settings_api(request: Request):
-    """The four JSON endpoints and what each one answers."""
-    return templates.TemplateResponse(request, "settings_api.html", {"nav": _settings_nav("api")})
+    """The endpoints and what each one answers."""
+    from ..queries import MAX_ADDRESSES
+
+    return templates.TemplateResponse(
+        request,
+        "settings_api.html",
+        {"nav": _settings_nav("api"), "max_addresses": MAX_ADDRESSES},
+    )

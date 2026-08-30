@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from .config import settings
 from .db import get_conn, run_db
-from .models import LogEntry
+from .models import LogEntry, Visit
 from .queries import get_state, insert_visit, set_state
 from .ua_parser import parse_user_agent
 
@@ -179,8 +179,16 @@ def _missing_field_report(keys: frozenset[str]) -> str | None:
 
     Only the optional fields reach this: a line missing a required one fails
     validation and _report_unparseable() names it. The rest default silently —
-    the lines still parse and a feature is simply gone. LogEntry is the reference
-    because nginx-log-format.conf is not in the image.
+    the lines still parse and a feature is simply gone.
+
+    The reference is the nginx adapter's own field list, not the canonical
+    event: this asks whether *this source* delivered what it promised, which is
+    a different question from whether Vidar got everything it can use. A format
+    that never carries Sec-Fetch is not a misconfigured nginx, and when a second
+    adapter exists it will need its own answer rather than this one.
+
+    LogEntry serves as that list because nginx-log-format.conf is not in the
+    image.
     """
     missing = {f for f in LogEntry.model_fields if f not in keys}
     if not missing:
@@ -345,8 +353,19 @@ def _derive_server_port(entry: LogEntry) -> int:
     return 80
 
 
-def process_entry(entry: LogEntry) -> dict:
-    """Convert a LogEntry to visit insert kwargs."""
+def process_entry(entry: LogEntry) -> Visit:
+    """Map one nginx log line onto the canonical visit event.
+
+    **This is the boundary.** Above it a field is called whatever nginx calls it;
+    below it, whatever Vidar calls it. A second log format would add a second
+    function here and change nothing else — the database, the evidence query and
+    the templates already speak the names on the right-hand side.
+
+    Most of the mapping is a rename (`remote_addr` → `ip`). Three fields are
+    derived rather than copied: method and path are recovered from the raw
+    request line when nginx could not parse it, the port is inferred when it is
+    absent, and browser/os/device come from the user agent.
+    """
     method, path = _derive_request_fields(entry)
     server_port = _derive_server_port(entry)
     ua_info = parse_user_agent(entry.http_user_agent)

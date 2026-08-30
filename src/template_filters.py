@@ -253,6 +253,31 @@ def cpe_services(value: str) -> Markup:
     return Markup(escape(", ".join(items))) if items else Markup("—")
 
 
+def fmtduration(seconds) -> str:
+    """A span of time, at the precision the log can actually support.
+
+    nginx logs $time_iso8601, which resolves to the second, so "0 s" means
+    "inside one second" and not "instant". Above that the unit steps up rather
+    than the number growing: a monitoring client polling every ten minutes never
+    opens a gap wide enough to end its session, so a single session legitimately
+    spans the whole retention window — 7 776 000 s is a correct answer nobody
+    can read, and "90 d" is the same answer.
+    """
+    if seconds is None:
+        return "—"
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return "—"
+    if total < 120:
+        return f"{total} s"
+    if total < 7200:
+        return f"{total // 60} min"
+    if total < 172800:
+        return f"{total // 3600} h"
+    return f"{total // 86400} d"
+
+
 def path_tip(path: str) -> tuple[str, str]:
     """The (what, how) pair for a known scanner or probe path, or an empty pair.
 
@@ -271,6 +296,26 @@ def path_tip(path: str) -> tuple[str, str]:
     return ("", "")
 
 
+def inline_code(text: str) -> Markup:
+    """Prose with `backticked` spans turned into <code>, everything else escaped.
+
+    src/families.py explains config snippets in running text — a deny rule, a
+    curl command — and a backtick rendered as a backtick reads as markdown that
+    failed to render. This is not a markdown parser and must not become one:
+    one construct, applied to constants this repository owns.
+
+    Escaping happens per segment rather than on the result, so a family whose
+    text contains a literal < is still safe inside the <code> as well as
+    outside it.
+    """
+    return Markup(
+        "".join(
+            f"<code>{escape(part)}</code>" if i % 2 else str(escape(part))
+            for i, part in enumerate(text.split("`"))
+        )
+    )
+
+
 # ── Registration ─────────────────────────────────────────────────────────────
 
 
@@ -286,4 +331,6 @@ def register_filters(env: jinja2.Environment) -> None:
     env.filters["cpe_os"] = cpe_os
     env.filters["cpe_services"] = cpe_services
     env.filters["parse_cpe"] = parse_cpe
+    env.filters["fmtduration"] = fmtduration
     env.filters["path_tip"] = path_tip
+    env.filters["inline_code"] = inline_code

@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..config import settings
+from ..sessions import BEHAVIOUR_BADGES, BEHAVIOUR_LABELS, BEHAVIOUR_TIPS
 from ..taxonomy import (
     CLASS_TIPS,
     GROUP_COLOR_VARS,
@@ -69,6 +70,11 @@ templates.env.globals.update(
         "GROUP_TIPS": GROUP_TIPS,
         "SIGNAL_TIPS": SIGNAL_TIPS,
         "SIGNAL_BADGES": SIGNAL_BADGES,
+        # Behaviour — the third axis. Its own registry, deliberately not the
+        # taxonomy's: see sessions.BEHAVIOUR_BADGES.
+        "BEHAVIOUR_LABELS": BEHAVIOUR_LABELS,
+        "BEHAVIOUR_TIPS": BEHAVIOUR_TIPS,
+        "BEHAVIOUR_BADGES": BEHAVIOUR_BADGES,
         "SIGNAL_LABELS": SIGNAL_LABELS,
         "SIGNAL_LABELS_SHORT": SIGNAL_LABELS_SHORT,
         # The registry itself, for templates that render one column, chip or bar

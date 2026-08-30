@@ -4,6 +4,7 @@ GET /api/stats    — summary statistics
 GET /api/activity — visits per day or hour, split by identity group
 GET /api/visits   — paginated visit list with IP/country filters
 GET /api/export   — full export as JSON or CSV (streamed, date-filtered, rate-limited)
+GET /api/decisions — the addresses matching a stated selection, with the evidence
 """
 
 from __future__ import annotations
@@ -11,20 +12,26 @@ from __future__ import annotations
 import csv
 import io
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from .. import __version__
 from ..db import get_conn
 from ..queries import (
+    DEFAULT_DAYS,
+    DEFAULT_GROUPS,
+    MAX_ADDRESSES,
     VISIT_SORT_MAP,
     count_visits,
     get_activity_timeline,
+    get_decisions,
     get_stats,
     get_visits,
     stream_visits_for_export,
+    valid_selection,
 )
 from ..taxonomy import VALID_CLASSES, VALID_GROUPS, VALID_SIGNALS
 from ..validators import valid_country, valid_date, valid_ip, valid_order, valid_search
@@ -215,3 +222,89 @@ async def export(
         media_type="application/json",
         headers={"Content-Disposition": "attachment; filename=export.json"},
     )
+
+
+@router.get("/decisions")
+async def decisions(
+    format: str = Query(default="txt", pattern="^(txt|json)$"),
+    cls: list[str] = Query(default=[], alias="class"),
+    group: list[str] = Query(default=[]),
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+):
+    """The addresses matching a stated selection, with what is known about each.
+
+    Vidar does not decide what is blocked. It says what somebody needs in order
+    to decide, in a form another tool can read — CrowdSec, nftables, a shell
+    script. The brain, not the hand.
+
+    Which is why the selection travels with the answer. Asked nothing in
+    particular it answers for `threats/*` over the last week, and says so; a
+    feed whose membership rule is invisible is a blocklist, and a blocklist
+    nobody can open is what this project argues against.
+    """
+    classes, groups = valid_selection(tuple(cls), tuple(group))
+    if not classes and not groups:
+        groups = DEFAULT_GROUPS
+        default = True
+    else:
+        default = False
+    since = valid_date(from_date)
+    until = valid_date(to_date)
+    if since is None and default:
+        since = (datetime.now(timezone.utc) - timedelta(days=DEFAULT_DAYS)).strftime("%Y-%m-%d")
+
+    def load(conn):
+        # The cap is passed rather than left to the default, so the number the
+        # response reports and the number the query used are the same one.
+        return get_decisions(conn, classes, groups, since, until, limit=MAX_ADDRESSES)
+
+    rows = await fetch(load)
+    selection = {
+        "classes": list(classes),
+        "groups": list(groups),
+        "from": since,
+        "to": until,
+        "recommended_default": default,
+        "truncated": len(rows) >= MAX_ADDRESSES,
+    }
+    if format == "json":
+        return {"selection": selection, "count": len(rows), "addresses": rows}
+    return PlainTextResponse(_as_text(rows, selection), media_type="text/plain; charset=utf-8")
+
+
+def _as_text(rows: list[dict], selection: dict) -> str:
+    """One address per line, with its reason after a `#`.
+
+    The convention Spamhaus DROP and the CrowdSec blocklists use, so the usual
+    consumers already strip it — and the reason stays visible to a person
+    reading the same file. A feed of bare addresses is one nobody can review.
+    """
+    what = ", ".join(selection["classes"] + [f"{g}/*" for g in selection["groups"]]) or "nothing"
+    head = [
+        f"# Vidar {__version__} — addresses matching a selection, not a verdict.",
+        "# Vidar does not decide what is blocked. Review before you act on it.",
+        f"# Selection: {what}"
+        + (" (the recommended default)" if selection["recommended_default"] else ""),
+        f"# Window: {selection['from'] or 'all data'} to {selection['to'] or 'now'}",
+        f"# Generated: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+        f"# Addresses: {len(rows)}"
+        + (
+            f" (capped at {MAX_ADDRESSES}; narrow the selection)" if selection["truncated"] else ""
+        ),
+        "#",
+        "# Everything after a # is a comment.",
+    ]
+    for r in rows:
+        marks = [r["visitor_class"]]
+        if r["probes"]:
+            marks.append(f"{r['probes']} probe" + ("" if r["probes"] == 1 else "s"))
+        marks.append(f"{r['requests']} request" + ("" if r["requests"] == 1 else "s"))
+        if r["blocklisted"]:
+            marks.append("on a blocklist")
+        if r["tor"]:
+            marks.append("Tor exit")
+        if r["hosting"]:
+            marks.append("hosting range")
+        head.append(f"{r['ip']}  # {' · '.join(marks)}")
+    return "\n".join(head) + "\n"

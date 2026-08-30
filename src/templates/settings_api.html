@@ -1,6 +1,11 @@
 {#
-  settings_api.html — the four JSON endpoints. The sidebar used to carry a bare
-  "API" link to /api/stats, which named one endpoint and hid the other three.
+  settings_api.html — the endpoints. The sidebar used to carry a bare "API"
+  link to /api/stats, which named one endpoint and hid the rest.
+
+  /api/decisions has its own panel rather than a fifth row above. The others
+  hand out what the dashboard shows; that one is read by something that may
+  then act, and the sentence about who decides has to be next to it and not in
+  a tooltip.
 #}
 {% extends "subnav_base.html" %}
 {% from '_macros.html' import kv_table, kv_row %}
@@ -39,6 +44,39 @@
       Per-month zips are on <a href="/settings/storage">Storage &amp; Retention</a>.
       <a href="/api/export?format=csv" target="_blank">CSV</a>
       <a href="/api/export?format=json" target="_blank">JSON</a>
+    {% endcall %}
+  {% endcall %}
+</div>
+
+<div class="panel">
+  <h3>Decisions</h3>
+  <p class="text-muted">
+    The third question — <em>how do I deal with it</em> — in a form another tool can read.
+    CrowdSec, nftables or a shell script can help themselves from here.
+  </p>
+  <p class="text-muted">
+    <strong>Vidar does not decide what is blocked.</strong> It says what somebody needs in order
+    to decide. The selection travels with the answer, and every address carries its reason,
+    because a feed whose membership rule is invisible is a blocklist — and a blocklist nobody can
+    open is the thing this dashboard argues against.
+  </p>
+  {% call kv_table('family-table') %}
+    {% call kv_row('/api/decisions', ('Addresses matching a stated selection, with the evidence.',
+                          'format=txt|json, plus class and group, and a from/to window. Asked
+                           nothing in particular it answers for threats/* over the last week and
+                           says so.')) %}
+      One address per line with its reason after a <code>#</code> — the convention the usual
+      consumers already strip. <code>format=json</code> gives the same with the full evidence per
+      address.
+      <a href="/api/decisions" target="_blank">Text</a>
+      <a href="/api/decisions?format=json" target="_blank">JSON</a>
+    {% endcall %}
+    {% call kv_row('Review it first', ('Why the file is written to be read by a person too.',
+                                       'Every line names the class, the counts and the network
+                                        signals behind it.')) %}
+      A selection is not a verdict. Read the reasons before anything acts on them — and narrow
+      the selection rather than taking the first {{ max_addresses | fmtnum }}, which is where the
+      answer is capped.
     {% endcall %}
   {% endcall %}
 </div>

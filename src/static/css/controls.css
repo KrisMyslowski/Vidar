@@ -156,6 +156,12 @@
   width: 22rem;
   color: var(--text-muted);
 }
+/* Exposure's family explanations, for exactly the reason above: one kv-table
+   per family, each sizing its own label column, so "How to stop serving it"
+   pushed the prose to a different indent in every block. Narrower than
+   .config-table — these labels are four short questions, not setting names. */
+.family-table { table-layout: fixed; width: 100%; }
+.family-table td:first-child { width: 11rem; color: var(--text-muted); }
 .config-table td { overflow-wrap: anywhere; }
 /* The group name rides in the table so it cannot drift out of step with the
    rows under it. */

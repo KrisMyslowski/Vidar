@@ -29,6 +29,39 @@ def _like_escape(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# Same-origin navigation, as one expression because there must only be one.
+# Three conditions, each load-bearing:
+#   1. the referer is anchored at our host — a bare '%host%' would also match
+#      'https://evil.com/?u=<host>', letting anyone forge internal navigation;
+#   2. what follows the host starts with '/', so 'https://<host>.evil.com/x'
+#      is not our site either;
+#   3. it points at a *different* page — our own HTTP->HTTPS redirect makes a
+#      client re-request the same URL with that URL as its referer, and that
+#      is a protocol hop, not navigation.
+# (A referer carrying an explicit port is not matched; vanishingly rare here.)
+#
+# The `:host <> ''` guard is not defensive noise. SITE_BASE_URL has no default
+# any more, and with an empty host every LIKE below collapses to 'http://%' —
+# which would count *every* referred visit as same-origin navigation and hand a
+# browser verdict to anything with a referer. An unconfigured site must lose
+# this signal, not invert it.
+#
+# Read by the session query too (queries/sessions.py). A second copy of this is
+# how "internal_nav means the same thing everywhere" stops being true.
+_INTERNAL_NAV_CASE = """CASE
+              WHEN v.sec_fetch_site = 'same-origin' THEN 1
+              WHEN :host <> ''
+                   AND (v.referer LIKE 'http://'  || :host || '%'
+                    OR v.referer LIKE 'https://' || :host || '%'
+                    OR v.referer LIKE 'http://www.'  || :host || '%'
+                    OR v.referer LIKE 'https://www.' || :host || '%')
+                   AND SUBSTR(v.referer, INSTR(v.referer, :host) + LENGTH(:host)) LIKE '/%'
+                   AND SUBSTR(v.referer, INSTR(v.referer, :host) + LENGTH(:host))
+                       <> v.path
+              THEN 1
+              ELSE 0 END"""
+
+
 @functools.lru_cache(maxsize=8)
 def _classify_sql(js_prefixes: tuple[str, ...]) -> str:
     """Build the per-IP evidence query.
@@ -98,33 +131,7 @@ def _classify_sql(js_prefixes: tuple[str, ...]) -> str:
         COUNT(DISTINCT CASE WHEN v.status = 404 AND NOT ({_CONVENTION_404_MATCH})
                             THEN v.path END) AS distinct_404_paths,
         SUM(CASE WHEN v.device = 'Bot'                THEN 1 ELSE 0 END) AS bot_device,
-        -- Same-origin navigation. Three conditions, each load-bearing:
-        --   1. the referer is anchored at our host — a bare '%host%' would also match
-        --      'https://evil.com/?u=<host>', letting anyone forge internal navigation;
-        --   2. what follows the host starts with '/', so 'https://<host>.evil.com/x'
-        --      is not our site either;
-        --   3. it points at a *different* page — our own HTTP->HTTPS redirect makes a
-        --      client re-request the same URL with that URL as its referer, and that
-        --      is a protocol hop, not navigation.
-        -- (A referer carrying an explicit port is not matched; vanishingly rare here.)
-        --
-        -- The `:host <> ''` guard is not defensive noise. SITE_BASE_URL has no
-        -- default any more, and with an empty host every LIKE below collapses to
-        -- 'http://%' — which would count *every* referred visit as same-origin
-        -- navigation and hand a browser verdict to anything with a referer. An
-        -- unconfigured site must lose this signal, not invert it.
-        SUM(CASE
-              WHEN v.sec_fetch_site = 'same-origin' THEN 1
-              WHEN :host <> ''
-                   AND (v.referer LIKE 'http://'  || :host || '%'
-                    OR v.referer LIKE 'https://' || :host || '%'
-                    OR v.referer LIKE 'http://www.'  || :host || '%'
-                    OR v.referer LIKE 'https://www.' || :host || '%')
-                   AND SUBSTR(v.referer, INSTR(v.referer, :host) + LENGTH(:host)) LIKE '/%'
-                   AND SUBSTR(v.referer, INSTR(v.referer, :host) + LENGTH(:host))
-                       <> v.path
-              THEN 1
-              ELSE 0 END) AS internal_nav,
+        SUM({_INTERNAL_NAV_CASE}) AS internal_nav,
         SUM(CASE WHEN v.sec_fetch_site = 'cross-site' THEN 1 ELSE 0 END) AS cross_site_nav,
         -- Distinct *pages*. '[handshake on HTTP port]' and friends are protocol
         -- errors nginx could not parse, not pages: counting them let a single

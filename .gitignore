@@ -28,6 +28,11 @@ build/
 # runs the gates on the interpreter the deploy image ships.
 .venv/
 
+# Claude Code's local settings. Untracked is not enough: sync_public.sh
+# publishes `git ls-files --cached --others --exclude-standard`, so anything
+# here that is merely untracked would be copied into the public mirror.
+.claude/
+
 # ── Node ─────────────────────────────────────────────────────────────────────
 # package-lock.json is deliberately NOT ignored: requirements/ pins Python
 # exactly, and the browser suite deserves the same guarantee. Without the

@@ -124,7 +124,7 @@ class TestDashboardViews:
             ("/visitors?group=path", "Paths"),
             ("/visitors?view=map", 'id="map"'),
             ("/analysis", "Analysis"),
-            ("/exposure", "Shodan"),
+            ("/shodan", "Shodan"),
         ],
     )
     def test_view_renders(self, client, dashboard_db, path, marker):
@@ -222,7 +222,7 @@ class TestDashboardViews:
         """The release UI draws every distribution as CSS bars — no chart canvas
         and no Chart.js anywhere, so the pages carry no chart dependency."""
         with patch("src.config.settings.db_path", dashboard_db):
-            for path in ("/", "/analysis", "/exposure", "/visitors?view=timeline"):
+            for path in ("/", "/analysis", "/shodan", "/visitors?view=timeline"):
                 text = client.get(path).text
                 # The only canvas left is the theme-toggle icon in the sidebar.
                 body = text.split('<main class="content">')[1]
@@ -321,7 +321,7 @@ class TestDashboardViews:
         assert 'class="map-overlay map-overlay--bl' in text
         assert "markers in the same group colors" not in text  # was mock placeholder
 
-    def test_exposure_table_matches_the_spec_columns(self, client, dashboard_db):
+    def test_shodan_table_matches_the_spec_columns(self, client, dashboard_db):
         """IP · CC · Ports · Class mix · CVEs · Visits, ports/CVEs as mono text."""
         now = datetime.now(timezone.utc).isoformat()
         with get_conn(dashboard_db) as conn:
@@ -330,19 +330,19 @@ class TestDashboardViews:
             )
             insert_visit(conn, ip="203.0.113.10", timestamp=now, path="/", status=200)
         with patch("src.config.settings.db_path", dashboard_db):
-            text = client.get("/exposure").text
+            text = client.get("/shodan").text
         assert ">Class mix</span>" in text and ">Visits</span>" in text
         assert 'class="cell-mono' in text  # ports/CVEs are text, not badge walls
         assert "CVE-2024-6387" in text
 
     def test_class_and_signal_are_bars_on_every_surface(self, client, dashboard_db):
         """Class mix and Signals render as the same mix bar everywhere — including
-        the IP grouping, the slide-over, Exposure and the Overview's Top→IPs.
+        the IP grouping, the slide-over, Shodan and the Overview's Top→IPs.
 
         A single visitor has one identity, so its bar is one full-width band; the
         exact class lives in the tooltip. No table falls back to a class badge.
         """
-        # Exposure only lists IPs that carry Shodan data.
+        # Shodan only lists IPs that carry Shodan data.
         with get_conn(dashboard_db) as conn:
             upsert_ip_intel(conn, _intel("203.0.113.10", open_ports="22,443"))
             set_visitor_class(conn, "203.0.113.10", "humans/browser-direct")
@@ -350,7 +350,7 @@ class TestDashboardViews:
             "/visitors",  # group=ip
             "/visitors?group=asn",
             "/visitors/rows?asn=AS1",
-            "/exposure",
+            "/shodan",
             "/",
         ]
         with patch("src.config.settings.db_path", dashboard_db):
@@ -437,7 +437,7 @@ class TestDashboardViews:
         with patch("src.config.settings.db_path", dashboard_db):
             client.get("/")
             with patch.object(cache, "get_attention_items", side_effect=AssertionError) as spy:
-                assert client.get("/exposure").status_code == 200
+                assert client.get("/shodan").status_code == 200
             spy.assert_not_called()
 
     def test_findings_report_what_triggered_them(self, client, tmp_db):
@@ -571,7 +571,7 @@ class TestDashboardViews:
             "/visitors?group=path",
             "/visitors?view=map",
             "/analysis",
-            "/exposure",
+            "/shodan",
         ):
             response = client.get(path)
             assert response.status_code == 200, path
@@ -663,7 +663,7 @@ class TestLegacyRedirects:
     """Old paths 301-redirect to their successor — always in one hop.
 
     The four aggregation tables became ?group=, the map became ?view=map, and
-    Analysis/Exposure became top-level routes.
+    Analysis/Shodan became top-level routes.
     """
 
     @pytest.mark.parametrize(
@@ -676,7 +676,7 @@ class TestLegacyRedirects:
             ("/visitors/paths", "/visitors?group=path"),
             ("/visitors/geo", "/visitors?view=map"),
             ("/visitors/analysis", "/analysis"),
-            ("/tools/shodan", "/exposure"),
+            ("/tools/shodan", "/shodan"),
             # Older redirects, re-pointed at the new targets (no 301 chains).
             ("/humans", "/visitors?class=humans"),
             ("/not-humans", "/visitors"),
@@ -1211,7 +1211,7 @@ class TestRangeMemory:
         # whole point of the feature.
         assert _active_range_tab(client.get("/visitors").text) == "7 days"
         assert _active_range_tab(client.get("/analysis").text) == "7 days"
-        assert _active_range_tab(client.get("/exposure").text) == "7 days"
+        assert _active_range_tab(client.get("/shodan").text) == "7 days"
 
     def test_a_custom_window_travels_too(self, client, tmp_db):
         client.get("/", params={"date_from": "2026-01-01", "date_to": "2026-01-31"})
@@ -1255,8 +1255,8 @@ class TestRangeMemory:
         assert "90" in _default_range_label(), "the default tab must name its span"
 
 
-def test_exposure_page_renders(client, tmp_db):
-    """Exposure lists the IPs carrying Shodan data, with the three facets."""
+def test_shodan_page_renders(client, tmp_db):
+    """Shodan lists the IPs carrying Shodan data, with the three facets."""
     now = datetime.now(timezone.utc).isoformat()
     with get_conn(tmp_db) as conn:
         insert_visit(conn, ip="203.0.113.50", timestamp=now, method="GET", path="/", status=200)
@@ -1264,7 +1264,7 @@ def test_exposure_page_renders(client, tmp_db):
             conn,
             _intel("203.0.113.50", tags="scanner", vulns="CVE-2021-1234", open_ports="80,443"),
         )
-    resp = client.get("/exposure")
+    resp = client.get("/shodan")
     assert resp.status_code == 200
     assert "Shodan" in resp.text
     assert "203.0.113.50" in resp.text
@@ -1274,7 +1274,7 @@ def test_exposure_page_renders(client, tmp_db):
     assert "Tags" in resp.text
 
 
-def test_exposure_port_filter(client, tmp_db):
+def test_shodan_port_filter(client, tmp_db):
     """?port= narrows the host list to IPs exposing that port."""
     now = datetime.now(timezone.utc).isoformat()
     with get_conn(tmp_db) as conn:
@@ -1283,14 +1283,14 @@ def test_exposure_port_filter(client, tmp_db):
         upsert_ip_intel(conn, _intel("203.0.113.50", open_ports="22,80"))
         upsert_ip_intel(conn, _intel("203.0.113.51", open_ports="443"))
 
-    resp = client.get("/exposure", params={"port": 22})
+    resp = client.get("/shodan", params={"port": 22})
     assert resp.status_code == 200
     assert "203.0.113.50" in resp.text
     assert "203.0.113.51" not in resp.text
     assert 'class="drill-pill"' in resp.text  # clearable filter pill
 
 
-def test_exposure_facets_share_the_table_filter(client, tmp_db):
+def test_shodan_facets_share_the_table_filter(client, tmp_db):
     """Facets describe the filtered host set, not the whole database.
 
     Host A exposes 22+80, host B exposes 443. Filtering by port 22 must drop 443
@@ -2084,7 +2084,7 @@ class TestTheRangeGovernsEveryPage:
             sep = "&" if "?" in path else "?"
             return client.get(f"{path}{sep}range={rng}").text
 
-    @pytest.mark.parametrize("path", ["/", "/visitors", "/analysis", "/exposure"])
+    @pytest.mark.parametrize("path", ["/", "/visitors", "/analysis", "/shodan"])
     def test_the_old_era_is_absent_from_the_recent_window(self, client, two_eras_db, path):
         recent = self._page(client, two_eras_db, path, "24h")
         everything = self._page(client, two_eras_db, path, "all")
@@ -2129,16 +2129,16 @@ class TestTheRangeGovernsEveryPage:
             cells(self._page(client, two_eras_db, "/analysis", "24h"))
         )
 
-    def test_exposure_hosts_follow_the_window(self, client, two_eras_db):
-        recent = self._page(client, two_eras_db, "/exposure", "24h")
-        everything = self._page(client, two_eras_db, "/exposure", "all")
+    def test_shodan_hosts_follow_the_window(self, client, two_eras_db):
+        recent = self._page(client, two_eras_db, "/shodan", "24h")
+        everything = self._page(client, two_eras_db, "/shodan", "all")
         assert "203.0.113.10" in everything and "203.0.113.11" in everything
         assert "203.0.113.10" not in recent and "203.0.113.11" in recent
 
-    def test_exposure_links_carry_the_window(self, client, two_eras_db):
+    def test_shodan_links_carry_the_window(self, client, two_eras_db):
         """A facet click must not widen the time window on the way."""
-        text = self._page(client, two_eras_db, "/exposure", "24h")
-        links = re.findall(r'href="(/exposure\?[^"]*)"', text)
+        text = self._page(client, two_eras_db, "/shodan", "24h")
+        links = re.findall(r'href="(/shodan\?[^"]*)"', text)
         assert links
         value_links = [unescape(h) for h in links if "port=" in h or "tag=" in h or "vuln=" in h]
         assert value_links

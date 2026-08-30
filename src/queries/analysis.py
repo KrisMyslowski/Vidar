@@ -3,8 +3,12 @@ the identity x signal matrix, and the Shodan exposure surface."""
 
 from __future__ import annotations
 
+import re
 import sqlite3
+from fnmatch import fnmatch
+from urllib.parse import unquote
 
+from ..classifier.patterns import _CONVENTION_404_MATCH, _CONVENTION_404_PATTERNS
 from ..taxonomy import CLEAN_SIGNAL_COLUMNS, GROUPS_WITH_UNKNOWN, SIGNALS
 from ._shared import (
     _THREAT_FLAGS_SQL,
@@ -606,3 +610,201 @@ def get_unusual_methods(
             [*d_params, limit],
         ).fetchall()
     ]
+
+
+# ── What the site gave away ──────────────────────────────────────────────────
+# The other direction. Everything above describes visitors; this describes what
+# they got. Attackers name the operator's attack surface every day by asking for
+# it, and the answers are already in `visits` — nothing new is collected.
+
+
+# A visitor class whose members only fetch what is linked, listed in robots.txt
+# or announced in a sitemap. If none of them ever retrieved a path successfully,
+# that path is not part of the discoverable site — which is the whole signal.
+#
+# `automated/*` and `unknown` are deliberately not benign: a headless browser on
+# a datacentre range proves nothing about a path being legitimate, and treating
+# it as proof would hide exactly the findings this looks for.
+# One benign address is not a pattern. Requiring two is what stops a single
+# misclassification from hiding a leak: the address that fetched `//%2eDS_Store`
+# was a headless browser under v5 and a referred human under v6, and with a veto
+# of one the whole finding disappeared on reclassification — 31 addresses of
+# evidence overruled by one verdict that had just changed its mind.
+#
+# Two independent benign addresses is evidence the path belongs to the site.
+# `/` has 223 of them against 2 699 probers; `/.DS_Store` has one, at most.
+_BENIGN_ADDRESSES_FOR_SITE = 2
+
+_BENIGN_CLASSES = (
+    "humans/browser-direct",
+    "humans/browser-internal-nav",
+    "humans/browser-referred",
+    "bots/search-crawlers",
+    "bots/ai-crawlers",
+    "bots/seo-tools",
+)
+
+
+def get_exposures(
+    conn: sqlite3.Connection,
+    since: str | None = None,
+    until: str | None = None,
+) -> list[dict]:
+    """Paths that answered 2xx and that no benign visitor ever asked for.
+
+    Three decisions, each of which was wrong in an earlier draft and was
+    corrected against a live log:
+
+    **2xx, not "not an error".** Reading success as `status < 400` counted the
+    HTTP→HTTPS redirect: 158 531 of the prober traffic on the reference log is a
+    301, which would have reported every probe as a hit. A security finding that
+    cries wolf costs more trust than it earns.
+
+    **Query strings are excluded.** A static server ignores them, so `/?phpinfo=-1`
+    returns the homepage with 200 and a scanner concludes its probe worked. 125
+    distinct paths on the reference log are that one phenomenon, and listing them
+    as 125 exposures would bury the one real finding. See get_probe_echo().
+
+    **Convention paths are excluded** — the same list the 404 ratio uses.
+    `/.well-known/acme-challenge/…` is fetched by nobody but a certificate
+    authority, which is the exact shape of a finding and the exact opposite of
+    one.
+
+    **The benign test runs on the resource, not on the spelling.** It used to
+    run per raw path in SQL, which made a finding depend on how each individual
+    request happened to be written: one visitor of `//%2eDS_Store` was
+    reclassified from a headless browser to a human by v6, that spelling dropped
+    out, and the same file went from 31 addresses to 30 while staying listed
+    under another spelling. A count that moves because one visitor was judged
+    differently is not a count. Spellings fold first; the question "did anything
+    benign ever fetch this" is then asked once, of the resource.
+    """
+    conds, params = _date_conditions(since, until, column="v.timestamp")
+    where = "".join(f" AND {c}" for c in conds)
+    benign = ", ".join("?" for _ in _BENIGN_CLASSES)
+    rows = [
+        dict(r)
+        for r in conn.execute(
+            f"""
+        SELECT v.path,
+               COUNT(DISTINCT v.ip) AS ips,
+               COUNT(*)             AS hits,
+               MIN(v.timestamp)     AS first_seen,
+               MAX(v.timestamp)     AS last_seen,
+               MAX(v.bytes_sent)    AS bytes_sent,
+               COUNT(DISTINCT CASE WHEN i.visitor_class IN ({benign})
+                                  THEN v.ip END) AS benign_ips
+        FROM visits v
+        JOIN ip_intel i ON i.ip = v.ip
+        WHERE v.status BETWEEN 200 AND 299
+          AND v.path NOT LIKE '%?%'
+          AND NOT ({_CONVENTION_404_MATCH})
+          {where}
+        GROUP BY v.path
+        ORDER BY ips DESC, hits DESC
+    """,
+            # Bound in the order the placeholders appear in the text, and here
+            # the benign list sits in the SELECT, ahead of the window in the
+            # WHERE. get_probe_echo() below has the two the other way round and
+            # therefore binds them the other way round. Reversed, this still
+            # runs: the window gets a class name, `v.timestamp >= 'bots/…'`
+            # matches no timestamp, and the page is empty under every range
+            # while every test that passes no window keeps passing.
+            [*_BENIGN_CLASSES, *params],
+        ).fetchall()
+    ]
+    return _fold_encodings(rows)
+
+
+def _fold_encodings(rows: list[dict]) -> list[dict]:
+    """Collapse percent-encoded spellings of one path, and drop the harmless ones.
+
+    Without this the reference log reports eight findings where there is one.
+    `/.DS_Store`, `/%2eDS_Store` and `//%2eDS_Store` are the same 6 148-byte file
+    reached three ways; `/robots%2etxt` is robots.txt, which the convention list
+    would have excluded had it been spelled normally; and `//`, `/./`, `/%2f`
+    are path-normalisation probes that get the homepage back.
+
+    Seven rows of noise around one real finding is how a security feature stops
+    being read. Decoding is what separates them: the variants fold into their
+    decoded form, and anything whose decoded form is a path benign visitors
+    fetch, or a convention path, is not a finding at all.
+    """
+    folded: dict[str, dict] = {}
+    for row in rows:
+        canonical = _canonical_path(row["path"])
+        if _is_convention_path(canonical):
+            continue
+        seen = folded.get(canonical)
+        if seen is None:
+            folded[canonical] = {**row, "path": canonical, "spellings": {row["path"]}}
+            continue
+        seen["ips"] += row["ips"]
+        seen["hits"] += row["hits"]
+        seen["benign_ips"] += row["benign_ips"]
+        seen["spellings"].add(row["path"])
+        seen["bytes_sent"] = max(seen["bytes_sent"], row["bytes_sent"])
+        seen["last_seen"] = max(seen["last_seen"], row["last_seen"])
+        seen["first_seen"] = min(seen["first_seen"], row["first_seen"])
+    # Now, and only now, ask the question — of the resource, once.
+    out = sorted(
+        (r for r in folded.values() if r["benign_ips"] < _BENIGN_ADDRESSES_FOR_SITE),
+        key=lambda r: (-r["ips"], -r["hits"]),
+    )
+    for row in out:
+        row["spellings"] = sorted(row["spellings"])
+    return out
+
+
+def _canonical_path(path: str) -> str:
+    """One spelling per resource.
+
+    Percent-decoding folds `/%2eDS_Store` onto `/.DS_Store`; collapsing repeated
+    slashes and a bare `/./` folds the normalisation probes onto what they
+    actually reached. Both are the same file asked for in a way that looks
+    different in a log.
+    """
+    decoded = unquote(path)
+    return re.sub(r"/{2,}", "/", decoded).replace("/./", "/")
+
+
+def _is_convention_path(path: str) -> bool:
+    """The same list the 404 ratio uses, applied to an already-decoded path."""
+    lowered = path.lower()
+    return any(fnmatch(lowered, p.replace("%", "*")) for p in _CONVENTION_404_PATTERNS)
+
+
+def get_probe_echo(
+    conn: sqlite3.Connection,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict:
+    """How often a probe URL got a 200 that means nothing.
+
+    Not an exposure — the opposite of one. A static server serves the path and
+    ignores the query, so `/?rest_route=/wp/v2/users/` returns the homepage and
+    a scanner reads that as a working WordPress endpoint. Worth reporting
+    because it explains why the same probes keep arriving, and because an
+    operator who sees "200" in their own log should know what it did not mean.
+
+    Counted as one fact with a number, never as a list of findings.
+    """
+    conds, params = _date_conditions(since, until, column="v.timestamp")
+    where = "".join(f" AND {c}" for c in conds)
+    benign = ", ".join("?" for _ in _BENIGN_CLASSES)
+    row = conn.execute(
+        f"""
+        SELECT COUNT(*) AS urls, SUM(ips) AS ips FROM (
+            SELECT v.path, COUNT(DISTINCT v.ip) AS ips
+            FROM visits v
+            JOIN ip_intel i ON i.ip = v.ip
+            WHERE v.status BETWEEN 200 AND 299
+              AND v.path LIKE '%?%'
+              {where}
+            GROUP BY v.path
+            HAVING SUM(CASE WHEN i.visitor_class IN ({benign}) THEN 1 ELSE 0 END) = 0
+        )
+    """,
+        [*params, *_BENIGN_CLASSES],
+    ).fetchone()
+    return {"urls": row[0] or 0, "ips": row[1] or 0}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from '_macros.html' import page_header, stat_card, sortable_th, kv_table, kv_row, pagination, shodan_links, th_tip, table_block, tip_attrs %}
+{% from '_macros.html' import page_header, stat_card, sortable_th, kv_table, kv_row, pagination, shodan_links, th_tip, table_block, tip_attrs, mix_bar, empty_row %}
 {% block title %}{{ ip }} — Vidar{% endblock %}
 
 {% block head %}
@@ -78,6 +78,8 @@
   {{ stat_card('Last seen', detail.last_seen | fmtdate, ('The IP\'s most recent request.', 'MAX(timestamp) across its whole history.'), size_class='card-value-sm') }}
   {{ stat_card('Avg response', detail.avg_response_time | fmtresptime, ('Mean time nginx took to answer this IP.', 'The request_time field, averaged over its requests.'), size_class='card-value-md') }}
   {{ stat_card('Bandwidth', detail.total_bandwidth | fmtbytes, ('Response bytes sent to this IP.', 'Sum of body_bytes_sent; request bodies are not counted.'), size_class='card-value-md') }}
+  {{ stat_card('Sessions', session_total | fmtnum, ('Runs of requests with no gap longer than 30 minutes.',
+     'A model decision with no correct answer, written down in src/sessions.py rather than tuned quietly.')) }}
 </div>
 
 {# ── Why this verdict: the classifier's own evidence, decisive rule first. ── #}
@@ -100,7 +102,129 @@
   {% endif %}
 </div>
 
+<p class="section-label">Behaviour</p>
+
+{# ── Sessions ───────────────────────────────────────────────────────────
+   The third axis: not what this address is, but what it did. A run of
+   requests with no gap longer than the session threshold — see
+   src/sessions.py, where the threshold is a documented model decision and
+   not a hidden one.
+
+   One label per session, and it is the session's dominant behaviour rather
+   than a story: a visit that arrives from a search engine, reads three pages
+   and then walks eleven paths that do not exist is one session and is called
+   enumeration. The counts beside it carry the "and then" the label cannot. #}
+{% call table_block('Sessions',
+     (session_total | fmtnum) ~ (' session' if session_total == 1 else ' sessions')
+     ~ (', newest ' ~ (sessions | length) ~ ' shown' if session_total > sessions | length else '')) %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Started', ('When the first request of the session arrived.',
+                            'Sessions are cut at 30 minutes of silence.'), col_key='started', w='c-date') }}
+      {{ th_tip('For', ('How long the session lasted.',
+                        'The log resolves to the second, so 0 s means "inside one second",
+                         not "instant".'), col_key='duration', w='c-num') }}
+      {#- Short header forms. A fixed-layout table clips cells but not headers, so
+          "Requests" and "Not found" each widened their own c-num column past the
+          others — measured at 97 px and 107 px against 89 px for the rest. -#}
+      {{ th_tip('Hits', ('Requests in the session.',), col_key='requests', w='c-num') }}
+      {{ th_tip('Paths', ('Distinct paths asked for.',), col_key='paths', w='c-num') }}
+      {{ th_tip('Read', ('Distinct paths that answered 2xx.',
+                         'What was actually taken from the site.'), col_key='read', w='c-num') }}
+      {{ th_tip('404s', ('Distinct paths that did not exist.',
+                         'Convention files are excluded, the same as everywhere else.'),
+                col_key='notfound', w='c-num') }}
+      {{ th_tip('Came from', ('The first path of the session, and the referer it arrived with.',),
+                col_key='entry', w='c-text') }}
+      {{ th_tip('Behaviour', ('What this session did.',
+                              'A third axis, orthogonal to identity: a human can scrape and a
+                               crawler can enumerate. One request is not a behaviour and is
+                               left blank.'), col_key='behaviour', w='c-badge') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td data-label="Started" data-col="started">{{ s.started | fmtdate }}</td>
+      <td data-label="For" data-col="duration" class="num">{{ s.duration | fmtduration }}</td>
+      <td data-label="Hits" data-col="requests" class="num">{{ s.requests | fmtnum }}</td>
+      <td data-label="Paths" data-col="paths" class="num">{{ s.unique_paths | fmtnum }}</td>
+      <td data-label="Read" data-col="read" class="num">{{ s.distinct_2xx_paths | fmtnum }}</td>
+      <td data-label="404s" data-col="notfound" class="num">{{ s.distinct_404_paths | fmtnum }}</td>
+      <td data-label="Came from" data-col="entry">
+        <code>{{ s.entry_path }}</code>
+        {%- if s.entry_referer %}<br><span class="text-muted">{{ s.entry_referer }}</span>{% endif %}
+      </td>
+      <td data-label="Behaviour" data-col="behaviour">
+        {%- if s.behaviour %}
+        <span class="badge {{ BEHAVIOUR_BADGES[s.behaviour] }} label-help"
+              {{ tip_attrs(BEHAVIOUR_TIPS[s.behaviour]) }} tabindex="0">{{ BEHAVIOUR_LABELS[s.behaviour] }}</span>
+        {%- else %}<span class="text-muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+
 <p class="section-label">Network &amp; exposure</p>
+
+{# ── Neighbourhood ──────────────────────────────────────────────────────
+   The cold start: a verdict needs history and a first request has none, but
+   its neighbours have been judged already. Nothing new is fetched — the same
+   ip_intel rows, grouped by the range and the operator this address sits in.
+
+   Two comparable rows, so a table and not a description list: the mix bars
+   only mean something read against each other, and a kv-table put them at
+   different indents with prose between. A scope with no peers is absent
+   rather than drawn as a zero — a bar over nothing reads as evidence. #}
+{% call table_block('Neighbourhood',
+     (neighbourhood | length | fmtnum) ~ (' scope' if neighbourhood | length == 1 else ' scopes')) %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Scope', ('How wide the comparison is drawn.',
+                          'The /24 an IPv4 address sits in, or the /64 for IPv6; then everything
+                           announced from the same ASN, whatever range it sits in.'),
+                col_key='scope', w='c-badge') }}
+      {{ th_tip('Range', ('The range or operator itself.',), col_key='range', w='c-text') }}
+      {{ th_tip('Others', ('Addresses Vidar has already judged there, this one excluded.',
+                           'Its own history only — no list is consulted.'),
+                col_key='others', w='c-num') }}
+      {{ th_tip('Class mix', ('What those addresses turned out to be.',), col_key='mix', w='c-mix') }}
+      {{ th_tip('Reads as', ('Named only where one group holds a majority of at least five peers.',
+                             'A plurality is not a character, and a majority of two is not a
+                              majority of anything.'), col_key='reads', w='c-text') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for n in neighbourhood %}
+    {%- set parts = [] -%}
+    {%- for g in TAXONOMY_GROUPS -%}
+    {%- set _ = parts.append({'label': g | title, 'count': n[g ~ '_ips'] or 0,
+                              'color': GROUP_COLOR_VARS[g]}) -%}
+    {%- endfor -%}
+    <tr>
+      <td data-label="Scope" data-col="scope">{{ 'This /24' if n.scope == 'network' else 'This ASN' }}</td>
+      <td data-label="Range" data-col="range">
+        {%- if n.scope == 'asn' %}<a href="/visitors?asn={{ n.label | urlencode }}">{{ n.label }}</a>
+        {%- else %}<code>{{ n.label }}</code>{% endif %}
+        {%- if n.org %} <span class="text-muted">{{ n.org }}</span>{% endif %}
+      </td>
+      <td data-label="Others" data-col="others" class="num">{{ n.unique_ips | fmtnum }}</td>
+      <td data-label="Class mix" data-col="mix">{{ mix_bar(parts) }}</td>
+      <td data-label="Reads as" data-col="reads">
+        {%- if n.dominant_group %}{{ n.dominant_ips | fmtnum }} of {{ n.unique_ips | fmtnum }} are {{ n.dominant_group | title }}
+        {%- else %}<span class="text-muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    {{ empty_row(5, 'neighbouring address') }}
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
 
 {# ── grid-2: Geo & Network | Shodan Intelligence ───────────────────────── #}
 <div class="grid-2">

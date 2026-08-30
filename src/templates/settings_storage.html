@@ -12,6 +12,17 @@
 
 {% block settings_content %}
 
+{#- A directory the service cannot write to is the one thing on this page that
+    makes every control on it fail, so it is said before any of them rather
+    than left as an archive list that is quietly always empty. Same wording as
+    `python -m src.preflight`, from the same function — two descriptions of one
+    misconfiguration are how they drift apart. -#}
+{% for problem in storage_problems %}
+<div class="settings-warning">
+  <strong>{{ problem.name }}:</strong> {{ problem.detail }}
+</div>
+{% endfor %}
+
 <div class="panel">
   <h3>Retention</h3>
   <form method="post" action="/settings/storage/mode" class="tab-row">

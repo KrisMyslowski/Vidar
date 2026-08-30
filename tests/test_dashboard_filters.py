@@ -8,6 +8,7 @@ from src.template_filters import csv_items as _csv_items
 from src.template_filters import fmtbytes as _fmtbytes
 from src.template_filters import fmtdate as _fmtdate
 from src.template_filters import fmtresptime as _fmtresptime
+from src.template_filters import inline_code as _inline_code
 from src.template_filters import parse_cpe as _parse_cpe
 from src.template_filters import primarylang as _primarylang
 
@@ -247,3 +248,29 @@ class TestPrimarylang:
         """None should return empty."""
         result = _primarylang(None)
         assert result == ""
+
+
+class TestInlineCode:
+    """One markdown construct, on constants this repository owns."""
+
+    def test_backticked_spans_become_code(self):
+        assert str(_inline_code("run `curl -sI /` first")) == ("run <code>curl -sI /</code> first")
+
+    def test_prose_without_backticks_is_unchanged(self):
+        assert str(_inline_code("no code here")) == "no code here"
+
+    def test_markup_is_escaped_inside_the_code_as_well_as_outside(self):
+        """The Apache deny rule is literally `<FilesMatch ...>`.
+
+        Escaping the whole string first and converting afterwards would have
+        turned the escaped backtick entities back into tags; escaping per
+        segment is why both halves are safe.
+        """
+        out = str(_inline_code('Apache `<FilesMatch "^\\.">deny</FilesMatch>` works'))
+        assert "<code>" in out
+        assert "<FilesMatch" not in out and "&lt;FilesMatch" in out
+
+    def test_a_stray_backtick_cannot_emit_unbalanced_markup(self):
+        """Unpaired is malformed input, not a hole — the tail is still closed."""
+        out = str(_inline_code("odd ` backtick"))
+        assert out.count("<code>") == out.count("</code>")

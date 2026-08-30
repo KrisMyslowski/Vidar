@@ -1,4 +1,8 @@
-"""GET /analysis and GET /exposure."""
+"""GET /analysis and GET /shodan.
+
+/shodan was /exposure until the name was needed for the other direction: what a
+visitor exposes is Shodan's subject, what the site exposed is the operator's.
+"""
 
 from __future__ import annotations
 
@@ -129,7 +133,7 @@ async def analysis(
     )
 
 
-@router.get("/exposure")
+@router.get("/shodan")
 async def exposure(
     request: Request,
     page: int = Query(default=1, ge=1),
@@ -206,7 +210,7 @@ async def exposure(
     def _exposure_url(**overrides) -> str:
         merged = {**active, **range_link, **overrides}
         parts = [f"{k}={quote(str(v))}" for k, v in merged.items() if v]
-        return "/exposure" + ("?" + "&".join(parts) if parts else "")
+        return "/shodan" + ("?" + "&".join(parts) if parts else "")
 
     _pill_colors = {
         "port": GROUP_COLOR_VARS["bots"],
@@ -226,7 +230,7 @@ async def exposure(
     return _remember_range(
         templates.TemplateResponse(
             request,
-            "exposure.html",
+            "shodan.html",
             {
                 "hosts": hosts,
                 "total": total,

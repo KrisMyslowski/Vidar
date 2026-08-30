@@ -85,7 +85,7 @@ async def visitors_requests_redirect(path_q: str | None = None):
 
 @router.get("/tools/shodan")
 async def tools_shodan_redirect(request: Request):
-    return _carry("/exposure", request)
+    return _carry("/shodan", request)
 
 
 # ── Backward-compat redirects ─────────────────────────────────────────────────

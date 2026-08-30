@@ -1,0 +1,111 @@
+{#
+  incidents.html — one row is one run of one program.
+
+  The signature is the first paths a session probed, in the order it probed
+  them; addresses carrying the same signature close together are the same run,
+  however many of them there are.
+
+  Built like every other list here: tiles, then a table whose columns carry
+  their own meaning in their headers. The score has no column of its own on
+  purpose — every number that goes into it is already a column, so the row is
+  the expansion, and the cell's tooltip spells out the arithmetic over those
+  same figures. A number a reader cannot reconstruct would put a score where
+  the evidence used to be.
+#}
+{% extends "base.html" %}
+{% from '_macros.html' import page_header, range_tabs, table_block, th_tip,
+    stat_card, empty_row, overflow_cell, tip_attrs %}
+{% block title %}Incidents — Vidar{% endblock %}
+
+{% block content %}
+{% call page_header('Incidents',
+     (incidents | length | fmtnum) ~ (' incident' if incidents | length == 1 else ' incidents')) %}
+  {{ range_tabs(active_range, '/incidents', extra_params=range_params,
+     date_from=date_from, date_to=date_to) }}
+{% endcall %}
+
+<div class="cards">
+  {{ stat_card('Incidents', incidents | length | fmtnum,
+     (min_addresses ~ ' or more addresses asking for the same first ' ~ signature_paths
+      ~ ' missing paths, in the same order, within ' ~ incident_gap_minutes ~ ' minutes.',
+      'A scanner is a program, and a program starts the same way every run.')) }}
+  {{ stat_card('Addresses', totals.addresses | fmtnum,
+     ('Distinct addresses across every incident in this range.',)) }}
+  {{ stat_card('Networks', totals.asns | fmtnum,
+     ('Distinct operators they came from.',
+      'Spread across networks is what separates a coordinated run from one misconfigured host.')) }}
+  {{ stat_card('Probes', totals.probe_404 | fmtnum,
+     ('Requests for paths that do not exist, across every incident.',
+      'Convention files are excluded, the same as everywhere else.')) }}
+  {{ stat_card('Typical hour', typical_hour.probing_addresses | round(1),
+     ('Addresses that probe in an ordinary hour in this range.',
+      'The median hour, not the mean — a mean is raised by whatever it is meant to detect.'),
+     size_class='card-value-md') }}
+</div>
+
+{% call table_block('Incidents',
+     (incidents | length | fmtnum) ~ (' run' if incidents | length == 1 else ' runs'),
+     table_key='incidents',
+     columns=[{'key': 'asns', 'label': 'Nets'},
+              {'key': 'listed', 'label': 'Listed', 'off': true},
+              {'key': 'normal', 'label': 'vs normal'},
+              {'key': 'score', 'label': 'Score', 'off': true},
+              {'key': 'members', 'label': 'From'}]) %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Started', ('When the first session of the run began.',), col_key='started', w='c-date') }}
+      {{ th_tip('For', ('How long the run lasted, first session to last.',
+                        'The log resolves to the second.'), col_key='duration', w='c-num') }}
+      {{ th_tip('Hosts', ('Distinct addresses that took part.',
+                          'Three is the minimum: two running one tool an hour apart is a tool
+                           being popular, not a coordinated event.'), col_key='addresses', w='c-num') }}
+      {{ th_tip('Nets', ('Distinct operators they came from.',), col_key='asns', w='c-num') }}
+      {{ th_tip('Probes', ('Requests for paths that do not exist.',), col_key='probes', w='c-num') }}
+      {{ th_tip('Listed', ('How many of the addresses are on a blocklist.',
+                           'An outside opinion agreeing with ours.'), col_key='listed', w='c-num') }}
+      {{ th_tip('vs normal', ('Against the addresses that usually probe in an hour here.',
+                              'Most runs last minutes rather than a full hour, so the multiple
+                               understates them. Blank where the typical hour sees nobody
+                               probing — there is nothing to be a multiple of.'),
+                col_key='normal', w='c-num') }}
+      {{ th_tip('Score', ('What this list is ordered by, and nothing else.',
+                          'Not a measurement. Every number in it is a column of this row —
+                           hover the value for the arithmetic.'), col_key='score', w='c-num') }}
+      {{ th_tip('Signature', ('The first paths each session probed, in order.',
+                              'What identifies the program. Sessions that agree on these are one
+                               run of it.'), col_key='signature', w='c-wide') }}
+      {{ th_tip('From', ('The addresses it came from.',
+                         'Each links to its own history — the sessions there are the ones this
+                          run is made of.'), col_key='members', w='c-text') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for i in incidents %}
+    <tr>
+      <td data-label="Started" data-col="started">{{ i.started | fmtdate }}</td>
+      <td data-label="For" data-col="duration" class="num">{{ i.duration | fmtduration }}</td>
+      <td data-label="Hosts" data-col="addresses" class="num">{{ i.addresses | fmtnum }}</td>
+      <td data-label="Nets" data-col="asns" class="num">{{ i.asns | fmtnum }}</td>
+      <td data-label="Probes" data-col="probes" class="num">{{ i.probe_404 | fmtnum }}</td>
+      <td data-label="Listed" data-col="listed" class="num">{{ i.blocklisted | fmtnum }}</td>
+      <td data-label="vs normal" data-col="normal" class="num">
+        {%- if i.against_normal %}{{ i.against_normal | round(1) }}×
+        {%- else %}<span class="text-muted">—</span>{% endif %}
+      </td>
+      <td data-label="Score" data-col="score" class="num">
+        <span class="label-help" {{ tip_attrs('What this list is ordered by — a sort key, not a measurement.',
+          i.score_explained) }} tabindex="0">{{ i.score }}</span>
+      </td>
+      <td data-label="Signature" data-col="signature">{{ overflow_cell(i.path_cells) }}</td>
+      <td data-label="From" data-col="members">
+        {{ overflow_cell(i.member_cells) }}
+      </td>
+    </tr>
+    {% else %}
+    {{ empty_row(9, 'incident') }}
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% endblock %}

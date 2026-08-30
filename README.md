@@ -6,7 +6,7 @@
 
 [![tests](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f4a54?style=flat-square)](LICENSE)
-[![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-3f4a54?style=flat-square)](docs/changelog.md)
+[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-3f4a54?style=flat-square)](docs/changelog.md)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3f4a54?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-3f4a54?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -50,6 +50,11 @@ is — a person, a search crawler, a scanner, an HTTP client. Tor, proxy, hostin
 status are **orthogonal signals** layered on top. A person behind a VPN stays a human with a
 proxy signal, rather than disappearing into an "infrastructure" bucket the way a single-axis
 taxonomy forces. 18 identity classes in 5 groups, six signals, and any combination of the two.
+
+**Behaviour is a third axis.** What an address *is* and where it *sits* still could not say what
+it *did*. Visits are cut into sessions, and each carries a behaviour — browsing, scraping,
+recon, enumeration, brute force — orthogonal to the other two, because a human can scrape and a
+crawler can enumerate and the classifier should not have to crown a winner between them.
 
 Holding that line takes work: a VPN exit and a rented server are the same datacenter range
 seen from here, so identity has to be decided on what the address did rather than on where
@@ -101,12 +106,28 @@ their networks carry. Every cell links to the IPs behind it.
 
 ![Analysis](docs/img/analysis.png)
 
+### Incidents
+
+A scanner is a program, and a program starts the same way every run. When three or more
+addresses ask for the same first five missing paths, in the same order, within an hour, that is
+one **event** rather than three visitors — with the paths it asked for, the addresses it came
+from, and how that compares with an ordinary hour here. The score beside it is a sort key and
+says so: every figure in it is a column of the same row.
+
 ### Exposure
+
+The log read the other way round. Not *who came* but *what did this server hand out* — paths
+that answered 2xx and that no human and no crawler ever requested. On the reference deployment
+it found a `.DS_Store` that had been served for months and that nobody had noticed. Each finding
+that Vidar recognises carries what the file is, why somebody asked for it, a `curl` to check it
+yourself, and how to stop serving it.
+
+### Shodan
 
 What Shodan knows about the hosts that visited — open ports, tags and CVEs as facets over the
 same host set, so a facet always describes the table beneath it.
 
-![Exposure](docs/img/exposure.png)
+![Shodan](docs/img/shodan.png)
 
 ---
 

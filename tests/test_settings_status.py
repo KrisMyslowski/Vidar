@@ -248,7 +248,7 @@ class TestTheKeyReachesTheBrowserOnlyWhenSet:
 
     @pytest.mark.parametrize(
         "path",
-        ["/", "/analysis", "/exposure", "/settings/status", "/visitors?view=table"],
+        ["/", "/analysis", "/shodan", "/settings/status", "/visitors?view=table"],
     )
     def test_pages_without_a_map_do_not_carry_it(self, tmp_db, monkeypatch, path):
         """It sat in base.html at first, so a documentation page and the status
@@ -258,3 +258,44 @@ class TestTheKeyReachesTheBrowserOnlyWhenSet:
         with TestClient(app) as client:
             body = client.get(path).text
         assert "abc123" not in body
+
+
+class TestStorageSurvivesAnUnwritableMount:
+    """The archive directory is created on first use, and that create can fail.
+
+    It failed on a *read* path: listing the archives called it, the mkdir hit a
+    read-only mount, and Settings answered 500 — which is where the gear leads,
+    so the whole section looked gone. Nothing was wrong with the database and
+    nothing said what was wrong with anything.
+    """
+
+    def test_the_page_answers_instead_of_erroring(self, client, tmp_path, monkeypatch):
+        from src import config
+
+        blocked = tmp_path / "nope"
+        blocked.write_text("a file, so mkdir under it cannot succeed")
+        monkeypatch.setattr(config.settings, "archive_dir", blocked / "archive")
+        monkeypatch.setattr(config.settings, "backup_dir", blocked / "backup")
+        resp = client.get("/settings/storage")
+        assert resp.status_code == 200
+
+    def test_and_says_which_directory_and_why(self, client, tmp_path, monkeypatch):
+        """Silently listing no archives would be the same page with the problem
+        hidden. The wording comes from the preflight, so there is one of it."""
+        from src import config
+
+        blocked = tmp_path / "nope"
+        blocked.write_text("a file")
+        monkeypatch.setattr(config.settings, "archive_dir", blocked / "archive")
+        monkeypatch.setattr(config.settings, "backup_dir", blocked / "backup")
+        body = client.get("/settings/storage").text
+        assert "cannot write" in body
+        assert "archives directory" in body
+        assert "VIDAR_DATA_DIR" in body
+
+    def test_and_says_nothing_when_the_mount_is_fine(self, client, tmp_path, monkeypatch):
+        from src import config
+
+        monkeypatch.setattr(config.settings, "archive_dir", tmp_path / "archive")
+        monkeypatch.setattr(config.settings, "backup_dir", tmp_path / "backup")
+        assert "cannot write" not in client.get("/settings/storage").text

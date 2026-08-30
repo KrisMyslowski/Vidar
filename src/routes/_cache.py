@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timezone
 
 from ..db import get_conn
-from ..queries import get_attention_items
+from ..queries import get_attention_items, get_hourly_baseline
 from ._app import templates
 
 _earliest_date_cache: str | None = None
@@ -133,13 +134,40 @@ def _cached(key: str, produce, ttl_s: float = _AGG_TTL_S):
     return value
 
 
+# An hour's baseline is the same answer for that whole hour, so it is keyed by
+# the hour rather than given a duration. A TTL started at 10:59 would serve the
+# 10:00 comparison through most of 11:00; a key that changes at the boundary
+# recomputes exactly once, when the answer actually changes.
+_BASELINE_TTL_S = 3600
+
+
+def _hourly_baseline() -> dict:
+    """The comparison behind the "This hour" finding, computed once per hour.
+
+    It is the one expensive part of the findings list — COUNT(DISTINCT ip) per
+    hour over four weeks, 290 ms on 520 000 visits against 6 ms for all the
+    others — and the findings list sits behind the nav badge on every page.
+    """
+    hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+    def load():
+        try:
+            with get_conn() as conn:
+                return get_hourly_baseline(conn)
+        except Exception:
+            return {"enough_history": False, "days": 0}
+
+    return _cached(f"baseline:{hour.isoformat()}", load, ttl_s=_BASELINE_TTL_S)
+
+
 def _attention_items() -> list[dict]:
     """The Overview findings — one cached entry for both the page and the badge."""
 
     def load():
         try:
+            baseline = _hourly_baseline()
             with get_conn() as conn:
-                return get_attention_items(conn)
+                return get_attention_items(conn, baseline)
         except Exception:  # a finding list must never take the page down
             return []
 

@@ -26,7 +26,7 @@ PAGES = [
     "/",
     "/visitors",
     "/analysis",
-    "/exposure",
+    "/shodan",
     "/settings/storage",
     "/settings/status",
     "/docs/usage",

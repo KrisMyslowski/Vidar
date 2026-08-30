@@ -3,6 +3,11 @@
 Each get_*/count_* pair differs only in the dimension it groups by and the sort
 keys it accepts, so both run through _exec_agg_rows / _exec_agg_count with the
 shared per-row breakdown columns.
+
+get_neighbourhood() is not one of those tables but belongs to the same
+machinery: it asks the breakdown of one address's peers rather than of every
+group, and reads the same columns so the bar on the detail page and the bars in
+the tables mean the same thing.
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ import sqlite3
 from typing import Sequence
 
 from .. import search
+from ..db import network_of
 from ..taxonomy import GROUPS_WITH_UNKNOWN, SIGNALS
 from ..validators import valid_order
 from ._shared import (
@@ -476,3 +482,98 @@ def count_paths(
         extra_where=extra_where,
         extra_params=extra_params,
     )
+
+
+# ── The neighbourhood of one address ─────────────────────────────────────────
+
+
+# A plurality is not a character; a majority is. Below this the bar is the whole
+# answer and no sentence is offered — "26 of 59 are humans" reads as a verdict
+# on the range when the other 33 are spread across four groups.
+_DOMINANT_SHARE = 0.5
+
+# And a majority of two is not a majority of anything. The share alone let
+# "1 of 1 are Bots" onto the page, which is one data point wearing the grammar
+# of a finding — the same mistake as a bar over nothing, one level up. Below
+# five peers the bar and the count stand on their own and say how thin they are.
+_DOMINANT_MIN_PEERS = 5
+
+
+def get_neighbourhood(conn: sqlite3.Connection, ip: str) -> list[dict]:
+    """What Vidar has already judged next to this address, by /24 and by ASN.
+
+    The cold-start problem: a verdict needs history, and a first request has
+    none. An address has neighbours from the first request though, and those
+    have been judged — "40 addresses seen from this /24, 38 of them probers" is
+    an orientation the address itself cannot give.
+
+    No new data and no new provider: `ip_intel` already holds every judgement,
+    and net() derives the /24 or /64 from the address. See db.network_of().
+
+    Peers are selected from `ip_intel` first, and the visit rows are then
+    reached through it — the other way round means running net() over every
+    visit row rather than over one row per address.
+
+    Two scopes, returned in the order they narrow: the /24 is the range one
+    customer holds, the ASN is the operator behind it. Either can be absent —
+    an unenriched address has no ASN, and an address whose neighbourhood Vidar
+    has never seen has no /24 row. The caller shows what it gets; a scope with
+    no peers is left out rather than shown as a zero, because "0 of 0 are
+    probers" is a bar that reads as evidence and is not one.
+    """
+    own = conn.execute("SELECT asn, org FROM ip_intel WHERE ip = ?", (ip,)).fetchone()
+    scopes = (
+        (
+            "network",
+            network_of(ip),
+            "SELECT ip FROM ip_intel WHERE net(ip) = net(?) AND ip != ?",
+            (ip, ip),
+        ),
+        (
+            "asn",
+            (own["asn"] if own else "") or "",
+            "SELECT ip FROM ip_intel WHERE asn = ? AND ip != ?",
+            ((own["asn"] if own else ""), ip),
+        ),
+    )
+    out = []
+    for scope, label, peers_sql, params in scopes:
+        if not label:
+            continue
+        row = conn.execute(
+            f"""
+            SELECT {_AGG_BREAKDOWN_SELECT}
+            FROM visits v
+            JOIN ip_intel i ON i.ip = v.ip
+            WHERE v.ip IN ({peers_sql})
+        """,
+            params,
+        ).fetchone()
+        if row and row["unique_ips"]:
+            group, count = _dominant_group(row)
+            out.append(
+                {
+                    "scope": scope,
+                    "label": label,
+                    "org": (own["org"] if own else "") if scope == "asn" else "",
+                    "dominant_group": group,
+                    "dominant_ips": count,
+                    **dict(row),
+                }
+            )
+    return out
+
+
+def _dominant_group(row: sqlite3.Row) -> tuple[str, int]:
+    """The identity group holding a majority of these addresses, or ('', 0).
+
+    An address can only be in one group, so the counts partition the peers and
+    at most one can pass. That is what makes the sentence sayable at all.
+    """
+    if row["unique_ips"] < _DOMINANT_MIN_PEERS:
+        return "", 0
+    counts = {g: row[f"{g}_ips"] or 0 for g in GROUPS_WITH_UNKNOWN}
+    group = max(counts, key=lambda g: counts[g])
+    if counts[group] > row["unique_ips"] * _DOMINANT_SHARE:
+        return group, counts[group]
+    return "", 0

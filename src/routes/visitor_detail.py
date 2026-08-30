@@ -11,7 +11,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..queries import (
     VISITOR_REQUEST_SORT_MAP,
+    count_sessions,
     explain_classification,
+    get_neighbourhood,
+    get_sessions,
     get_visitor_detail,
     get_visitor_requests,
 )
@@ -21,6 +24,12 @@ from ._cache import fetch
 from ._helpers import total_pages
 
 router = APIRouter()
+
+# The newest sessions, not all of them. An address with 20 000 visits can carry
+# hundreds, and a page that renders every one of them is a page nobody scrolls
+# to the end of. The true count is fetched separately and shown, so the cut is
+# visible rather than silent.
+_SESSION_LIMIT = 25
 
 
 @router.get("/visitors/{ip}")
@@ -45,9 +54,12 @@ async def visitor_detail(
             get_visitor_detail(conn, ip),
             get_visitor_requests(conn, ip, page, limit=100, sort=sort, order=order),
             explain_classification(conn, ip),
+            get_neighbourhood(conn, ip),
+            get_sessions(conn, ip, limit=_SESSION_LIMIT),
+            count_sessions(conn, ip),
         )
 
-    detail, reqs, evidence = await fetch(_load)
+    detail, reqs, evidence, neighbourhood, sessions, session_total = await fetch(_load)
     if not detail:
         raise HTTPException(status_code=404, detail="IP not found")
     total = detail["visit_count"]
@@ -59,6 +71,9 @@ async def visitor_detail(
             "detail": detail,
             "requests": reqs,
             "evidence": evidence,
+            "neighbourhood": neighbourhood,
+            "sessions": sessions,
+            "session_total": session_total,
             "err_share": err_share,
             "ip": ip,
             "page": page,

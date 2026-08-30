@@ -37,7 +37,9 @@
       <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Overview{% if nav_attention %}<span class="nav-badge" title="{{ nav_attention }} finding{{ '' if nav_attention == 1 else 's' }} to look at">{{ nav_attention }}</span>{% endif %}</a></li>
       <li><a href="/visitors" class="{% if request.url.path.startswith('/visitors') %}active{% endif %}">Visitors</a></li>
       <li><a href="/analysis" class="{% if request.url.path == '/analysis' %}active{% endif %}">Analysis</a></li>
+      <li><a href="/incidents" class="{% if request.url.path == '/incidents' %}active{% endif %}">Incidents</a></li>
       <li><a href="/exposure" class="{% if request.url.path == '/exposure' %}active{% endif %}">Exposure</a></li>
+      <li><a href="/shodan" class="{% if request.url.path == '/shodan' %}active{% endif %}">Shodan</a></li>
     </ul>
     {#- API and the two export links moved to Settings. The exports pulled the
         whole database from a footer that gave no hint of it, and API was a bare

@@ -34,7 +34,9 @@ PAGES = [
     "/visitors?group=client",
     "/visitors?group=path",
     "/analysis",
-    "/exposure",
+    "/shodan",
+    "/exposure?range=all",
+    "/incidents?range=all",
     "/visitors/203.0.113.10",
 ]
 
@@ -99,7 +101,50 @@ def _tables(html: str):
     return [t for t in p.tables if t["head"]]
 
 
+def _seed_findings(db):
+    """Enough for Exposure and Incidents to have rows worth checking.
+
+    Both pages answer with an empty table when nothing matches, and an empty
+    table has no body rows to compare against its header — the two invariants
+    this file exists for would pass without ever being tested. Added here
+    rather than to the shared fixture: dashboard_db is per-test, so this
+    changes nothing for anybody else.
+    """
+    from src.db import get_conn
+    from src.queries import insert_visit, set_visitor_class, upsert_ip_intel
+
+    tool = ["/.env", "/.git/config", "/wp-login.php", "/admin/", "/phpinfo.php"]
+    with get_conn(db) as conn:
+        # An exposure finding: 2xx, and no benign address ever asked for it.
+        for n in range(2):
+            ip = f"198.51.100.{n + 1}"
+            upsert_ip_intel(conn, {"ip": ip})
+            set_visitor_class(conn, ip, "bots/vulnerability-probers")
+            insert_visit(
+                conn,
+                ip=ip,
+                timestamp="2026-08-20T10:00:00+00:00",
+                path="/.DS_Store",
+                status=200,
+                bytes_sent=6148,
+            )
+        # An incident: three addresses running one tool within the hour.
+        for n in range(3):
+            ip = f"198.51.101.{n + 1}"
+            upsert_ip_intel(conn, {"ip": ip, "asn": f"AS{6449 + n}"})
+            set_visitor_class(conn, ip, "bots/vulnerability-probers")
+            for k, path in enumerate(tool):
+                insert_visit(
+                    conn,
+                    ip=ip,
+                    timestamp=f"2026-08-20T11:{n * 5:02d}:{k * 3:02d}+00:00",
+                    path=path,
+                    status=404,
+                )
+
+
 def _render(client, dashboard_db, path):  # noqa: F811
+    _seed_findings(dashboard_db)
     with patch("src.config.settings.db_path", dashboard_db):
         return client.get(path).text
 

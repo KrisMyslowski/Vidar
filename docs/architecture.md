@@ -35,6 +35,18 @@ only coupling is a read-only bind mount of the log directory, plus the log forma
 fields nginx emits must land in `src/models.py` (`LogEntry`), the `visits` DDL in `src/db.py`
 and [data-reference.md](data-reference.md) together.
 
+**A log format is one source's way of writing a request down, and `src/models.py` keeps that
+separate from what a request *is*.** `Visit` is the canonical event — the vocabulary the
+database columns, the evidence query, the classifier and the templates all use. `LogEntry` is
+nginx's spelling of the same thing, and `process_entry()` is the single place where one becomes
+the other. A second log format is a second mapping there and nothing else.
+
+Most of what looks like a vendor field is not: `sec_fetch_*` and `accept_encoding` are HTTP
+headers, `ssl_protocol` and `ssl_cipher` are TLS facts, and any web server can log them.
+`NGINX_ONLY_FIELDS` names the four that genuinely cannot travel — the connection counters, the
+rate-limit status and TLS session reuse. `tests/test_canonical_event.py` holds all of this to
+the code, because a `TypedDict` is documentation at runtime and Python enforces none of it.
+
 ### Container isolation
 
 | Layer | Mechanism |
@@ -133,7 +145,7 @@ SQLite in WAL mode: one writer, concurrent readers, so dashboard reads never blo
 
 The five child tables carry `ON DELETE CASCADE` from `ip_intel` and replaced comma-separated
 columns, which were dropped. `upsert_ip_intel` writes them via `_sync_shodan_children`; reads
-re-aggregate with `GROUP_CONCAT` for display and filter directly for `/exposure?port=&vuln=&tag=`.
+re-aggregate with `GROUP_CONCAT` for display and filter directly for `/shodan?port=&vuln=&tag=`.
 This is what makes "every host with port 22" a query instead of a `LIKE` scan.
 
 ### Visit identity
@@ -163,7 +175,8 @@ and filtered with `?signal=`. A human on a VPN is `humans/*` *plus* a proxy sign
 infrastructure class.
 
 The logic lives in `src/classifier/`, split out of the SQL layer: `patterns.py` holds the
-literals and `CLASSIFIER_VERSION`, `evidence_sql.py` the one query summarising an IP's
+thresholds and `CLASSIFIER_VERSION`, `patterns.toml` the needles and `pack.py` their
+  loading, `evidence_sql.py` the one query summarising an IP's
 history, `rules.py` the ordered chain, `classify.py` the two entry points needing a
 connection. Writing a class back to `ip_intel` is SQL and stays in `queries/intel.py`.
 
@@ -200,7 +213,8 @@ Two invariants worth stating because both have been broken:
   Fork `patterns.py` or `enricher.py`; both are single files with clear seams.
   `DNSBL_PROVIDERS` is the one genuine exception, and it is already a setting, because a DNSBL
   zone is a hostname with a uniform protocol behind it.
-- **A logic change must bump `CLASSIFIER_VERSION`** (`src/classifier/patterns.py`). Startup
+- **A logic change must bump `_RULES_VERSION`** (`src/classifier/patterns.py`), and a needle
+  change moves the pack digest half of `CLASSIFIER_VERSION` on its own. Startup
   then runs `force_reclassify_all()` once, made idempotent by a version flag in
   `processor_state`. It costs less than the phrase "reclassify every address" suggests:
 
@@ -252,7 +266,7 @@ All SQL goes through `src/queries/`, eight subject modules behind one import sur
 had to change, and new code can import the module it actually needs. Route handlers never
 write raw SQL.
 
-Four pages carry the dashboard — `/`, `/visitors`, `/analysis`, `/exposure` — plus
+Four pages carry the dashboard — `/`, `/visitors`, `/analysis`, `/shodan` — plus
 `/visitors/{ip}` and the `/visitors/rows` fragment, with `/settings/{status,storage,api}` and
 `/docs/{slug}` beside them. `/visitors` is the single visitor
 surface: `?group=ip|asn|country|client|path` picks

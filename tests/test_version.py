@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from src import __version__
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
@@ -58,7 +60,11 @@ def test_every_tracked_file_is_world_readable():
     The Dockerfile now normalises modes after COPY. This checks the source of the
     problem rather than the last place it could have been caught.
     """
+    import shutil
     import subprocess
+
+    if shutil.which("git") is None:
+        pytest.skip("no git here, and the tracked-file list is what this checks against")
 
     root = PYPROJECT.parent
     tracked = subprocess.run(

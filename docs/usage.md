@@ -128,6 +128,60 @@ classification, deciding rule first, then the orthogonal context (headers, DNSBL
 Tor, Shodan) — followed by geo, network, exposure and a paginated request log with its own
 mini map.
 
+### Sessions and behaviour
+
+The third axis. Identity says what an address **is** and the signals say where it **sits**;
+neither could say what it **did**. A **session** is a run of requests with no gap longer than
+**30 minutes**, and each one carries a behaviour: **Browsing**, **Scraping**, **Recon**,
+**Enumeration** or **Brute force**.
+
+Behaviour is orthogonal to identity on purpose. A human can scrape and a search crawler can
+enumerate; with only two axes the classifier had to weigh such cases against each other and
+crown a winner, and now it does not have to. It belongs to the session rather than to the
+address, because one address can read two pages in the morning and walk a scanner list at
+night — an address-level label would have to pick one and be wrong about the rest.
+
+**One request is not a behaviour** and is left blank. There is no pace, no sequence and no
+second path to read anything out of, and on a quiet site most sessions are exactly this;
+labelling them would make the majority label an artefact of the threshold.
+
+**The thirty minutes are a model decision with no correct answer**, so they are written down
+rather than tuned quietly. It is the web-analytics convention, which matters less for being
+right than for being a number readers already have an intuition about. Ten minutes splits
+somebody who stopped to read. Without an upper bound at all, the busiest addresses collapse
+into one session covering the whole retention window — the one shape that carries no
+information. A client polling at a steady ten-minute interval never opens a wide enough gap and
+legitimately shows as a single session lasting days; that is why the duration column changes
+unit rather than growing digits.
+
+**The log resolves to the second.** A duration of `0 s` means "inside one second", not
+"instant", and nothing below a second can be measured — burst detection ends at "per second".
+
+Sessions are computed when the page is read, never stored, so no migration and no backfill
+exists to go stale. The newest 25 are shown and the true count is stated beside them.
+
+### Neighbourhood
+
+A verdict needs history, and a first request has none. Its **neighbours** have one: the panel
+shows what Vidar has already judged in the same **/24** (a **/64** for IPv6) and at the same
+**ASN**, as the same class-mix bar the aggregation tables use. Where one identity group holds a
+majority of the peers it is named in words — *"4 of 4 are Bots"*. A plurality is not named: with
+the largest group at 40 % across four others, nothing about the range characterises it, and a
+sentence claiming otherwise would be the false confidence this page exists to avoid.
+
+Nothing is fetched for this. It is `ip_intel` read by range and by operator, so it costs no
+request and no provider. The address itself is never counted among its own peers, and a scope
+with no peers is left out rather than drawn as an empty bar.
+
+**It is empty on a new deployment, and stays empty for a while.** The panel says so in words
+rather than showing nothing: the feature needs a log it does not have on day one, and it
+sharpens as that log grows. Even on the reference deployment — 9 206 addresses over three
+months — a single /24 is often thin. The peer count is always shown next to the bar for that
+reason.
+
+The ASN row links to `/visitors?asn=…`, which lists the peers themselves. The /24 has no
+equivalent filter yet, so it is text.
+
 ---
 
 ## 6. Analysis (`/analysis`)
@@ -141,7 +195,98 @@ Distribution cards carry a `Table` switch that swaps the bars for the same numbe
 
 ---
 
-## 7. Exposure (`/exposure`)
+## 7. Incidents (`/incidents`)
+
+Every other surface answers *who came*. This one answers *what happened* — the question somebody
+actually has when they open a dashboard at three in the morning. Nine thousand rows cannot answer
+it; ten events can.
+
+A scanner is a program, and a program starts the same way every time it runs. When **3 or more
+addresses** request **the same first 5 missing paths, in the same order, within 60 minutes** of
+each other, that is one event rather than three visitors. Those five paths are the incident's
+**signature**.
+
+One row per run: when it started, how long it lasted, how many addresses and networks took
+part, how much it probed, how that compares with an ordinary hour, the signature, and the
+addresses themselves — each linking to its own history. `Listed` and `Score` are off by default
+and available from **Columns**.
+
+**The score is a sort key and nothing else.** It is not a measurement and no decision should
+hang on its value; it exists so the page can put the interesting rows first. It has no evidence
+of its own — every figure in it is a column of the same row — and the cell spells the sum out
+over those figures:
+
+> `11 addresses → 33 + 10 networks → 20 + 2 on blocklists → 8 + 132 probes → 2 = 63`
+
+Volume is capped on purpose. One address hammering one path all night is a large number and not
+an event; uncapped, it would sort the page by traffic instead of by coordination.
+
+**Empty is a valid result and the usual one on a small site.** Correlation without volume is
+noise — a surface that lowers its own bar to avoid looking idle
+stops being worth opening. Every threshold is set on the under-reporting side for the same
+reason: a page that cries wolf is read once.
+
+The prefix rather than the whole path set is also deliberate. A full set breaks apart the moment
+one address stops early, and it would break *silently* — two incidents where there is one, each
+below the reporting threshold, so the event disappears rather than looking wrong.
+
+This is the one page whose query is expensive: it sessionises every address in the window. It is
+cached, and nothing else may ask for that shape per request.
+
+---
+
+## 8. Exposure (`/exposure`)
+
+The other direction. Every other page describes visitors; this one describes what they got.
+
+A path is listed when it answered **2xx** and fewer than two benign addresses — humans, search
+crawlers, AI crawlers — ever fetched it. Those only follow what is linked, listed in
+`robots.txt` or announced in a sitemap, so a successful path none of them touched is not part of
+the site as it is meant to be reachable.
+
+What is deliberately *not* listed matters as much:
+
+| | |
+|---|---|
+| Redirects | Success is 2xx. On the reference log 158 531 prober requests are the HTTP→HTTPS redirect |
+| Query strings | A static server ignores them, so `/?phpinfo=-1` returns the homepage. Counted once, below the table, never listed as findings |
+| Convention paths | `robots.txt`, `/.well-known/`, favicons — the same list the 404 ratio uses |
+| Encoded spellings | `/.DS_Store` and `/%2eDS_Store` are one file, folded into one row |
+
+**One benign address does not clear a path; two do.** A single verdict can change — an address
+here was a headless browser under one classifier version and a referred human under the next —
+and a veto of one would have taken a real finding away. Where a benign address is counted, the
+table shows it.
+
+An empty table is the expected result and says so in words.
+
+### What each finding is
+
+A path and a byte count are a fright, not information. Under the table each finding that Vidar
+recognises is explained: **what the file is**, **why somebody asked for it**, **a command to
+check it yourself**, and **how to stop serving it**. The check is addressed to `SITE_BASE_URL`,
+so it is a command to paste rather than a template to adapt; with that setting blank it prints
+an obvious placeholder instead of a plausible hostname.
+
+The explanation belongs to the *family*, not to the path. There are 26 609 distinct probed
+paths on the reference deployment and the 500 most-requested cover 30 % of them, so a catalogue
+of individual paths cannot work — PHPUnit's `eval-stdin.php` alone is probed under more than
+twenty-five prefixes. Nine families are recognised: operating-system metadata, version control
+directories, environment files, backups and editor leftovers, configuration files, keys and
+credentials, developer tooling leftovers, log files and diagnostic pages. Three findings under
+`.git/` are one thing to fix, so they get one explanation naming all three.
+
+A finding outside those nine is listed under **Not described here**, with the `curl` and nothing
+else. That is deliberate: the command is derived from the path and needs to know nothing about
+the file, while a description broad enough to cover everything would apply to any file and help
+with none of them — and once it appears under every unrecognised finding, it gets skipped along
+with the real ones. `src/families.py` holds the registry.
+
+Most findings will land there, and that is the normal case rather than a gap. **The detection
+does not consult the registry**: a file you drop in the document root tomorrow, under a name
+nothing has seen, is listed the first time a scanner fetches it and nothing else does.
+
+## 9. Shodan (`/shodan`)
 
 The Shodan side: facets for ports, tags and CVEs above the host table, sharing one filter
 state. Narrowing by `port`, `vuln` or `tag` moves both, so a facet always describes the host
@@ -152,14 +297,14 @@ set below it.
 The version beside the name at the top of the sidebar is the build that is answering. It is
 also in `GET /api/stats`, so a script can check it without loading a page.
 
-## 8. Documentation
+## 10. Documentation
 
 The book in the middle of the sidebar footer opens these documents inside the
 dashboard, so the deployment steps and the field reference are at hand through
 the tunnel rather than only on GitHub. `docs/.order` sets the order of the list;
 a document missing from that file is appended rather than hidden.
 
-## 9. Settings
+## 11. Settings
 
 Behind the gear in the sidebar footer, three pages:
 
@@ -230,7 +375,42 @@ The daily pass runs inside the app; the page shows when it last ran.
 
 ---
 
-## 10. Troubleshooting
+## 12. Decisions (`/api/decisions`)
+
+The third question — *how do I deal with it* — in a form another tool can read. CrowdSec,
+nftables or a shell script can help themselves from here. The endpoint is documented on
+**Settings → API**.
+
+**Vidar does not decide what is blocked.** It says what somebody needs in order to decide, and
+something else is the hand. Which makes it compatible with the tools that do act rather than a
+competitor to them.
+
+Two things follow from that, and both are visible in the output:
+
+- **The selection travels with the answer.** Asked nothing in particular it answers for
+  `threats/*` over the last week, and the response says so. A feed whose membership rule is
+  invisible is a blocklist, and a blocklist nobody can open is what this dashboard argues
+  against.
+- **Every address carries its reason** — the class, the counts, and the network signals behind
+  it — after a `#`, the convention Spamhaus DROP and the CrowdSec blocklists use, so the usual
+  consumers already strip it and a person reading the same file still sees why.
+
+```
+# Vidar 1.0.0 — addresses matching a selection, not a verdict.
+# Vidar does not decide what is blocked. Review before you act on it.
+# Selection: threats/* (the recommended default)
+203.0.113.60  # threats/exploit-probers · 12 probes · 24 requests · on a blocklist · Tor exit
+```
+
+Take `format=json` for the same with the full evidence per address. Nothing is ranked by a score:
+the order is what the address did here — probes, then requests — because a number would collapse
+the evidence into a rank that has to be trusted.
+
+The answer is capped, and says when the cap was hit rather than quietly handing over a prefix.
+
+---
+
+## 13. Troubleshooting
 
 | Symptom | Cause | Check |
 |---|---|---|

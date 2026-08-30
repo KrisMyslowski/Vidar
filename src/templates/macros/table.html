@@ -103,8 +103,8 @@
   Rows needing special <td> attributes (e.g. cell-truncate) can be raw <tr> HTML
   inside the {% call kv_table() %} block.
 #}
-{%- macro kv_table() -%}
-<table class="kv-table"><tbody>{{ caller() }}</tbody></table>
+{%- macro kv_table(cls='') -%}
+<table class="kv-table{% if cls %} {{ cls }}{% endif %}"><tbody>{{ caller() }}</tbody></table>
 {%- endmacro -%}
 
 {%- macro kv_row(label, tip='') -%}

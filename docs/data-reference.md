@@ -217,7 +217,7 @@ CASCADE`. Each is indexed on its value column for per-value lookups.
 These are the **sole** store for the multi-value fields. `upsert_ip_intel()` writes them via
 `_sync_shodan_children()` (delete-then-insert per IP). Reads re-aggregate with `GROUP_CONCAT`
 (`_shodan_agg_select()`) for display (`get_visitor_detail`, `get_shodan_hosts`); per-value
-filtering (`/exposure?port=&vuln=&tag=`) and the classifier/`has_tags` `tags` lookups go
+filtering (`/shodan?port=&vuln=&tag=`) and the classifier/`has_tags` `tags` lookups go
 directly against the child tables. `init_db` migrates a legacy DB by backfilling the child
 tables from the old CSV columns and then dropping those columns (needs SQLite ≥ 3.35).
 
@@ -744,6 +744,71 @@ the result. `de` now returns exactly those 961; `path:de` still returns the 1,62
 
 ---
 
+## 4.5 The pattern pack
+
+The needles the classifier matches on — which operators run crawlers, what the scanning tools
+call themselves, which paths a scanner asks for — live in **`src/classifier/patterns.toml`**,
+not in code. They go stale for a different reason than the rules do: a newly announced AI
+crawler is not a logic change, and treating it as one meant a code edit, a version bump and a
+release for a string.
+
+| Table | What it holds |
+|---|---|
+| `scanner_paths` | Probe paths, as SQL LIKE patterns |
+| `payload_abuse` | Non-HTTP request bodies carrying a payload |
+| `dropper_suffixes` | Multi-architecture dropper filenames |
+| `convention_404` | Well-known files whose absence is protocol, not probing |
+| `cloud_isps` | Operators ip-api's `hosting` flag misses |
+| `researcher_rdns` / `researcher_uas` | Named organisations that publish their scanning identity |
+| `scanning_tool_uas` | Tools anyone can run |
+| `search_rdns` / `search_uas` | Search engines |
+| `ai_rdns` / `ai_uas` | AI crawlers |
+| `seo_uas` | SEO crawlers |
+| `http_client_uas` | HTTP client libraries |
+| `crawler_origins` | Which networks each declared crawler legitimately crawls from |
+
+**The thresholds did not move.** Each is calibration — a number measured against a real log and
+meaningless apart from the rule that reads it — and a data file would invite tuning one away
+from its measurement. They stay in `patterns.py` with the measurement beside them.
+
+### An operator pack
+
+`PATTERNS_PATH` names a second file of the same shape. Its entries are appended per table,
+shipped needles first. Only tables it declares are touched.
+
+**Additive, never subtractive.** A pack can add a needle and cannot remove one, because removing
+one describes a rule change and a rule change belongs in a rule — where it can be reasoned
+about, rather than in a data file that silently subtracts from the shipped behaviour while the
+code still reads as though it applied.
+
+Shipped needles come first in the merged list, which decides more than it looks like:
+`_hit()` returns the *first* needle found and that string is what an evidence line shows a
+reader, so an operator addition cannot change how an existing match is described.
+
+### The fingerprint
+
+`CLASSIFIER_VERSION` is `<rules>+<pack digest>` — for example `6+ebf8dfe2`. The rules half is
+bumped by hand when the chain changes; the digest is a sha256 prefix over the canonical form of
+the effective pack, so comments and formatting do not affect it but any needle does.
+
+This is what makes the pack safe to edit. Without it, an operator file would apply to addresses
+seen after the restart and to nothing else, and the database would hold two vintages of
+judgement with no way to tell them apart. With it, the next start reclassifies everything —
+measured at 5.8 s per million visits.
+
+### When a pack is broken
+
+Loading validates: the `schema` key must match, every table the classifier reads must be present
+in the shipped pack, an unknown table is refused (nothing would read it, so it would look applied
+and never be), and every entry must be a non-empty string.
+
+A failure raises at import and stops the service, naming the file, the table and the value.
+Detection that quietly falls back to "no patterns" produces a dashboard where everything is
+unknown and nothing is wrong — the same silent-failure shape as the cron that never fired.
+`python -m src.preflight` reports it without starting the service.
+
+---
+
 ## 5. Query functions (`src/db.py` and `src/queries/`)
 
 | Function | Parameters | Returns | When to Use |
@@ -764,7 +829,13 @@ the result. `de` now returns exactly those 961; `path:de` still returns the 1,62
 | `get_stats` | `conn` | dict | Overview dashboard: totals, top-N lists, rates, sparkline |
 | `get_geo_data` | `conn` | tuple[list[dict], dict] | `/visitors?view=map` route: markers + geo_stats |
 | `get_analysis_data` | `conn, since, until` | dict | `/analysis` route: enriched-IP total, distributions (status/http-version/methods), rate limits, classifier diagnostics |
-| `get_shodan_hosts` / `count_shodan_hosts` | `conn, page, limit, port, vuln, tag` | list[dict] / int | `/exposure` route: IPs with Shodan exposure; optional per-value filters (AND-combined) read the `ip_intel_*` child tables |
+| `get_shodan_hosts` / `count_shodan_hosts` | `conn, page, limit, port, vuln, tag` | list[dict] / int | `/shodan` route: IPs with Shodan exposure; optional per-value filters (AND-combined) read the `ip_intel_*` child tables |
+| `get_exposures` | `conn, since, until` | list[dict] | `/exposure` route: paths that answered 2xx and that fewer than two benign addresses fetched. Percent-encoded spellings fold first, then the benign test runs once per resource. Redirects, query strings and convention paths are excluded |
+| `get_probe_echo` | `conn, since, until` | dict | `/exposure` route: how many query-string probe URLs got a meaningless 200, and from how many addresses. Counted, never listed as findings |
+| `get_neighbourhood` | `conn, ip` | list[dict] | `/visitors/{ip}`: the class-group and signal breakdown of the peers in the same /24 (or /64) and the same ASN, excluding the address itself. Uses the `net()` SQL function registered by `get_conn` — see `db.network_of()`. A scope with no peers is omitted |
+| `get_sessions` / `count_sessions` | `conn, ip[, limit]` / `conn, ip` | list[dict] / int | `/visitors/{ip}`: the address's visits cut into sessions at a gap of `SESSION_GAP_SECONDS` (`src/sessions.py`), newest first, each with the aggregates `behaviour_for()` reads. The cut is a window function over `idx_visits_ip_timestamp`, so no sort happens; nothing is stored |
+| `get_incidents` | `conn, since, until[, limit]` | list[dict] | `/incidents`: sessions across addresses sharing a signature — the first `SIGNATURE_PATHS` missing paths in the order they were probed — clustered in time. The one query that sessionises every address; cached by the route. Thresholds and the sort key live in `src/incidents.py` |
+| `get_hourly_baseline` / `get_typical_hour` | `conn[, now]` / `conn, since, until` | dict | What an ordinary hour here holds, as a **median** with empty hours counted as zero. The first compares the last complete hour against the trailing 28 days for the Overview's findings; the second gives one window's typical hour, so past events can be placed against it. Both report `enough_history` / `usable` rather than comparing against noise |
 | `get_activity_timeline` | `conn, since, until` | list[dict] | `/` route: `[{day, total, humans, bots, automated, threats, unknown}]` daily taxonomy breakdown |
 | `get_ip_intel` | `conn, ip` | dict or None | Single IP enrichment lookup |
 | `get_ip_intel_bulk` | `conn, ips` | dict[str, dict\|None] | Bulk enrichment lookup |
@@ -820,6 +891,7 @@ These are computed at query time — not stored in the database.
 | `filter_static_assets` | `FILTER_STATIC_ASSETS` | `true` | Drop .css/.js/image requests. Note: this filters by extension *before* classification, so scanner probes to e.g. `/credentials.json` or `/config.js` are never tracked — a deliberate blind spot of the bot/threat detection |
 | `filter_internal_ips` | `FILTER_INTERNAL_IPS` | `true` | Drop RFC1918 / loopback IPs |
 | `site_base_url` | `SITE_BASE_URL` | *(empty)* | Its host defines which referers count as internal navigation ([§4.2.2](#422-the-browser-gate-rule-8)). **Empty by default** — describes the watched site, so there is no right default. Unset, the signal is off, not guessed: an empty host would otherwise make every referer match |
+| `patterns_path` | `PATTERNS_PATH` | *(empty)* | An optional second pattern pack, merged on top of `src/classifier/patterns.toml`. Additive only — it can add needles, never remove one. A file that does not load stops the service, naming the table and the value. Changing it changes `CLASSIFIER_VERSION` and so reclassifies every stored address ([§4.5](#45-the-pattern-pack)) |
 | `poll_interval_seconds` | `POLL_INTERVAL_SECONDS` | `1.0` | Log tail polling frequency |
 | `shodan_requests_per_minute` | `SHODAN_REQUESTS_PER_MINUTE` | `600` | Ceiling on outbound Shodan requests. `shodan_concurrency` bounds how many run at once and nothing bounded how many run per minute — a backlog drain issued ~1,300/min at a free service that publishes no limit |
 | `shodan_cooldown_seconds` | `SHODAN_COOLDOWN_SECONDS` | `300` | How long to stop calling Shodan entirely after it answers 429. Previously a 429 was swallowed as "no data" and the rate never came down |

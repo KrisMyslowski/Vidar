@@ -19,7 +19,7 @@ from tests.test_dashboard_routes import dashboard_db  # noqa: F401
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "src/templates"
 
-PAGES = ["/", "/visitors", "/analysis", "/exposure", "/visitors/203.0.113.10", "/settings/storage"]
+PAGES = ["/", "/visitors", "/analysis", "/shodan", "/visitors/203.0.113.10", "/settings/storage"]
 
 
 @pytest.fixture

@@ -16,6 +16,7 @@ from ._shared import (
     seen_in_window,
     visit_window,
 )
+from .baseline import _median_with_zeros, get_hourly_baseline
 
 # How many entries each Overview "Top" list carries. The block is a tabbed
 # single panel, so depth costs no vertical space until a tab is opened.
@@ -194,7 +195,7 @@ def get_stats(
     }
 
 
-def get_attention_items(conn: sqlite3.Connection) -> list[dict]:
+def get_attention_items(conn: sqlite3.Connection, baseline: dict | None = None) -> list[dict]:
     """Things worth looking at right now, for the Overview's "Needs attention".
 
     Each item is one finding with a link to the view that shows it in full. Items
@@ -274,26 +275,40 @@ def get_attention_items(conn: sqlite3.Connection) -> list[dict]:
                 ),
                 "value": row["hosts"],
                 "signal": "dnsbl",
-                "href": f"/exposure?vuln={quote(row['vuln'])}",
+                "href": f"/shodan?vuln={quote(row['vuln'])}",
             }
         )
 
     # 4. Tor traffic today against its own 7-day baseline.
+    #
+    # The median of the seven days, not their mean. A mean has the wrong failure
+    # mode for a spike detector: one busy day raises the bar, so the next spike
+    # sits under it and is never reported — the finding goes quiet exactly when
+    # something is happening repeatedly. Days with no Tor traffic write no row
+    # and are counted back in as zeros, or a single active day out of seven
+    # becomes the norm.
+    days = [
+        r[0]
+        for r in conn.execute(
+            """SELECT COUNT(*) FROM visits v JOIN ip_intel i ON v.ip = i.ip
+               WHERE i.is_tor = 1 AND v.timestamp >= ? AND v.timestamp < ?
+               GROUP BY substr(v.timestamp, 1, 10)""",
+            (d7, today),
+        ).fetchall()
+    ]
     row = conn.execute(
-        """SELECT SUM(CASE WHEN v.timestamp >= ? THEN 1 ELSE 0 END) AS today,
-                  SUM(CASE WHEN v.timestamp >= ? AND v.timestamp < ? THEN 1 ELSE 0 END) AS prev
-           FROM visits v JOIN ip_intel i ON v.ip = i.ip
-           WHERE i.is_tor = 1""",
-        (today, d7, today),
+        """SELECT COUNT(*) AS today FROM visits v JOIN ip_intel i ON v.ip = i.ip
+           WHERE i.is_tor = 1 AND v.timestamp >= ?""",
+        (today,),
     ).fetchone()
-    if row and (row["today"] or 0) > 0 and (row["prev"] or 0) > 0:
-        daily_avg = row["prev"] / 7
-        factor = row["today"] / daily_avg if daily_avg else 0
+    typical = _median_with_zeros(days, 7)
+    if row and (row["today"] or 0) > 0 and typical:
+        factor = row["today"] / typical
         if factor >= 2:
             items.append(
                 {
                     "tag": "Tor",
-                    "text": f"Tor traffic {factor:.0f}× above the 7-day average",
+                    "text": f"Tor traffic {factor:.0f}× the typical day of the last week",
                     "value": row["today"],
                     "signal": "tor",
                     "href": "/visitors?signal=is_tor",
@@ -323,6 +338,51 @@ def get_attention_items(conn: sqlite3.Connection) -> list[dict]:
                 "href": f"/visitors?group=path&q={quote(row['path'])}",
             }
         )
+
+    # 6. The hour that just ended, against what an hour here normally holds.
+    #
+    # The one finding that says "look now" rather than "look at this". It is
+    # last because it is the least specific: everything above names an address,
+    # a path or a CVE, and this names a moment. Silent while the log is under a
+    # fortnight old, and silent on a site whose median hour is empty — a
+    # multiple of nothing is not a signal. See queries/baseline.py.
+    #
+    # Passed in rather than computed here, and it is the whole reason this
+    # function takes an argument at all. COUNT(DISTINCT ip) per hour over four
+    # weeks costs 290 ms on 520 000 visits against 6 ms for everything else in
+    # this list — and this list is behind the nav badge, which renders on every
+    # page. The answer changes once an hour, so the caller caches it on the hour
+    # (routes/_cache.py) instead of it being recomputed with the rest.
+    base = baseline if baseline is not None else get_hourly_baseline(conn)
+    if base.get("enough_history"):
+        probing = base["probing_addresses"]
+        if probing["unusual"]:
+            items.append(
+                {
+                    "tag": "This hour",
+                    "text": (
+                        f"{probing['current']:,} addresses probing in the last hour — "
+                        f"{probing['factor']:g}× the typical {probing['typical']:g}"
+                    ),
+                    "value": probing["current"],
+                    "signal": "threats",
+                    "href": "/incidents?range=24h",
+                }
+            )
+        requests = base["requests"]
+        if requests["unusual"] and not probing["unusual"]:
+            items.append(
+                {
+                    "tag": "This hour",
+                    "text": (
+                        f"{requests['current']:,} requests in the last hour — "
+                        f"{requests['factor']:g}× the typical {requests['typical']:g}"
+                    ),
+                    "value": requests["current"],
+                    "signal": "hosting",
+                    "href": "/visitors?range=24h",
+                }
+            )
 
     return items
 
