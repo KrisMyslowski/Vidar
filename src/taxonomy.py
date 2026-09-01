@@ -159,7 +159,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         key="dnsbl_listed",
         alias="dnsbl",
-        label="DNSBL Listed",
+        label="DNSBL listed",
         label_short="DNSBL",
         sql="{p}dnsbl_listed = 1",
         column="dnsbl_listed",
@@ -174,7 +174,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         key="has_tags",
         alias="tags",
-        label="Shodan Tags",
+        label="Shodan tags",
         label_short="Shodan",
         sql="EXISTS (SELECT 1 FROM ip_intel_tags t WHERE t.ip = {ip})",
         tip=(

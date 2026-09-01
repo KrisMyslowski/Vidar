@@ -14,6 +14,10 @@ _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 # Strict: the month reaches the filesystem as <archive_dir>/<month>.zip, so a
 # lenient pattern is a path traversal. Anchored, fixed width, 01-12 only.
 _MONTH_RE = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
+# A logged timestamp, at the precision nginx writes: seconds, with an offset.
+# Anchored whole rather than searched, so nothing but a timestamp gets through
+# to a comparison against the `timestamp` column.
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)?")
 
 
 def valid_ip(ip: str | None) -> str | None:
@@ -106,3 +110,15 @@ def valid_order(order: str) -> str:
 def valid_choice(value: str, choices: frozenset[str], default: str) -> str:
     """Return value if it is in choices, else default."""
     return value if value in choices else default
+
+
+def valid_timestamp(s: str | None) -> str | None:
+    """Return an ISO second-resolution timestamp if it is one, else None.
+
+    The gate between a URL parameter and a session's bounds. A session is
+    addressed by the moment it began and the moment it ended, so those two
+    strings reach a SQL comparison — bound as parameters, but a caller should
+    still not be able to put arbitrary text there and read the result back as a
+    session that never existed.
+    """
+    return s if s and _TIMESTAMP_RE.fullmatch(s) else None

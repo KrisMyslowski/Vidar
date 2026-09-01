@@ -148,7 +148,7 @@ FIELDS: tuple[Field, ...] = (
         ("v.server_port",),
         (),
         "serverport:80",
-        "the port on *our* server — only ever 80 or 443",
+        "the port on this server — only ever 80 or 443",
     ),
     Field(
         "status", "Status", "visit", STATUS, ("v.status",), (), "status:404", "a code, or 2xx–5xx"

@@ -22,11 +22,12 @@
     {% call kv_row('/api/stats', ('Summary numbers as JSON.',
                           'Takes the same from/to window as the dashboard; without one the answer is all-time.')) %}
       Summary counts behind the Overview tiles.
+      Takes <code>from</code> and <code>to</code>.
       <a href="/api/stats" target="_blank">Open</a>
     {% endcall %}
     {% call kv_row('/api/activity', ('Visits per bucket, split by identity group.',
                              'bucket=day or hour, plus the same class, signal and search filters as /visitors.')) %}
-      Visits per bucket, split by identity group — the activity chart's data.
+      The activity chart's data.
       Takes <code>from</code>, <code>to</code>, <code>bucket=day|hour</code>,
       and the page filters <code>class</code>, <code>signal</code>, <code>q</code>.
       <a href="/api/activity" target="_blank">Open</a>

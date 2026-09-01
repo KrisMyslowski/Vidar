@@ -79,7 +79,11 @@ table.data-table { table-layout: fixed; }
    the entire leftover (a 600px ISP column beside a truncated date). Tables
    without a picker (the Identity × Signals matrix) may leave their equal data
    columns unsized: nothing there can disappear. */
-th.c-num   { width: 4.5rem; }  /* short counts: Visits, IPs, Pages, Hits, Status */
+th.c-num   { width: 4.5rem; }  /* short counts: Visits, IPs, Pages, Status */
+th.c-num-wide { width: 6rem; } /* a count whose header does not fit 4.5rem —
+                                  Requests, Addresses, Networks. Widening the
+                                  column is the honest fix; abbreviating the
+                                  header invents a second word for one thing. */
 th.c-cc    { width: 4rem; }    /* country code */
 th.c-port  { width: 5.5rem; }  /* "80, 443" as text */
 th.c-badge { width: 6.5rem; }  /* Method, Device, Rate Limit + long-headed counts */

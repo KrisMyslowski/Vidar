@@ -42,13 +42,13 @@ describe('timeline.js', () => {
 
   describe('formatBucket', () => {
     it('shows the day for daily buckets and the hour for hourly ones', () => {
-      expect(formatBucket('2026-08-05', 'day')).toBe('05.08.');
+      expect(formatBucket('2026-08-05', 'day')).toBe('05 Aug');
       expect(formatBucket('2026-08-05T14', 'hour')).toBe('14:00');
     });
 
     it('spells the date out in the tooltip, hour included', () => {
-      expect(formatBucketLong('2026-08-05', 'day')).toBe('05.08.26');
-      expect(formatBucketLong('2026-08-05T14', 'hour')).toBe('05.08.26 14:00');
+      expect(formatBucketLong('2026-08-05', 'day')).toBe('05 Aug 2026');
+      expect(formatBucketLong('2026-08-05T14', 'hour')).toBe('05 Aug 2026 14:00');
     });
   });
 
@@ -116,18 +116,30 @@ describe('timeline.js', () => {
       document.dispatchEvent(new window.Event('DOMContentLoaded'));
     });
 
-    it('draws one line per series', () => {
-      const lines = document.querySelectorAll('.tl-svg polyline');
-      expect(lines.length).toBe(2);
-      expect([...lines].map((l) => l.parentElement.dataset.series)).toEqual(['humans', 'bots']);
+    it('draws the total as the hero and one small multiple per series', () => {
+      // One shared linear axis put humans at a third of a pixel beside threats;
+      // each series gets its own scale now, and the total gets the big band.
+      expect(document.querySelectorAll('.tl-hero polyline').length).toBe(1);
+      const mults = document.querySelectorAll('.tl-mults .tl-mult');
+      expect([...mults].map((m) => m.dataset.series)).toEqual(['humans', 'bots']);
+      mults.forEach((m) => expect(m.querySelectorAll('polyline').length).toBe(1));
+    });
+
+    it('prints each series peak, named, because it is no longer on an axis', () => {
+      // The unit is part of the label. A bare number beside a group name reads
+      // as a count of that group, which is what the filter chip above already
+      // shows — and that one counts addresses, not visits.
+      const peaks = [...document.querySelectorAll('.tl-mult-peak')].map((e) => e.textContent);
+      expect(peaks).toEqual(['peak 4/day', 'peak 5/day']);
     });
 
     it('gives every bucket a point on every line', () => {
-      const pts = document.querySelector('.tl-svg polyline').getAttribute('points').split(' ');
-      expect(pts.length).toBe(rows.length);
+      document.querySelectorAll('.tl-svg polyline').forEach((line) => {
+        expect(line.getAttribute('points').split(' ').length).toBe(rows.length);
+      });
     });
 
-    it('names every series and the total on hover', () => {
+    it('names every series and the total on hover, zeroes included', () => {
       const plot = document.querySelector('.timeline-plot');
       plot.dispatchEvent(new window.MouseEvent('mousemove', { bubbles: true, clientX: 0 }));
       const tip = document.querySelector('.timeline-tip');
@@ -135,6 +147,9 @@ describe('timeline.js', () => {
       expect(tip.textContent).toContain('Humans');
       expect(tip.textContent).toContain('Bots');
       expect(tip.textContent).toContain('visits');
+      // A series at zero keeps its row. Dropping it read as "not a category
+      // here" and made the tooltip change height as the cursor moved.
+      expect(document.querySelectorAll('.timeline-tip .tl-tip-row').length).toBe(series.length);
     });
 
     describe('the zoom buttons', () => {
@@ -209,7 +224,8 @@ describe('timeline.js', () => {
       plot.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 0 }));
       document.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true, clientX: 1e6 }));
       await new Promise((r) => setTimeout(r, 10));
-      expect(document.querySelectorAll('.tl-svg polyline').length).toBe(2);
+      // The hero plus one band per series — the whole picture, still drawn.
+      expect(document.querySelectorAll('.tl-svg polyline').length).toBe(series.length + 1);
     });
   });
 });

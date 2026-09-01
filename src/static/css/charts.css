@@ -5,15 +5,70 @@
  * Moving a rule between parts moves it in the cascade.
  */
 /* ── Activity timeline (timeline.js draws the SVG) ─────────────────────────
-   One line per identity group. The plot box owns the height so the SVG can be
-   sized from it; the tooltip and the zoom chip are positioned against it. */
+   A hero band for the total, five small multiples under it — one per identity
+   group, each against its own maximum. One shared linear axis put humans at a
+   third of a pixel beside threats; the magnitude lives in the printed peak now.
+   The plot box no longer owns a height: the hero and the band row each own
+   theirs, and the block is as tall as the two together. */
 .timeline { position: relative; }
-.timeline-plot { height: 190px; cursor: crosshair; user-select: none; }
+.timeline-plot { cursor: crosshair; user-select: none; }
+.tl-hero { height: 150px; }
 .tl-svg { display: block; width: 100%; height: 100%; }
 .tl-grid { stroke: var(--border); stroke-width: 1; }
 .tl-axis { fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono); }
-.tl-line { stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+/* The second axis row on an hourly view: which day a block of hours is in.
+   Without it the axis reads 00:00 12:00 00:00 12:00 and names no day at all. */
+.tl-axis--date { font-size: 9px; opacity: 0.75; }
+.tl-daytick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
+.tl-line { stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.tl-line--total { stroke-width: 1.75; opacity: 0.7; }
+/* The fill is what makes a 52px band read as a shape rather than a wire. */
+.tl-area { opacity: 0.18; }
+.tl-hero .tl-area { opacity: 0.12; }
+/* The New series under the All + New comparison, nested inside its outline:
+   solid where the outer one is faint, so the gap between them — the returning
+   traffic — is what the eye lands on. */
+.tl-area--new { opacity: 0.45; }
+.tl-hero .tl-area--new { opacity: 0.3; }
+.tl-line--new { stroke-width: 1.25; stroke-dasharray: 3 2; }
 .tl-cursor { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.tl-mults {
+  display: grid;
+  /* auto-fit, not repeat(5): five fixed columns overflowed every panel narrower
+     than about 600px, and the bands are readable stacked. */
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+.tl-mult-plot { height: 52px; }
+.tl-mult-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin-bottom: 2px;
+}
+.tl-mult-name { font-size: var(--font-xs); font-weight: 500; }
+/* The series maximum, printed because it is no longer readable off an axis. */
+.tl-mult-peak {
+  margin-left: auto;
+  font-size: var(--font-xxs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* What window is on screen. Two disabled buttons say a zoom is possible; they
+   never said three days out of ninety. */
+.timeline-range { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* The gesture, said once. Same register and weight as the map's own hint, one
+   panel over — that one teaches shift-drag, and this one is less conventional
+   than that. It fades after the reader has done it once (timeline.js). */
+.timeline-hint {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  transition: opacity 0.4s;
+}
+.timeline-hint--done { opacity: 0; }
 /* The drag band: what the reader is about to zoom into. */
 .tl-band { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
 .timeline-tip {
@@ -39,12 +94,23 @@
 .tl-tip-total { color: var(--text-muted); margin-bottom: var(--space-2xs); }
 .tl-tip-row { display: flex; align-items: center; gap: 5px; }
 .tl-tip-row strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* The New half of a figure under the comparison: beside its number, quieter,
+   so the pair reads as one value with its subset rather than as two values. */
+.timeline-tip em {
+  font-style: normal;
+  color: var(--text-muted);
+  font-size: var(--font-xxs);
+  margin-left: 4px;
+}
 .tl-tip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 /* Zoom controls, where the zoom chip used to sit. The chip spelled out the
    window it had zoomed to and carried the only way back; these say it with two
    states instead — a disabled minus is "you are looking at everything", a
    disabled plus is "there is nothing finer here". */
-.timeline-zoombar { position: absolute; right: 0; top: -2rem; display: flex; gap: 4px; }
+/* In the panel head as a flex item, not floating above the plot: positioned
+   absolutely it landed on top of the subtitle as soon as that subtitle wrapped,
+   which it does at 420px. */
+.timeline-zoombar { display: flex; gap: 4px; margin-left: auto; }
 .btn-icon {
   display: inline-flex;
   align-items: center;
@@ -375,6 +441,14 @@ tr[data-drawer-src] { cursor: pointer; }
 }
 .drawer-close:hover { color: var(--text); }
 .drawer-loading { color: var(--text-muted); font-size: var(--font-sm); }
+/* One scroll container per table in the panel, the same rule .data-table
+   states for the page: scroll, don't clip. The panel is 736px and a fixed
+   layout table is at least as wide as its column widths add up to, so the
+   sessions table lands at 768px and used to hang 57px past the edge. Per
+   table, not on .drawer: with the overflow on the panel the whole thing
+   scrolled sideways — heading, section labels and pager with it — and reading
+   one wide path moved everything else out from under the reader. */
+.drawer-scroll { overflow-x: auto; }
 .drawer-full-link {
   display: inline-block;
   margin-top: var(--space-md);

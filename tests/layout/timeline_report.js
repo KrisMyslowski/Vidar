@@ -12,12 +12,20 @@
   const plot = box.querySelector('.timeline-plot');
 
   const state = () => {
-    const line = box.querySelector('.tl-svg polyline');
-    const labels = [...box.querySelectorAll('.tl-axis')].map((t) => t.textContent);
+    // The hero carries the total and the shared x-axis; each small multiple
+    // carries one group. The y-axis numbers are the only labels left of the
+    // plot area, which is what separates them from the date marks.
+    const hero = box.querySelector('.tl-hero .tl-svg');
+    const line = hero && hero.querySelector('polyline');
+    const axis = hero ? [...hero.querySelectorAll('.tl-axis')] : [];
     return {
+      bands: box.querySelectorAll('.tl-mults .tl-mult').length,
       lines: box.querySelectorAll('.tl-svg polyline').length,
+      peaks: [...box.querySelectorAll('.tl-mult-peak')].map((e) => e.textContent),
       buckets: line ? line.getAttribute('points').trim().split(/\s+/).length : 0,
-      xLabels: labels.filter((t) => /[.:]/.test(t)),
+      xLabels: axis
+        .filter((t) => Number(t.getAttribute('x')) >= 44)
+        .map((t) => t.textContent),
       // Zoomed in is "the way out is available". The chip this used to read is
       // gone; the zoombar's out button carries the same fact as `disabled`,
       // which is also the honest state at either end.
@@ -57,7 +65,10 @@
   out.afterDrag = state();
 
   // A short window: days would be single points, so the chart asks for hours.
-  await drag(0.45, 0.52, 1200);
+  // Wide enough to bite on what the first drag left — 7% of the width was less
+  // than one bucket of a seven-bucket view, so the second drag did nothing and
+  // the chart never asked for hours.
+  await drag(0.40, 0.68, 1200);
   out.afterShortDrag = state();
 
   // Each step out undoes one step in, so two drags need two clicks.
@@ -70,7 +81,9 @@
 
   // Nothing may stick out of the panel it lives in.
   const panel = box.closest('.panel').getBoundingClientRect();
-  const svg = box.querySelector('.tl-svg').getBoundingClientRect();
-  out.fits = svg.left >= panel.left - 1 && svg.right <= panel.right + 1;
+  out.fits = [...box.querySelectorAll('.tl-svg')].every((s) => {
+    const r = s.getBoundingClientRect();
+    return r.left >= panel.left - 1 && r.right <= panel.right + 1;
+  });
   return out;
 })()

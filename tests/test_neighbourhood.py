@@ -242,7 +242,7 @@ def test_the_panel_says_so_when_there_is_nothing_yet(client, tmp_db):
     with get_conn(tmp_db) as conn:
         _seen(conn, "203.0.113.1", asn="")
     text = client.get("/visitors/203.0.113.1").text
-    assert "No neighbouring addresss recorded yet" in text
+    assert "No neighbouring addresses recorded yet" in text
 
 
 def test_no_sentence_where_there_is_no_majority(client, tmp_db):

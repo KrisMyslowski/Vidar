@@ -17,9 +17,9 @@ class TestFmtdate:
     """Test date formatting filter."""
 
     def test_iso_timestamp_to_local(self):
-        """Should format ISO timestamp as dd.mm.yy HH:MM."""
+        """Should format ISO timestamp as YYYY-MM-DD HH:MM."""
         result = _fmtdate("2026-04-15T14:32:00")
-        assert result == "15.04.26 14:32"
+        assert result == "2026-04-15 14:32"
 
     def test_empty_string(self):
         """Empty string should return as-is."""
@@ -180,9 +180,8 @@ class TestFmtbytes:
         assert "0" in result
 
     def test_none_value(self):
-        """None should show 0 B."""
-        result = _fmtbytes(None)
-        assert "0" in result
+        """None is a missing measurement, not a measured zero."""
+        assert _fmtbytes(None) == "—"
 
 
 class TestFmtresptime:

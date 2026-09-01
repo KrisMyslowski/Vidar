@@ -58,11 +58,15 @@ async def analysis(
         )
     )
 
+    # The card note is a definition slot, not an instruction one. Two of the six
+    # told the reader to click — which every one of these cards affords anyway,
+    # and which stops being true for the status card the moment its "Table ⇄"
+    # is toggled and there are no bars.
     status = data.get("status_dist") or {}
     cards = [
         {
             "title": "Status codes",
-            "note": "click a bar to filter Visitors by status",
+            "note": "the response classes nginx returned",
             "color": GROUP_COLOR_VARS["humans"],
             "rows": [
                 {
@@ -259,7 +263,7 @@ async def exposure(
                 "facets": [
                     {
                         "title": "Open ports",
-                        "note": "click to add a port filter",
+                        "note": "TCP ports Shodan found open on visiting IPs",
                         "param": "port",
                         "entries": top_ports,
                         "active": str(port) if port else "",

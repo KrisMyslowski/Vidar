@@ -205,6 +205,20 @@ _VISITOR_GROUP_SUMS = ", ".join(
 )
 
 
+# The same pivot over distinct addresses instead of requests, for the visitor
+# timeline. Not a second way of counting the same thing: six thousand requests
+# from three addresses is a scanner and three thousand addresses making two each
+# is a crawl, and a request count cannot tell you which.
+#
+# These do not add up across buckets. An address that visits on two days is
+# counted in both, so summing a column double-counts it — the range's own
+# distinct total is a different question, and the filter chips answer it.
+_VISITOR_GROUP_IP_COUNTS = ", ".join(
+    f"COUNT(DISTINCT CASE WHEN {_group_match(g, 'i.visitor_class')} THEN v.ip END) AS {g}"
+    for g in GROUPS_WITH_UNKNOWN
+)
+
+
 # HTTP status-code bands — the single source for every 2xx/3xx/4xx/5xx split
 # (paths status mix, ?status= filter, status doughnut, status-mix timeline).
 _STATUS_BANDS: tuple[tuple[str, str], ...] = (
@@ -548,6 +562,69 @@ def _apply_drilldown_filters(
     return query, params
 
 
+def _apply_drill_filters(
+    query: str,
+    params: list,
+    *,
+    country: str | None = None,
+    ip: str | None = None,
+    port: int | None = None,
+    asn: str | None = None,
+    path: str | None = None,
+    browser: str | None = None,
+) -> tuple[str, list]:
+    """Every row-level drill-down at once, for the queries that take all of them.
+
+    The visitor executors spell country, ip and port out inline and call
+    _apply_drilldown_filters for the other three, which is fine where the six
+    arrive one at a time. The timeline, the heatmap and the chip counts take
+    them as a set, and a set of six written out four times is four places for
+    one of them to go missing — which is exactly how the timeline came to
+    render a pill for a filter it never applied.
+    """
+    if country:
+        query += " AND i.country_code = ?"
+        params.append(country)
+    if ip:
+        query += " AND v.ip = ?"
+        params.append(ip)
+    if port:
+        query += " AND v.server_port = ?"
+        params.append(port)
+    return _apply_drilldown_filters(query, params, asn, path, browser)
+
+
+def _apply_min_visits(
+    query: str, params: list, min_visits: int, inner_where: str, inner_params: list
+) -> tuple[str, list]:
+    """Keep only addresses that made at least `min_visits` requests.
+
+    The visitor table says this with a HAVING over its own GROUP BY v.ip, which
+    a query grouped by time bucket cannot borrow. Same meaning, expressed as a
+    membership test: the addresses that clear the bar are selected first, under
+    *the same* filters and window, and the outer query keeps their rows.
+
+    `inner_where`/`inner_params` are that same chain. Passing them rather than
+    rebuilding is the point — a filter that reached the outer query and not the
+    subquery would count visits the page is not showing, and the bar would be
+    cleared by traffic nobody selected.
+
+    `inner_where` must carry its own leading WHERE. Two conventions live in this
+    module — the timeline builds "WHERE 1=1 AND …" and the chip counts build
+    "1=1 AND …" for an outer query that supplies the keyword — and a helper that
+    guessed which one it was handed is a helper that guesses wrong. It is
+    spelled out at the call site instead.
+    """
+    if not min_visits or min_visits <= 0:
+        return query, params
+    query += (
+        " AND v.ip IN (SELECT v.ip FROM visits v LEFT JOIN ip_intel i ON v.ip = i.ip"
+        f" {inner_where} GROUP BY v.ip HAVING COUNT(*) >= ?)"
+    )
+    params.extend([*inner_params, int(min_visits)])
+    return query, params
+
+
 def _apply_signal_filter(
     query: str, params: list, signal_filter: list[str] | None
 ) -> tuple[str, list]:
@@ -562,6 +639,52 @@ def _apply_signal_filter(
     conditions = [f"({_signal_condition(s)})" for s in SIGNALS if s.key in signal_filter]
     if conditions:
         query += f" AND ({' OR '.join(conditions)})"
+    return query, params
+
+
+# The two states of the seen filter. "total" is the absence of one, and it is
+# spelled out rather than left as an empty string so a typo in a URL falls back
+# to it visibly instead of silently selecting something else.
+SEEN_TOTAL = "total"
+SEEN_NEW = "new"
+# A comparison rather than a narrowing: the charts draw both series so the gap
+# between them — the returning traffic — is visible. It filters nothing, and
+# `_apply_seen_filter` treats it as the absence of a filter for that reason, so
+# the table, the map, the counts and the heatmap answer for All under it. The
+# control says so; a third state that quietly meant something different to four
+# surfaces would be the thing this dashboard keeps having to remove.
+SEEN_BOTH = "both"
+SEEN_VALUES = (SEEN_TOTAL, SEEN_NEW, SEEN_BOTH)
+
+
+def _apply_seen_filter(
+    query: str, params: list, seen: str | None, date_from: str | None, ip_ref: str = "v.ip"
+) -> tuple[str, list]:
+    """Narrow to addresses whose first request falls inside the window.
+
+    "New" is the complement of the window's own lower bound: an address is new
+    here if nothing of it exists before `date_from`. That makes it exactly as
+    accurate as the bound the reader picked, and it needs no stored first_seen
+    column that could disagree with the visits it was derived from.
+
+    **It is honest only about what the database still holds.** Retention moves
+    whole months out to a zip, and an address whose earlier visits left with one
+    reads as new. The tooltip on the control says so; there is no way to answer
+    it better without keeping the months.
+
+    With no lower bound — the `all` range — there is nothing to be new relative
+    to, every address would qualify, and the filter would be a claim that means
+    nothing. It does nothing at all instead, and the control is disabled there.
+
+    idx_visits_ip_timestamp covers the subquery: it is a lookup of the first key
+    under each address, not a scan.
+    """
+    if seen != SEEN_NEW or not date_from:
+        return query, params
+    query += (
+        " AND NOT EXISTS (SELECT 1 FROM visits v0" f" WHERE v0.ip = {ip_ref} AND v0.timestamp < ?)"
+    )
+    params.append(date_from)
     return query, params
 
 

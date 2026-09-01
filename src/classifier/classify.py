@@ -81,9 +81,9 @@ def explain_classification(conn: sqlite3.Connection, ip: str) -> list[dict]:
         ports, vulns = (counts[0] or 0, counts[1] or 0) if counts else (0, 0)
         parts = [f"Shodan tags: {d['tags']}"]
         if ports:
-            parts.append(f"{ports} open port(s)")
+            parts.append(f"{ports} open port{'' if ports == 1 else 's'}")
         if vulns:
-            parts.append(f"{vulns} known CVE(s)")
+            parts.append(f"{vulns} known CVE{'' if vulns == 1 else 's'}")
         evidence.append({"text": ", ".join(parts), "source": "shodan", "decisive": False})
     return evidence
 

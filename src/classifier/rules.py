@@ -27,6 +27,13 @@ from .patterns import (
     _is_cloud_isp,
 )
 
+
+# These sentences are user-facing — they are the "Why this verdict" list on the
+# visitor detail page — so they get a real plural rather than "request(s)".
+def _s(n: int) -> str:
+    return "" if n == 1 else "s"
+
+
 # ── The rule chain ───────────────────────────────────────────────────────────
 # One ordered list. Each rule reads the evidence and either claims the IP — with
 # the sentence that justifies the claim — or passes to the next.
@@ -95,7 +102,7 @@ def _rule_payload_abuse(e: _Evidence) -> _Verdict | None:
         return None
     return (
         "threats/protocol-abusers",
-        f"{n} non-HTTP request(s) carrying a shell command or dropper payload",
+        f"{n} non-HTTP request{_s(n)} carrying a shell command or dropper payload",
         "behaviour",
     )
 
@@ -107,7 +114,7 @@ def _rule_exploit_probes(e: _Evidence) -> _Verdict | None:
         return None
     return (
         "threats/exploit-probers",
-        f"{n} request(s) carrying an exploit pattern "
+        f"{n} request{_s(n)} carrying an exploit pattern "
         "(traversal, SQL, script, null byte, dropper)",
         "behaviour",
     )
@@ -120,7 +127,7 @@ def _rule_scanner_paths(e: _Evidence) -> _Verdict | None:
         return None
     return (
         "bots/vulnerability-probers",
-        f"Requested {n} known probe path(s) (/.env, /.git/, /wp-admin …)",
+        f"Requested {n} known probe path{_s(n)} (/.env, /.git/, /wp-admin …)",
         "behaviour",
     )
 
@@ -297,9 +304,13 @@ def _rule_browser(e: _Evidence) -> _Verdict | None:
         return None
 
     if e.n("browser_navigate") > 0:
-        why = f"Sec-Fetch navigation headers on {e.n('browser_navigate')} request(s)"
+        nav = e.n("browser_navigate")
+        why = f"Sec-Fetch navigation headers on {nav} request{_s(nav)}"
     elif js_browser:
-        why = f"Fetched {e.n('js_fetch')} page fragment(s) only our JavaScript requests"
+        # "fragment(s) only our JavaScript requests" was also missing the word
+        # that makes it a sentence.
+        frags = e.n("js_fetch")
+        why = f"Fetched {frags} page fragment{_s(frags)} that only our JavaScript requests"
     else:
         why = f"Browser-only transport signals across {e.n('unique_paths')} distinct pages"
 
@@ -346,7 +357,7 @@ def _rule_protocol_mismatch(e: _Evidence) -> _Verdict | None:
         return None
     return (
         "automated/protocol-mismatch",
-        f"{n} request(s) that were not HTTP — a TLS handshake on the plain-HTTP "
+        f"{n} request{_s(n)} that were not HTTP — a TLS handshake on the plain-HTTP "
         "port, or an empty request line",
         "behaviour",
     )

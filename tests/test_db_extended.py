@@ -885,8 +885,13 @@ class TestVisualQueryHelpers:
         assert rows[(1, 9)] == 2  # Monday 09:xx
         assert rows[(0, 23)] == 1  # Sunday 23:xx
 
-    def test_hourly_heatmap_splits_by_group(self, tmp_db):
-        """Each cell carries the per-taxonomy-group breakdown for the toggle."""
+    def test_hourly_heatmap_counts_the_cell_and_nothing_else(self, tmp_db):
+        """The total, and no per-group split.
+
+        It carried one for a toggle above the grid; the page's own group chips
+        took that job and the toggle went, leaving five SUM() aggregates per
+        cell computed on every render and read by nothing.
+        """
         from src.queries import get_hourly_heatmap, set_visitor_class, upsert_ip_intel
 
         with get_conn(tmp_db) as conn:
@@ -900,9 +905,7 @@ class TestVisualQueryHelpers:
         with get_conn(tmp_db) as conn:
             cell = {(r["dow"], r["hr"]): r for r in get_hourly_heatmap(conn)}[(1, 9)]
         assert cell["total"] == 2
-        assert cell["humans"] == 1
-        assert cell["bots"] == 1
-        assert cell["threats"] == 0
+        assert set(cell.keys()) == {"dow", "hr", "total"}
 
     def test_hourly_heatmap_respects_date_range(self, tmp_db):
         with get_conn(tmp_db) as conn:
@@ -949,32 +952,38 @@ class TestVisualQueryHelpers:
         from src.routes._charts import build_heatmap_grid
 
         grid, maxes = build_heatmap_grid(
-            [
-                {
-                    "dow": 1,
-                    "hr": 9,
-                    "total": 5,
-                    "humans": 3,
-                    "bots": 2,
-                    "automated": 0,
-                    "threats": 0,
-                    "unknown": 0,
-                },
-                {
-                    "dow": 0,
-                    "hr": 23,
-                    "total": 2,
-                    "humans": 0,
-                    "bots": 0,
-                    "automated": 0,
-                    "threats": 0,
-                    "unknown": 2,
-                },
-            ]
+            [{"dow": 1, "hr": 9, "total": 5}, {"dow": 0, "hr": 23, "total": 2}]
         )
         assert [g["label"] for g in grid] == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         assert grid[0]["cells"][9]["total"] == 5  # Monday 09
-        assert grid[0]["cells"][9]["humans"] == 3
-        assert grid[6]["cells"][23]["unknown"] == 2  # Sunday 23
-        assert maxes["total"] == 5
-        assert maxes["humans"] == 3
+        assert grid[6]["cells"][23]["total"] == 2  # Sunday 23
+        assert maxes == {"total": 5, "low": 2}
+        # Every weekday is in range when the window is open-ended.
+        assert all(row["in_range"] for row in grid)
+
+    def test_heatmap_marks_weekdays_the_window_cannot_contain(self):
+        """Four empty rows under a three-day window are an absence of calendar,
+        not an absence of traffic, and rendered identically to one."""
+        from src.routes._charts import build_heatmap_grid
+
+        # 2026-08-26 is a Wednesday; the window is Wed, Thu, Fri.
+        grid, _ = build_heatmap_grid([{"dow": 3, "hr": 9, "total": 4}], "2026-08-26", "2026-08-28")
+        covered = {row["label"] for row in grid if row["in_range"]}
+        assert covered == {"Wed", "Thu", "Fri"}
+
+    def test_a_week_or_longer_covers_every_weekday(self):
+        from src.routes._charts import build_heatmap_grid
+
+        grid, _ = build_heatmap_grid([{"dow": 3, "hr": 9, "total": 4}], "2026-08-20", "2026-08-28")
+        assert all(row["in_range"] for row in grid)
+
+    def test_the_ramp_is_logarithmic_between_the_observed_extremes(self):
+        """Dividing by the maximum put 134 of 168 real cells below 0.10, and a
+        170-visit cell resolved to a colour no eye separates from a 637 one."""
+        from src.routes._charts import heat_ramp
+
+        assert heat_ramp(0, 170, 6875) == 0
+        assert heat_ramp(170, 170, 6875) == 0
+        assert heat_ramp(6875, 170, 6875) == 1
+        # The median cell of that month lands mid-ramp instead of at 0.07.
+        assert 0.2 < heat_ramp(456, 170, 6875) < 0.35

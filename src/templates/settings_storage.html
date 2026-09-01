@@ -7,7 +7,7 @@
   with nothing behind it.
 #}
 {% extends "subnav_base.html" %}
-{% from '_macros.html' import table_block, empty_state, tip_attrs %}
+{% from '_macros.html' import table_block, empty_state, tip_attrs, th_tip %}
 {% block title %}Storage &amp; Retention — Vidar{% endblock %}
 
 {% block settings_content %}
@@ -20,6 +20,9 @@
 {% for problem in storage_problems %}
 <div class="settings-warning">
   <strong>{{ problem.name }}:</strong> {{ problem.detail }}
+  {%- if problem.command %}
+  <pre class="code-block"><code>{{ problem.command }}</code></pre>
+  {%- endif %}
 </div>
 {% endfor %}
 
@@ -55,12 +58,12 @@
     delete it{% endif %}.
     {% if archives %}
       {{ archives | length }} archive{{ '' if archives | length == 1 else 's' }} on disk,
-      {{ archives_total_bytes | filesizeformat }}, oldest {{ oldest_archive }}.
+      {{ archives_total_bytes | fmtbytes }}, oldest {{ oldest_archive }}.
     {% endif %}
   </p>
   <form method="post" action="/settings/storage/archive-keep" class="storage-window"
         {% if archives_expiring_now %}
-        data-confirm="Delete {{ archives_expiring_now }} archive(s) on the next daily pass? They are already older than this window. The zip files are gone for good."
+        data-confirm="Delete {{ archives_expiring_now }} archive{{ '' if archives_expiring_now == 1 else 's' }} on the next daily pass? They are already older than this window. The zip files are gone for good."
         {% endif %}>
     <label for="archive-keep">Months to keep an archive (0 keeps every archive)</label>
     <input id="archive-keep" name="months" type="number" inputmode="numeric"
@@ -92,8 +95,8 @@
     Download zips the month without removing it. Delete removes it with no archive
     written — use Download first if you want to keep it.
   </p>
-  {% call table_block('Months held', (months | length | fmtnum) ~ ' months') %}
-  <table>
+  {% call table_block('Months held', (months | length | fmtnum) ~ (' month' if months | length == 1 else ' months')) %}
+  <table class="responsive-table">
     <thead>
       <tr>
         {# The same head as Archived months below, column for column. Size and
@@ -101,26 +104,33 @@
            is no zip and so no size and no archive date — but the two tables
            read as one thing when their heads match, and a month moves from
            this table to that one without the row changing shape. #}
-        <th class="c-date">Month</th>
-        <th class="c-num">Visits</th>
-        <th class="c-num">IPs</th>
-        <th class="c-num">Size</th>
-        <th class="c-date">Archived</th>
-        <th class="c-mix">State</th>
+        {{ th_tip('Month', ('The calendar month this row is about.',
+                  'Retention works in whole months, so a month is the unit that moves.'),
+                  w='c-date') }}
+        {{ th_tip('Visits', ('Requests logged in that month.',), w='c-num') }}
+        {{ th_tip('IPs', ('Distinct addresses that made them.',), w='c-num') }}
+        {{ th_tip('Size', ('Size of the zip on disk.',
+                  'Empty while the month is still in the database — there is no zip yet.'),
+                  w='c-num') }}
+        {{ th_tip('Archived', ('When the zip was written.',
+                  'Empty for a month that has not been archived.'), w='c-date') }}
+        {{ th_tip('State', ('Where this month currently lives.',
+                  'In the database, archived to a zip, or re-imported and pinned so the next
+                   pass leaves it alone.'), w='c-mix') }}
         <th class="c-actions"></th>
       </tr>
     </thead>
     <tbody>
       {% for m in months %}
       <tr>
-        <td>{{ m.month }}</td>
-        <td>{{ m.visits | fmtnum }}</td>
-        <td>{{ m.ips | fmtnum }}</td>
+        <td data-label="Month">{{ m.month }}</td>
+        <td data-label="Visits">{{ m.visits | fmtnum }}</td>
+        <td data-label="IPs">{{ m.ips | fmtnum }}</td>
         {# No zip yet, so no size and no archive date. An em dash rather than a
            blank cell: blank reads as "we did not look". #}
-        <td class="text-muted">—</td>
-        <td class="text-muted">—</td>
-        <td><span class="text-muted">in database</span></td>
+        <td data-label="Size" class="text-muted">—</td>
+        <td data-label="Archived" class="text-muted">—</td>
+        <td data-label="State"><span class="text-muted">in database</span></td>
         <td class="storage-actions">
           <a class="btn-refresh" href="/settings/storage/download/{{ m.month }}">Download</a>
           <form method="post" action="/settings/storage/delete-month/{{ m.month }}"
@@ -130,7 +140,7 @@
         </td>
       </tr>
       {% else %}
-      <tr class="empty-state-row"><td colspan="7">{{ empty_state('visit') }}</td></tr>
+      <tr class="empty-state-row"><td colspan="7">{{ empty_state('month', plural='months') }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -138,7 +148,9 @@
 </div>
 
 <div class="panel">
-  <h3>Archives</h3>
+  {#- The table below is already called "Archived months"; this heading named
+      the section for what is in it instead of repeating the noun. -#}
+  <h3>Out of the window</h3>
   <p class="text-muted">
     Re-import loads a month back into the database for {{ restore_days }} days, then
     the daily pass moves it out again. Delete removes the zip; any rows currently
@@ -164,27 +176,35 @@
   </div>
   {% endif %}
   {% call table_block('Archived months', (archives | length | fmtnum) ~ ' on disk') %}
-  <table>
+  <table class="responsive-table">
     <thead>
       <tr>
-        <th class="c-date">Month</th>
-        <th class="c-num">Visits</th>
-        <th class="c-num">IPs</th>
-        <th class="c-num">Size</th>
-        <th class="c-date">Archived</th>
-        <th class="c-mix">State</th>
+        {{ th_tip('Month', ('The calendar month this row is about.',
+                  'Retention works in whole months, so a month is the unit that moves.'),
+                  w='c-date') }}
+        {{ th_tip('Visits', ('Requests logged in that month.',), w='c-num') }}
+        {{ th_tip('IPs', ('Distinct addresses that made them.',), w='c-num') }}
+        {#- The head matches the Months table column for column on purpose, but
+            not word for word: every row here *is* a zip, so the two tooltips
+            about a month that has none were describing the other table. -#}
+        {{ th_tip('Size', ('Size of the zip on disk.',), w='c-num') }}
+        {{ th_tip('Archived', ('When the zip was written.',), w='c-date') }}
+        {{ th_tip('State', ('Where this month currently lives.',
+                  'Archived to a zip, re-imported and pinned so the next pass leaves it
+                   alone, or unreadable — a zip the service can no longer open.'),
+                  w='c-mix') }}
         <th class="c-actions"></th>
       </tr>
     </thead>
     <tbody>
       {% for a in archives %}
       <tr>
-        <td>{{ a.month }}</td>
-        <td>{{ a.visits | fmtnum }}</td>
-        <td>{{ a.ips | fmtnum }}</td>
-        <td>{{ a.bytes | fmtbytes }}</td>
-        <td>{{ a.created_at | fmtdate }}</td>
-        <td>
+        <td data-label="Month">{{ a.month }}</td>
+        <td data-label="Visits">{{ a.visits | fmtnum }}</td>
+        <td data-label="IPs">{{ a.ips | fmtnum }}</td>
+        <td data-label="Size">{{ a.bytes | fmtbytes }}</td>
+        <td data-label="Archived">{{ a.created_at | fmtdate }}</td>
+        <td data-label="State">
           {%- if not a.readable %}<span class="badge badge-red">unreadable</span>
           {%- elif a.restored_until %}<span class="badge badge-teal">in database until {{ a.restored_until | fmtdate }}</span>
           {%- else %}<span class="text-muted">archived</span>{% endif %}
@@ -217,22 +237,24 @@
      have not. Same page, because both answer "what exists besides the live
      file", and a backup nobody can see is how the last scheduled job in this
      project failed for months. #}
-  {% call table_block('Snapshots', (snapshots | length | fmtnum) ~ ' of ' ~ backup_keep) %}
-  <table>
+  {% call table_block('Snapshots', (snapshots | length | fmtnum) ~ ' of ' ~ backup_keep ~ ' kept') %}
+  <table class="responsive-table">
     <thead>
       <tr>
-        <th class="c-date">Snapshot</th>
-        <th class="c-num">Size</th>
-        <th class="c-date">Taken</th>
+        {{ th_tip('Snapshot', ('The file on disk.',
+                  'Written with VACUUM INTO, so it is a consistent copy even while the
+                   database is being written to.'), w='c-date') }}
+        {{ th_tip('Size', ('Size of the snapshot.',), w='c-num') }}
+        {{ th_tip('Taken', ('When it was written.',), w='c-date') }}
         <th class="c-actions"></th>
       </tr>
     </thead>
     <tbody>
       {% for s in snapshots %}
       <tr>
-        <td>{{ s.name }}</td>
-        <td>{{ s.bytes | fmtbytes }}</td>
-        <td>{{ s.created_at | fmtdate }}</td>
+        <td data-label="Snapshot">{{ s.name }}</td>
+        <td data-label="Size">{{ s.bytes | fmtbytes }}</td>
+        <td data-label="Taken">{{ s.created_at | fmtdate }}</td>
         <td class="storage-actions">
           <a class="btn-refresh" href="/settings/storage/snapshot/{{ s.name }}">Download</a>
         </td>

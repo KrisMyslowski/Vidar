@@ -11,6 +11,7 @@ an earlier draft produced against a live log.
 
 from __future__ import annotations
 
+import re
 from unittest.mock import patch
 
 import pytest
@@ -23,13 +24,23 @@ HUMAN = "humans/browser-direct"
 PROBER = "bots/vulnerability-probers"
 
 
-def _hit(conn, ip, path, status=200, cls=PROBER, bytes_sent=100):
+def _paths(html):
+    """The finding paths, in the order the Findings table renders them.
+
+    Keyed on data-col, which only the sortable Findings table carries — the
+    Served block below it also labels a Path column, and matching the label
+    alone read both tables as one list.
+    """
+    return re.findall(r'data-col="path"[^>]*>\s*<code>([^<]+)</code>', html)
+
+
+def _hit(conn, ip, path, status=200, cls=PROBER, bytes_sent=100, ts=None):
     upsert_ip_intel(conn, {"ip": ip})
     set_visitor_class(conn, ip, cls)
     insert_visit(
         conn,
         ip=ip,
-        timestamp="2026-08-20T10:00:00+00:00",
+        timestamp=ts or "2026-08-20T10:00:00+00:00",
         method="GET",
         path=path,
         status=status,
@@ -122,6 +133,107 @@ def test_an_encoded_convention_path_is_still_a_convention_path(tmp_db):
         _hit(conn, "203.0.113.10", "/robots%2etxt")
     with get_conn(tmp_db) as conn:
         assert get_exposures(conn) == []
+
+
+def test_the_default_sort_reproduces_the_order_the_page_had(tmp_db, client):
+    """A commit that adds sorting must not change what the page shows first.
+
+    _fold_encodings has always returned `(-ips, -hits)`; the default sort key
+    has to be that same order, or the page silently reorders on the release that
+    makes it sortable.
+    """
+    with get_conn(tmp_db) as conn:
+        for ip in range(1, 4):
+            _hit(conn, f"203.0.113.{ip}", "/.git/config")
+        for ip in range(4, 6):
+            _hit(conn, f"203.0.113.{ip}", "/.env")
+        _hit(conn, "203.0.113.9", "/dump.sql")
+
+    default = _paths(client.get("/exposure?range=all").text)
+    explicit = _paths(client.get("/exposure?range=all&sort=addresses&order=DESC").text)
+    assert default == ["/.git/config", "/.env", "/dump.sql"]
+    assert explicit == default
+
+
+def test_every_column_sorts_on_its_value_not_its_rendering(tmp_db, client):
+    """The rendered text cannot carry the order: sort.js parses every ISO date
+    to the number 2026 and reads 980 B as larger than 6 KB. The route sorts the
+    underlying values before anything is formatted."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/b.sql", bytes_sent=980, ts="2026-08-20T10:00:00+00:00")
+        _hit(conn, "203.0.113.2", "/a.bak", bytes_sent=6144, ts="2026-08-10T10:00:00+00:00")
+        _hit(conn, "203.0.113.3", "/a.bak", ts="2026-08-11T10:00:00+00:00")
+
+    by_size = _paths(client.get("/exposure?range=all&sort=size&order=DESC").text)
+    by_first = _paths(client.get("/exposure?range=all&sort=first&order=ASC").text)
+    by_path = _paths(client.get("/exposure?range=all&sort=path&order=ASC").text)
+    # 6 144 B beats 980 B, which the rendered "6.0 KB" vs "980.0 B" would not.
+    assert by_size == ["/a.bak", "/b.sql"]
+    assert by_first == ["/a.bak", "/b.sql"]
+    assert by_path == ["/a.bak", "/b.sql"]
+
+
+def test_the_custom_range_form_keeps_the_sort(tmp_db, client):
+    """It is a GET to the bare path: whatever it does not carry is gone.
+
+    The macro states the rule for the pages that already had state — the custom
+    range must not silently drop the selection — and these two joined that club
+    the moment their columns became sortable.
+    """
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.env")
+    text = client.get("/exposure?range=all&sort=size&order=ASC&vsort=requests&vorder=DESC").text
+    form = re.search(r"<form[^>]*range-custom-form.*?</form>", text, re.S)
+    assert form, "no custom range form"
+    hidden = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', form.group(0)))
+    # Both blocks: Served sorts on its own parameters and is just as easy to
+    # drop here as the findings above it.
+    assert hidden == {
+        "sort": "size",
+        "order": "ASC",
+        "vsort": "requests",
+        "vorder": "DESC",
+    }, hidden
+
+
+def test_an_unknown_sort_key_falls_back_rather_than_erroring(tmp_db, client):
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.env")
+    assert client.get("/exposure?range=all&sort=nonsense&order=sideways").status_code == 200
+
+
+def test_the_benign_test_is_not_scoped_to_the_selected_range(tmp_db):
+    """A path does not stop being part of the site on a quiet day.
+
+    The counts are windowed — that is what the range tabs are for — but the rule
+    the page states is "nothing benign *ever* asked for it". Windowed too, a
+    narrow range reported the site's own homepage as an exposure, because the
+    two humans who account for it visited last week.
+    """
+    with get_conn(tmp_db) as conn:
+        for i, ip in enumerate(("203.0.113.30", "203.0.113.31")):
+            _hit(conn, ip, "/", cls=HUMAN, ts=f"2026-08-0{i + 1}T10:00:00+00:00")
+        _hit(conn, "203.0.113.32", "/", ts="2026-08-20T10:00:00+00:00")
+    with get_conn(tmp_db) as conn:
+        assert get_exposures(conn, "2026-08-19", "2026-08-21") == []
+
+
+def test_a_path_the_sites_own_javascript_fetches_is_not_a_finding(tmp_db):
+    """No crawler follows a link that is not in the HTML, so a fragment loaded
+    by fetch() has exactly the shape of a finding and is a content page."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.20", "/fragments/about.html")
+    # A neutral prefix, not the one this deployment happens to use: the mirror
+    # gate rejects any .env value that reaches a published file, and it caught
+    # exactly this fixture.
+    with patch("src.config.settings.js_only_path_prefixes", ["/fragments/"]):
+        with get_conn(tmp_db) as conn:
+            assert get_exposures(conn) == []
+    # And with the prefixes unset — the default — nothing is lost that was not
+    # there to lose: the same path is reported exactly as before.
+    with patch("src.config.settings.js_only_path_prefixes", []):
+        with get_conn(tmp_db) as conn:
+            assert [f["path"] for f in get_exposures(conn)] == ["/fragments/about.html"]
 
 
 def test_a_normalisation_probe_returns_the_homepage_not_a_finding(tmp_db):
@@ -226,20 +338,70 @@ def client(tmp_db):
         yield TestClient(app)
 
 
+def test_served_shows_the_whole_surface_the_findings_are_a_subset_of(client, tmp_db):
+    """The findings table says "1 path". It does not say one of how many.
+
+    Same result set, split on the benign threshold, so the two blocks cannot
+    disagree about a number they share.
+    """
+    with get_conn(tmp_db) as conn:
+        # A page two crawlers fetch, and a file only probers ever got.
+        for ip, cls in (("203.0.113.1", HUMAN), ("203.0.113.2", HUMAN)):
+            _hit(conn, ip, "/about.html", cls=cls)
+        _hit(conn, "203.0.113.3", "/.DS_Store")
+
+    text = client.get("/exposure?range=all").text
+    served = re.findall(r'data-label="Path" class="col-path"><code>([^<]+)</code>', text)
+    assert served == ["/about.html", "/.DS_Store"]
+    # The finding is one of them, and the table above lists only it.
+    assert _paths(text) == ["/.DS_Store"]
+    assert ">Finding</span>" in text and ">Site</span>" in text
+
+
+def test_served_keeps_the_paths_the_findings_logic_sets_aside(client, tmp_db):
+    """robots.txt is not a finding — nobody but a convention fetches it — but it
+    is something this server hands out, and a list of what it hands out that
+    omits it answers a stranger question than either."""
+    with get_conn(tmp_db) as conn:
+        for n in range(4):
+            _hit(conn, f"203.0.113.{n + 1}", "/robots.txt", cls=HUMAN)
+        _hit(conn, "203.0.113.9", "/.DS_Store")
+
+    text = client.get("/exposure?range=all").text
+    served = re.findall(r'data-label="Path" class="col-path"><code>([^<]+)</code>', text)
+    assert "/robots.txt" in served
+    # And it is not counted as a finding, however few benign addresses it has.
+    assert _paths(text) == ["/.DS_Store"]
+
+
+def _panel(client, path, **params):
+    """The slide-over for one finding, where its explanation now lives."""
+    from urllib.parse import urlencode
+
+    query = urlencode({"path": path, **params})
+    return client.get(f"/exposure/finding?{query}").text
+
+
 def test_a_finding_carries_its_explanation(client, tmp_db):
-    """All four answers on the page, not a link to somewhere that has them."""
+    """All four answers, one click from the row rather than on the page.
+
+    They used to sit under the table, one panel per family. Per-path advice
+    belongs beside the path it is about, and the same registry answers here.
+    """
     with get_conn(tmp_db) as conn:
         _hit(conn, "203.0.113.1", "/.DS_Store", bytes_sent=6148)
         _hit(conn, "203.0.113.2", "/.DS_Store", bytes_sent=6148)
-    text = client.get("/exposure").text
-    assert "Operating-system metadata" in text
+    text = _panel(client, "/.DS_Store")
+    assert "Operating-system metadata" not in text  # the title is the row's job
     for question in (
         "What it is",
         "Why it was asked for",
         "Check it yourself",
         "How to stop serving it",
     ):
-        assert question in text
+        assert question in text, question
+    # And the page itself no longer repeats any of it.
+    assert "What it is" not in client.get("/exposure").text
 
 
 def test_the_check_names_the_site_it_is_addressed_to(client, tmp_db):
@@ -250,7 +412,7 @@ def test_the_check_names_the_site_it_is_addressed_to(client, tmp_db):
         _hit(conn, "203.0.113.1", "/.DS_Store")
         _hit(conn, "203.0.113.2", "/.DS_Store")
     with patch.object(settings, "site_base_url", "https://example.com"):
-        text = client.get("/exposure").text
+        text = _panel(client, "/.DS_Store")
     assert "curl -sI https://example.com/.DS_Store" in text
     assert "{host}" not in text and "{path}" not in text
 
@@ -259,7 +421,7 @@ def test_a_blank_site_url_leaves_an_obvious_placeholder(client, tmp_db):
     """SITE_BASE_URL ships unset, and a wrong hostname is worse than none.
 
     The three site settings are blank by design so a verbatim .env.example
-    cannot pass the deploy gate — which means this page has to render before
+    cannot pass the deploy gate — which means this panel has to render before
     anybody fills them in, and the command it prints must not look real.
     """
     from src.config import settings
@@ -268,12 +430,12 @@ def test_a_blank_site_url_leaves_an_obvious_placeholder(client, tmp_db):
         _hit(conn, "203.0.113.1", "/.DS_Store")
         _hit(conn, "203.0.113.2", "/.DS_Store")
     with patch.object(settings, "site_base_url", ""):
-        text = client.get("/exposure").text
+        text = _panel(client, "/.DS_Store")
     assert "your-site.example" in text
 
 
 def test_a_finding_with_no_family_renders_no_explanation(client, tmp_db):
-    """None is a normal answer, and the page says nothing rather than filler.
+    """None is a normal answer, and the panel says nothing rather than filler.
 
     Inventing a family broad enough to cover everything would produce a
     paragraph that applies to any file and helps with none of them.
@@ -281,22 +443,188 @@ def test_a_finding_with_no_family_renders_no_explanation(client, tmp_db):
     with get_conn(tmp_db) as conn:
         _hit(conn, "203.0.113.1", "/leftover-draft.html")
         _hit(conn, "203.0.113.2", "/leftover-draft.html")
-    text = client.get("/exposure").text
+    text = _panel(client, "/leftover-draft.html")
     assert "/leftover-draft.html" in text
     assert "What it is" not in text
     # But it does get the one piece of advice that needs no knowledge of it.
-    assert "curl -sI https://" in text and "/leftover-draft.html" in text
+    assert "curl -sI https://" in text
 
 
-def test_one_family_covering_two_paths_is_explained_once(client, tmp_db):
-    """Two rows, one thing to fix — so one explanation, naming both paths."""
+def test_a_path_that_is_not_a_finding_says_so_rather_than_erroring(client, tmp_db):
+    """The panel renders whatever comes back — a status page inside a slide-over
+    reads as a broken panel, not as an answer."""
     with get_conn(tmp_db) as conn:
-        for path in ("/.git/config", "/.git/HEAD"):
-            _hit(conn, "203.0.113.1", path)
-            _hit(conn, "203.0.113.2", path)
-    text = client.get("/exposure").text
-    # Both rows are marked, so the reader can see which explanation is theirs;
-    # the explanation itself is written once.
-    assert text.count("Version control directory") == 3  # two row markers + the heading
-    assert text.count("What it is") == 1
-    assert "/.git/config" in text and "/.git/HEAD" in text
+        _hit(conn, "203.0.113.1", "/.DS_Store")
+    resp = client.get("/exposure/finding?path=/not-a-finding")
+    assert resp.status_code == 200
+    assert "not a finding in the selected range" in resp.text
+
+
+def test_the_panel_answers_for_every_spelling_of_the_path(client, tmp_db):
+    """A finding is the fold of its percent-encoded spellings. A panel keyed on
+    the canonical path alone would describe a subset of the row that opened it."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.DS_Store")
+        _hit(conn, "203.0.113.2", "/%2eDS_Store")
+        _hit(conn, "203.0.113.3", "/%2eDS_Store")
+    text = _panel(client, "/.DS_Store")
+    assert "3 from 3" in text, text[:0] or "the panel counted only one spelling"
+    assert "/%2eDS_Store" in text
+
+
+def test_the_panel_says_whether_it_is_still_served(client, tmp_db):
+    """The one line that decides whether there is anything to do today, and the
+    only one asked without the window: a file is on disk or it is not."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.DS_Store")
+        _hit(conn, "203.0.113.2", "/.DS_Store")
+    assert "still served" in _panel(client, "/.DS_Store")
+
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.4", "/.DS_Store", status=404, ts="2026-08-25T10:00:00+00:00")
+    assert "no longer served" in _panel(client, "/.DS_Store")
+
+
+# ── The fold and the counts it carries ───────────────────────────────────────
+
+
+def test_one_address_under_two_spellings_is_one_address(tmp_db):
+    """The fold adds a distinct count to a distinct count, which is not one.
+
+    `/.DS_Store` and `/%2eDS_Store` are the same file reached two ways. An
+    address that tried both is one address that got it, and the column says
+    "distinct addresses". Summing the per-spelling counts reports two.
+    """
+    with get_conn(tmp_db) as conn:
+        for path in ("/.DS_Store", "/%2eDS_Store"):
+            _hit(conn, "198.51.100.7", path)
+        _hit(conn, "198.51.100.8", "/.DS_Store")
+    with get_conn(tmp_db) as conn:
+        (finding,) = get_exposures(conn)
+
+    assert finding["path"] == "/.DS_Store"
+    assert finding["spellings"] == ["/%2eDS_Store", "/.DS_Store"]
+    assert finding["ips"] == 2, "two addresses, one of which wrote the path two ways"
+    assert finding["hits"] == 3, "requests do add up — three were made"
+
+
+def test_the_site_threshold_is_not_reached_by_counting_one_visitor_twice(tmp_db):
+    """The sum decided Site from Finding, not only what the column displayed.
+
+    Two benign addresses make a path part of the site. One benign address that
+    wrote the path two ways is one benign address, and the path is still a
+    finding.
+    """
+    with get_conn(tmp_db) as conn:
+        for path in ("/.DS_Store", "/%2eDS_Store"):
+            _hit(conn, "198.51.100.7", path, cls=HUMAN)
+        _hit(conn, "198.51.100.9", "/.DS_Store")
+    with get_conn(tmp_db) as conn:
+        rows = get_exposures(conn, findings_only=False)
+
+    (row,) = [r for r in rows if r["path"] == "/.DS_Store"]
+    assert row["benign_ips"] == 1, "one human, however it spelled the path"
+    assert row["is_finding"], "one benign address is below the threshold of two"
+
+
+def _served(html):
+    """The Served block's paths, in render order.
+
+    Keyed on the Kind cell, which only Served has — the findings table above it
+    also labels a Path column, and matching the label alone reads both as one.
+    """
+    block = html.split("Served")[-1]
+    return re.findall(
+        r'<td data-label="Path" class="col-path"><code>([^<]+)</code>.*?data-label="Kind"',
+        block,
+        re.S,
+    )
+
+
+def test_served_sorts_on_its_own_columns(tmp_db, client):
+    """It is the block that answers "one of how many", and it was the one table
+    on this page a reader could not re-order."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/b.sql", bytes_sent=980)
+        for n in (1, 2, 3):
+            _hit(conn, f"203.0.113.{n}", "/a.bak", bytes_sent=6144)
+    base = "/exposure?range=all"
+    assert _served(client.get(f"{base}&vsort=path&vorder=ASC").text) == ["/a.bak", "/b.sql"]
+    assert _served(client.get(f"{base}&vsort=path&vorder=DESC").text) == ["/b.sql", "/a.bak"]
+    # 6 144 B beats 980 B, which the rendered "6.0 KB" vs "980.0 B" would not.
+    assert _served(client.get(f"{base}&vsort=size&vorder=DESC").text) == ["/a.bak", "/b.sql"]
+    assert _served(client.get(f"{base}&vsort=requests&vorder=DESC").text) == ["/a.bak", "/b.sql"]
+
+
+def test_the_two_blocks_sort_independently(tmp_db, client):
+    """They share a URL. Ordering Served must not reorder the findings above it,
+    which is why it carries its own parameters rather than the same `sort`."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/b.sql", bytes_sent=980)
+        _hit(conn, "203.0.113.2", "/a.bak", bytes_sent=6144)
+    html = client.get("/exposure?range=all&sort=path&order=DESC&vsort=path&vorder=ASC").text
+    assert _paths(html) == ["/b.sql", "/a.bak"], "findings descending"
+    assert _served(html) == ["/a.bak", "/b.sql"], "served ascending, at the same time"
+
+
+def test_served_opens_in_the_order_it_always_did(tmp_db, client):
+    """Making a table sortable must not change what it shows first: Site before
+    Finding, then the most benign, then the most requested."""
+    with get_conn(tmp_db) as conn:
+        for n in (1, 2):
+            _hit(conn, f"203.0.113.{n}", "/index.html", cls=HUMAN)
+        _hit(conn, "203.0.113.9", "/.env")
+    html = client.get("/exposure?range=all").text
+    assert _served(html) == ["/index.html", "/.env"], "the site page leads, the finding follows"
+
+
+def test_every_column_header_carries_the_whole_selection(tmp_db, client):
+    """A header link is a fresh URL: whatever it does not carry is gone.
+
+    Two tables share this page, so each header has to carry the window *and*
+    the other block's order. Missed once already — the two tails were set inside
+    the Findings `{% call %}`, which is its own scope, so Served rendered them
+    empty and every header there dropped the range.
+    """
+    from html import unescape
+    from urllib.parse import parse_qs, urlparse
+
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.env")
+    html = client.get("/exposure?range=all&sort=size&order=ASC&vsort=requests&vorder=DESC").text
+    hrefs = [unescape(h) for h in re.findall(r"<th[^>]*><a[^>]*href=\"([^\"]+)\"", html)]
+    findings = [h for h in hrefs if "vsort=" not in h.split("&")[0]]
+    assert len(hrefs) == 14, "seven columns in each block"
+
+    for href in hrefs:
+        q = parse_qs(urlparse(href).query)
+        assert q.get("range") == ["all"], f"lost the window: {href}"
+        # The block that owns the link sets its own key; the other one rides
+        # along unchanged.
+        if href.startswith("?vsort="):
+            assert q["sort"] == ["size"] and q["order"] == ["ASC"], href
+        else:
+            assert q["vsort"] == ["requests"] and q["vorder"] == ["DESC"], href
+    assert findings, "and the findings block has headers at all"
+
+
+def test_the_recounted_addresses_obey_the_window(tmp_db):
+    """The recount binds two sets of parameters positionally, which is the shape
+    _date_conditions warns about: get_exposures once bound its window onto the
+    class list and every range came back empty while the tests passed.
+
+    The benign count is deliberately not windowed — "ever" means ever — so this
+    pins both halves at once.
+    """
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.DS_Store", ts="2026-08-01T00:00:00+00:00")
+        _hit(conn, "203.0.113.2", "/%2eDS_Store", ts="2026-08-01T00:00:00+00:00")
+        # Inside the window, and the only benign fetch anywhere.
+        _hit(conn, "203.0.113.3", "/%2eDS_Store", cls=HUMAN, ts="2026-08-20T00:00:00+00:00")
+    with get_conn(tmp_db) as conn:
+        windowed = {r["path"]: r for r in get_exposures(conn, "2026-08-15", "2026-08-25", False)}
+        every = {r["path"]: r for r in get_exposures(conn, findings_only=False)}
+
+    assert every["/.DS_Store"]["ips"] == 3, "three addresses over all time"
+    assert windowed["/.DS_Store"]["ips"] == 1, "one of them inside the window"
+    assert windowed["/.DS_Store"]["benign_ips"] == 1, "the benign test ignores the window"

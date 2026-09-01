@@ -1,6 +1,6 @@
 {#
   shodan.html — three facets over the host set below them, each narrowing the
-  the exposure data, and the host table they describe. Facets and table share one
+  host table they describe. Facets and table share one
   filter state, so a facet count always matches the hosts below it.
 #}
 {% extends "base.html" %}
@@ -12,7 +12,10 @@
 {#- The range strip belongs here like everywhere else: this was the one page
     where the window did not apply, so it showed every IP ever enriched next to
     a header that named a time range on the other four pages. -#}
-{% call page_header('Shodan', (total_all | fmtnum) ~ ' of ' ~ (enriched_ips | fmtnum) ~ ' IPs enriched via Shodan InternetDB') %}
+{#- "0 of 1,089 IPs enriched" parsed as none of them being enriched, and
+    contradicted /analysis, which counts all 1,089 as enriched. What the pair
+    says is how many of the enriched ones Shodan has a record for. -#}
+{% call page_header('Shodan', (total_all | fmtnum) ~ ' of ' ~ (enriched_ips | fmtnum) ~ ' enriched IPs have a Shodan InternetDB record') %}
   {{ range_tabs(active_range, '/shodan', extra_params=range_params,
      date_from=date_from, date_to=date_to) }}
 {% endcall %}
@@ -29,7 +32,12 @@
 {#- Ports and CVEs are calm mono text, not badge walls: the facets above are the
     drill surface, so a row only has to be readable at a glance. Class is the one
     badge per row; Tags/Hostnames/Last fetched sit behind Columns ▾. -#}
-{% call table_block('Hosts', (total | fmtnum) ~ ' matching', table_key='exposure',
+{#- "matching" only when something is being matched: with no facet active the
+    count is simply the host set, and the word implied a filter that was not
+    there. The table key is this page's own — it read `exposure` from before
+    /exposure was a page, which would have collided with that one's columns. -#}
+{% call table_block('Hosts',
+     (total | fmtnum) ~ (' matching' if pills else ' hosts'), table_key='shodan',
      columns=[{'key': 'tags', 'label': 'Tags'}, {'key': 'hostnames', 'label': 'Hostnames'},
               {'key': 'fetched', 'label': 'Last fetched'}],
      page=page, total_pages=total_pages, pager_params=pager_params) %}
@@ -45,7 +53,7 @@
       {{ th_tip('CVEs', ('Known vulnerabilities in this host\'s exposed services.',
           'CVE identifiers from Shodan. Use the CVEs facet above to filter by one.'), w='c-text') }}
       {{ th_tip('Visits', ('Requests this host sent to the site.',
-          'Rows in the visits table for this IP, inside the selected range.'), w='c-num') }}
+          'One per logged request from this IP, inside the selected range.'), w='c-num') }}
       {{ th_tip('Tags', ('What Shodan says this host is.',
           'Its own tags, e.g. scanner, vpn, cloud — a claim about the host, not about the visit.'), col_key='tags', w='c-text') }}
       {{ th_tip('Hostnames', ('Hostnames Shodan resolved for this IP.',
@@ -65,7 +73,7 @@
       <td data-label="Visits">{{ h.visit_count | fmtnum }}</td>
       <td data-label="Tags" data-col="tags"><span class="cell-overflow">{{ shodan_links(h.tags, 'tag', extra=range_suffix) }}</span></td>
       <td data-label="Hostnames" data-col="hostnames">{{ overflow_cell(h.hostnames | csv_items) }}</td>
-      <td data-label="Last Fetched" class="nowrap" data-col="fetched">{{ h.fetched_at | fmtdate }}</td>
+      <td data-label="Last fetched" class="nowrap" data-col="fetched">{{ h.fetched_at | fmtdate }}</td>
     </tr>
     {% else %}
     {{ empty_row(9, 'host', filter_chips, clear_href if filter_chips else '', 'Clear filters') }}

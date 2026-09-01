@@ -48,6 +48,21 @@ def _like_escape(term: str) -> str:
 #
 # Read by the session query too (queries/sessions.py). A second copy of this is
 # how "internal_nav means the same thing everywhere" stops being true.
+# Requests that actually reached the site. Half of all traffic here is the
+# port-80 -> 443 redirect, which would otherwise halve every error ratio. Both
+# permanent redirect codes count: 308 is what an nginx that wants the method
+# preserved answers, and excluding one but not the other made the denominator
+# depend on which the operator chose.
+#
+# Read by the session query too (queries/sessions.py), where leaving it out is
+# what let a scanner hide: 117 036 requests from one address were port-80
+# redirects and nothing else, so every ratio taken over raw request counts
+# described a session the server had never actually answered.
+_CONTENT_REQUEST_CASE = (
+    "CASE WHEN NOT (v.status IN (301, 308) AND v.server_port = 80) THEN 1 ELSE 0 END"
+)
+
+
 _INTERNAL_NAV_CASE = """CASE
               WHEN v.sec_fetch_site = 'same-origin' THEN 1
               WHEN :host <> ''
@@ -92,13 +107,7 @@ def _classify_sql(js_prefixes: tuple[str, ...]) -> str:
         -- are named here instead. See _CRAWLER_ORIGINS.
         LOWER(COALESCE(i.org, '') || ' ' || COALESCE(i.asn, '')) AS network_owner,
         COUNT(v.id) AS total,
-        -- Requests that actually reached the site. Half of all traffic here is
-        -- the port-80 -> 443 redirect, which would otherwise halve every error
-        -- ratio. Both permanent redirect codes count: 308 is what an nginx that
-        -- wants the method preserved answers, and excluding one but not the
-        -- other made the denominator depend on which the operator chose.
-        SUM(CASE WHEN NOT (v.status IN (301, 308) AND v.server_port = 80)
-                 THEN 1 ELSE 0 END) AS content_requests,
+        SUM({_CONTENT_REQUEST_CASE}) AS content_requests,
         SUM(CASE WHEN {_NON_HTTP_METHODS} AND ({_PAYLOAD_ABUSE_MATCH})
                  THEN 1 ELSE 0 END) AS payload_abuse,
         SUM(CASE WHEN v.path IN ('[binary payload]', '[handshake on HTTP port]',

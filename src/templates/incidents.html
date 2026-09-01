@@ -14,64 +14,100 @@
 #}
 {% extends "base.html" %}
 {% from '_macros.html' import page_header, range_tabs, table_block, th_tip,
-    stat_card, empty_row, overflow_cell, tip_attrs %}
+    stat_card, empty_row, overflow_cell, tip_attrs, sortable_th %}
 {% block title %}Incidents — Vidar{% endblock %}
 
 {% block content %}
 {% call page_header('Incidents',
      (incidents | length | fmtnum) ~ (' incident' if incidents | length == 1 else ' incidents')) %}
   {{ range_tabs(active_range, '/incidents', extra_params=range_params,
-     date_from=date_from, date_to=date_to) }}
+     date_from=date_from, date_to=date_to,
+     hidden_params=range_fields) }}
 {% endcall %}
 
 <div class="cards">
   {{ stat_card('Incidents', incidents | length | fmtnum,
      (min_addresses ~ ' or more addresses asking for the same first ' ~ signature_paths
-      ~ ' missing paths, in the same order, within ' ~ incident_gap_minutes ~ ' minutes.',
+      ~ ' missing paths, in the same order, within ' ~ incident_window ~ ' of each other.',
       'A scanner is a program, and a program starts the same way every run.')) }}
   {{ stat_card('Addresses', totals.addresses | fmtnum,
-     ('Distinct addresses across every incident in this range.',)) }}
-  {{ stat_card('Networks', totals.asns | fmtnum,
+     ('Distinct addresses across every incident in the selected range.',
+      'Counted once each, so an address in two incidents is one address here.')) }}
+  {#- An em dash, not a zero, when nothing has an ASN yet: 25 addresses cannot
+      come from 0 networks, and rendering the absence as a measurement put that
+      contradiction on the page beside itself. The drawer's Network column has
+      always shown the same fact honestly. -#}
+  {{ stat_card('Networks', (totals.asns | fmtnum) if totals.asns else '—',
      ('Distinct operators they came from.',
-      'Spread across networks is what separates a coordinated run from one misconfigured host.')) }}
+      'Spread across networks is what separates a coordinated run from one misconfigured
+       host. Blank where no address here has an ASN yet — enrichment has not supplied one.')
+     ) }}
   {{ stat_card('Probes', totals.probe_404 | fmtnum,
      ('Requests for paths that do not exist, across every incident.',
       'Convention files are excluded, the same as everywhere else.')) }}
   {{ stat_card('Typical hour', typical_hour.probing_addresses | round(1),
-     ('Addresses that probe in an ordinary hour in this range.',
+     ('Addresses that probe in an ordinary hour in the selected range.',
       'The median hour, not the mean — a mean is raised by whatever it is meant to detect.'),
      size_class='card-value-md') }}
 </div>
 
+{#- Score is no longer hidden by default. It is what the list is ordered by, and
+    a default sort on a column nobody can see is a list ordered by something the
+    reader can neither name nor restore. It costs a column's width on a table
+    that already scrolls, which .data-table does on purpose. -#}
 {% call table_block('Incidents',
-     (incidents | length | fmtnum) ~ (' run' if incidents | length == 1 else ' runs'),
+     (incidents | length | fmtnum) ~ (' run' if incidents | length == 1 else ' runs')
+     ~ ' · click a row for the sessions behind it',
      table_key='incidents',
-     columns=[{'key': 'asns', 'label': 'Nets'},
-              {'key': 'listed', 'label': 'Listed', 'off': true},
-              {'key': 'normal', 'label': 'vs normal'},
-              {'key': 'score', 'label': 'Score', 'off': true},
+     columns=[{'key': 'asns', 'label': 'Networks'},
+              {'key': 'listed', 'label': 'DNSBL', 'off': true},
+              {'key': 'normal', 'label': 'Against normal'},
+              {'key': 'score', 'label': 'Score'},
               {'key': 'members', 'label': 'From'}]) %}
-<table class="responsive-table">
+{#- server-sort: sort.js reads rendered text, where every ISO date parses to the
+    number 2026 and `7 d` outranks `90 min`. The order comes from the route,
+    over the decorated rows, before anything is rendered. -#}
+<table class="responsive-table sortable server-sort">
   <thead>
     <tr>
-      {{ th_tip('Started', ('When the first session of the run began.',), col_key='started', w='c-date') }}
-      {{ th_tip('For', ('How long the run lasted, first session to last.',
-                        'The log resolves to the second.'), col_key='duration', w='c-num') }}
-      {{ th_tip('Hosts', ('Distinct addresses that took part.',
+      {{ sortable_th('started', 'Started', ('When the first session of the run began.',
+                            'The first session, not the first request of the day.'),
+                sort, order, suffix_params=sort_params, col_key='started', w='c-date') }}
+      {{ sortable_th('duration', 'For', ('How long the run lasted, first session to last.',
+                        'Sorted on seconds, not on the words it is written in.'),
+                sort, order, suffix_params=sort_params, col_key='duration', w='c-num') }}
+      {{ sortable_th('addresses', 'Addresses', ('Distinct addresses that took part.',
                           'Three is the minimum: two running one tool an hour apart is a tool
-                           being popular, not a coordinated event.'), col_key='addresses', w='c-num') }}
-      {{ th_tip('Nets', ('Distinct operators they came from.',), col_key='asns', w='c-num') }}
-      {{ th_tip('Probes', ('Requests for paths that do not exist.',), col_key='probes', w='c-num') }}
-      {{ th_tip('Listed', ('How many of the addresses are on a blocklist.',
-                           'An outside opinion agreeing with ours.'), col_key='listed', w='c-num') }}
-      {{ th_tip('vs normal', ('Against the addresses that usually probe in an hour here.',
-                              'Most runs last minutes rather than a full hour, so the multiple
-                               understates them. Blank where the typical hour sees nobody
-                               probing — there is nothing to be a multiple of.'),
-                col_key='normal', w='c-num') }}
-      {{ th_tip('Score', ('What this list is ordered by, and nothing else.',
+                           being popular, not a coordinated event.'),
+                sort, order, suffix_params=sort_params, col_key='addresses', w='c-num-wide') }}
+      {{ sortable_th('asns', 'Networks', ('Distinct operators they came from.',
+                             'From ip-api. Blank where no address here has an ASN yet —
+                              that is missing enrichment, not a measured zero.'),
+                sort, order, suffix_params=sort_params, col_key='asns', w='c-num-wide') }}
+      {{ sortable_th('probes', 'Probes', ('Requests for paths that do not exist.',
+                           'Convention files — robots.txt, /.well-known/, favicons — are
+                            excluded, as everywhere else.'),
+                sort, order, suffix_params=sort_params, col_key='probes', w='c-num') }}
+      {#- Named for the signal, not for what it does to the address: the same
+          thing is DNSBL in the matrix and on the signal filter, and "Listed"
+          here was a fourth word for it. -#}
+      {{ sortable_th('listed', 'DNSBL', ('How many of the addresses are on a DNS blocklist.',
+                          'An outside opinion agreeing with ours.'),
+                sort, order, suffix_params=sort_params, col_key='listed', w='c-num') }}
+      {{ sortable_th('normal', 'Against normal', ('Against the addresses that usually probe in an hour here.',
+                                   'Most runs last minutes, not an hour, so it understates.
+                                    Runs with no usable normal sort last, as the dash reads.'),
+                sort, order, suffix_params=sort_params, col_key='normal', w='c-num-wide') }}
+      {{ sortable_th('score', 'Score', ('What this list is ordered by unless you say otherwise.',
                           'Not a measurement. Every number in it is a column of this row —
-                           hover the value for the arithmetic.'), col_key='score', w='c-num') }}
+                           hover the value for the arithmetic. Sorting by another column
+                           replaces this ordering; clicking Score returns to it.'),
+                sort, order, suffix_params=sort_params, col_key='score', w='c-num') }}
+      {#- Signature and From stay unsortable, and deliberately. A signature is an
+          *ordered* path list and that order is its identity — sorting by its
+          first element destroys what the column shows, the same reason a
+          session's requests are not sortable. From is a truncated eight of N,
+          so its first address is an accident of DISTINCT. -#}
       {{ th_tip('Signature', ('The first paths each session probed, in order.',
                               'What identifies the program. Sessions that agree on these are one
                                run of it.'), col_key='signature', w='c-wide') }}
@@ -82,14 +118,18 @@
   </thead>
   <tbody>
     {% for i in incidents %}
-    <tr>
+    {#- The row is the claim, the panel is the run it stands for. Clicking the
+        address links still follows them: drawer.js leaves anchors alone. -#}
+    <tr data-drawer-src="/incidents/case?from={{ i.started | urlencode }}&to={{ i.ended | urlencode }}&sig={{ i.digest }}">
       <td data-label="Started" data-col="started">{{ i.started | fmtdate }}</td>
       <td data-label="For" data-col="duration" class="num">{{ i.duration | fmtduration }}</td>
-      <td data-label="Hosts" data-col="addresses" class="num">{{ i.addresses | fmtnum }}</td>
-      <td data-label="Nets" data-col="asns" class="num">{{ i.asns | fmtnum }}</td>
+      <td data-label="Addresses" data-col="addresses" class="num">{{ i.addresses | fmtnum }}</td>
+      <td data-label="Networks" data-col="asns" class="num">
+        {%- if i.asns %}{{ i.asns | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
+      </td>
       <td data-label="Probes" data-col="probes" class="num">{{ i.probe_404 | fmtnum }}</td>
       <td data-label="Listed" data-col="listed" class="num">{{ i.blocklisted | fmtnum }}</td>
-      <td data-label="vs normal" data-col="normal" class="num">
+      <td data-label="Against normal" data-col="normal" class="num">
         {%- if i.against_normal %}{{ i.against_normal | round(1) }}×
         {%- else %}<span class="text-muted">—</span>{% endif %}
       </td>
@@ -103,7 +143,7 @@
       </td>
     </tr>
     {% else %}
-    {{ empty_row(9, 'incident') }}
+    {{ empty_row(10, 'incident', ranged=date_from or date_to) }}
     {% endfor %}
   </tbody>
 </table>

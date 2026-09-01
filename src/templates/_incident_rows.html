@@ -1,0 +1,150 @@
+{#
+  _incident_rows.html — slide-over body: what one incident asked for, and who
+  asked. Served as a fragment by /incidents/case and injected by drawer.js.
+
+  Two tables, because an incident is two things at once. Without the paths this
+  panel is a list of addresses and says nothing about what happened; without the
+  addresses the paths are a wordlist nobody ran.
+
+  Both are sortable and the paths table pages, against a panel 736px wide that
+  a 120-character payload path does not fit. Each table sits in its own
+  .drawer-scroll: the wide one moves sideways under the reader's finger and the
+  prose around it stays where it was. Without that the drawer scrolled as a
+  whole, heading included.
+
+  The links are relative "?…", which is what drawer.js re-fetches on — see
+  there. They carry from/to/sig because those name the incident, and each
+  table carries the other's sort so moving one does not reset the other.
+
+  The paths keep a "#" column holding the position each path arrived at. That
+  is what makes this table sortable where the page's Signature column is not:
+  the order is the signature, and it survives a re-sort only because it is
+  written into the row rather than left in the sequence.
+
+  Only the requests the incident is built from — paths that do not exist,
+  convention files excluded. Widening it to every request the sessions made
+  would put a different total under a row that already states one.
+#}
+{% from '_macros.html' import th_tip, sortable_th, pagination, ip_signal_bar, tip_attrs %}
+{# What each table appends to its own links so the other table keeps its state. #}
+{% set path_tail = case_params ~ '&ssort=' ~ ssort ~ '&sorder=' ~ sorder %}
+{% set sess_tail = case_params ~ '&page=' ~ page ~ '&sort=' ~ sort ~ '&order=' ~ order %}
+<div class="drawer-head">
+  <div>
+    <span class="drawer-title">Incident</span>
+    <code class="drawer-value">{{ started | fmtdate }} – {{ ended | fmtdate }}</code>
+  </div>
+  <div class="drawer-head-actions">
+    <span class="table-block-count">
+      {{ sessions | length | fmtnum }} address{{ '' if sessions | length == 1 else 'es' }} ·
+      {{ probes | fmtnum }} probe{{ '' if probes == 1 else 's' }} ·
+      {{ path_total | fmtnum }} path{{ '' if path_total == 1 else 's' }}
+    </span>
+    <button type="button" class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+</div>
+
+<p class="section-label">Asked for</p>
+{% if paths %}
+<div class="drawer-scroll">
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ sortable_th('pos', '#', ('Position in the order the paths first arrived.',
+                'Which is the order the program walks them — the first five are its
+                 signature, and the reason these sessions are one event. Sorting by
+                 another column moves the rows; this number stays with its path.'),
+                sort, order, path_tail, 'ASC', w='c-num', base=case_url) }}
+      {{ sortable_th('path', 'Path', ('What was asked for, and never found.',
+                'Exactly as the client wrote it.'),
+                sort, order, path_tail, 'ASC', w='c-wide', base=case_url) }}
+      {{ sortable_th('addresses', 'Addresses', ('How many of the addresses below asked for it.',
+                'A path all of them tried is part of the program; one only a few tried is
+                 where the runs diverged.'),
+                sort, order, path_tail, 'DESC', w='c-num', base=case_url) }}
+      {{ sortable_th('requests', 'Requests', ('How often it was asked for, across the whole incident.',
+                'These sum to the probe count on the row this panel came from — across
+                 every page of this table, not this one.'),
+                sort, order, path_tail, 'DESC', w='c-num', base=case_url) }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in paths %}
+    <tr>
+      <td data-label="#" class="num">
+        {{ p.pos }}{% if p.in_signature %}<span class="text-muted label-help" {{ tip_attrs('Part of the signature.',
+          'One of the first five paths every session in this incident asked for, in order.')
+          }} tabindex="0">*</span>{% endif %}
+      </td>
+      <td data-label="Path" class="col-path"><code>{{ p.path }}</code></td>
+      <td data-label="Addresses" class="num">{{ p.addresses | fmtnum }}</td>
+      <td data-label="Requests" class="num">{{ p.requests | fmtnum }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pagination(page, total_pages, path_tail ~ '&sort=' ~ sort ~ '&order=' ~ order, base=case_url) }}
+{% else %}
+<p class="text-muted">No paths recorded for this signature in the selected range any more.</p>
+{% endif %}
+
+<p class="section-label">From</p>
+{% if sessions %}
+<div class="drawer-scroll">
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ sortable_th('started', 'Joined', ('When this address began its run.',
+                'In order, so the shape of the campaign is visible: eighteen addresses over six
+                 days is a different thing from eighteen inside a minute.'),
+                ssort, sorder, sess_tail, 'ASC', w='c-date', base=case_url, pfx='s') }}
+      {{ sortable_th('duration', 'For', ('How long its session lasted.',
+                'The log resolves to the second, so 0 s means inside one second.'),
+                ssort, sorder, sess_tail, 'DESC', w='c-num', base=case_url, pfx='s') }}
+      {{ sortable_th('ip', 'Address', ('The address itself.',
+                'Opens its full history, where this session expands into the requests it is
+                 made of.'),
+                ssort, sorder, sess_tail, 'ASC', w='c-ip', base=case_url, pfx='s') }}
+      {{ sortable_th('org', 'Network', ('Who announces it.',
+                'The org and ASN from ip-api. Blank where enrichment has not reached this
+                 address yet, and blank sorts last either way.'),
+                ssort, sorder, sess_tail, 'ASC', w='c-text', base=case_url, pfx='s') }}
+      {{ sortable_th('probes', 'Probes', ('Requests it made for paths that do not exist.',
+                'Convention files are excluded, as everywhere else. These sum to the number
+                 on the row this panel came from.'),
+                ssort, sorder, sess_tail, 'DESC', w='c-num', base=case_url, pfx='s') }}
+      {#- Not sortable: the bar is several independent flags, and there is no
+          one order over "Tor, hosting and listed" that is not invented. -#}
+      {{ th_tip('Signals', ('What is known about the address beyond what it did here.',
+                'Tor, proxy, hosting, blocklist and Shodan tags — from ip-api, DNSBL and
+                 Shodan, not from this run. The same bar as on Visitors.'),
+                w='c-mix') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in sessions %}
+    <tr>
+      <td data-label="Joined" class="nowrap">{{ r.started | fmtdate }}</td>
+      <td data-label="For" class="num">{{ r.duration | fmtduration }}</td>
+      <td data-label="Address"><a href="/visitors/{{ r.ip | urlencode }}">{{ r.ip }}</a></td>
+      <td data-label="Network">
+        {%- if r.org %}{{ r.org }}{% if r.asn %} <span class="text-muted">{{ r.asn }}</span>{% endif %}
+        {%- elif r.asn %}{{ r.asn }}
+        {%- else %}<span class="text-muted">—</span>{% endif %}
+      </td>
+      <td data-label="Probes" class="num">{{ r.probe_404 | fmtnum }}</td>
+      {#- The shared bar, not two hand-written badges. Those reported only
+          blocklist and hosting — so an address on Tor showed nothing here while
+          showing Tor everywhere else — and coloured the blocklist badge red
+          where the legend has it orange, which is the exact drift the identity
+          strip at the top of visitor_detail.html documents having fixed. -#}
+      <td data-label="Signals">{{ ip_signal_bar(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="text-muted">No sessions match this signature in the selected range any more.</p>
+{% endif %}

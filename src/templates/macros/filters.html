@@ -22,7 +22,7 @@
 {%- set parts = (csv or '').split(',') | map('trim') | reject('equalto', '') | list -%}
 {%- if not parts -%}—{%- else -%}
 {%- for p in parts -%}<a class="badge {{ badge }}" href="/shodan?{{ param }}={{ p | urlencode }}{{ extra }}"
-   {{ tip_attrs('Shodan ' ~ param ~ ': ' ~ p ~ '.', 'Opens Exposure, listing every host that shares it.') }}>{{ p }}</a>{% endfor -%}
+   {{ tip_attrs('Shodan ' ~ param ~ ': ' ~ p ~ '.', 'Opens Shodan, listing every host that shares it.') }}>{{ p }}</a>{% endfor -%}
 {%- endif -%}
 {%- endmacro -%}
 
@@ -39,9 +39,9 @@
   {%- for p in pills %}
   <span class="drill-pill{% if p.color %} drill-pill--tinted{% endif %}"{% if p.color %} style="--clr: {{ p.color }}"{% endif %}
         {{ tip_attrs('This list is narrowed to one ' ~ p.kind ~ '.',
-           'An exact match, unlike a search term, which matches anywhere in the value.') }}><strong>{{ p.kind }}</strong><code>{{ p.value }}</code><a href="{{ p.href }}" title="Remove filter" aria-label="Remove {{ p.kind }} filter {{ p.value }}">✕</a></span>
+           'An exact match, unlike a search term, which matches anywhere in the value.') }}><strong>{{ p.kind }}</strong><code>{{ p.value }}</code><a href="{{ p.href }}" aria-label="Remove {{ p.kind }} filter {{ p.value }}">✕</a></span>
   {%- endfor %}
-  {%- if clear_href %}<a class="drill-pills-clear" href="{{ clear_href }}">clear all</a>{% endif %}
+  {%- if clear_href %}<a class="drill-pills-clear" href="{{ clear_href }}">Clear filters</a>{% endif %}
 </div>
 {%- endif %}
 {%- endmacro -%}
@@ -65,7 +65,7 @@
     <button type="button" class="filter-toggle filter-toggle--all{% if not active_classes and not active_signals %} active{% endif %}"
             aria-pressed="{{ 'true' if not active_classes and not active_signals else 'false' }}"
             {{ tip_attrs('Every visitor, with no class or signal selected.',
-               'Clears the chips only — a drill-down, a search term or the date range stay.') }}>All{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in this group.', 'Counted inside the selected date range, not all-time.') }}>{{ visitor_counts.get('all', 0) | fmtnum }}</strong>{% endif %}</button>
+               'Clears the chips only — a drill-down, a search term or the date range stay.') }}>All{% if visitor_counts is not none %}&nbsp;<strong{{ tip_attrs('Distinct IPs in the selected range.', 'Every class and every signal — this chip selects nothing, it clears.') }}>{{ visitor_counts.get('all', 0) | fmtnum }}</strong>{% endif %}</button>
 
     {#- Group chips. Each group carries its own subclasses, so the taxonomy is
         read where it lives instead of in one flat "Classes" list that mixed all
@@ -171,7 +171,9 @@
         a class or signal added there documents itself here. -#}
     {%- if search_help %}
     <details class="search-help">
-      <summary class="filter-disclosure-summary" title="Search syntax, classes and signals"
+      <summary class="filter-disclosure-summary"
+               {{ tip_attrs('Search syntax, classes and signals.',
+                  'Three tabs: the term forms, every class value, every signal value.') }}
                aria-controls="search-syntax">Help ▾</summary>
     </details>
     <div class="search-help-panel" id="search-syntax" data-tabs>
@@ -211,7 +213,7 @@
           value ?class= takes — the group prefix is part of it, and leaving it
           out is the most common way a hand-built URL filters nothing. -#}
       <div data-tab-panel="classes" hidden>
-        <p class="search-help-lead">What a visitor <em>is</em>. Exactly one per IP, decided from its whole history and re-judged when its behavior changes. Filter with <code>class:&lt;value&gt;</code> or the chips above — a group value selects every class under it.</p>
+        <p class="search-help-lead">What a visitor <em>is</em>. Exactly one per IP, decided from its whole history and re-judged when its behaviour changes. Filter with <code>class:&lt;value&gt;</code> or the chips above — a group value selects every class under it.</p>
         {#- One table for every group, not one per group: a table sizes its own
             columns, so five of them put the description column in five
             different places. -#}

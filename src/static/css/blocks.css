@@ -141,6 +141,11 @@
 .table-block-head {
   display: flex;
   align-items: baseline;
+  /* Wraps. The Activity head carries a title, a subtitle, the window it is
+     showing and two zoom buttons, which is more than fits a narrow panel in
+     one line — and a head that does not wrap makes the panel scroll sideways
+     instead. */
+  flex-wrap: wrap;
   gap: var(--space-sm);
   margin-bottom: var(--space-xs);
 }
@@ -230,6 +235,11 @@
 /* Custom range sits in the strip as a <details>; its summary is the last tab. */
 .tab-group > details:last-child > .tab { border-right: 0; }
 .tab:hover { color: var(--text); text-decoration: none; }
+/* A tab that does not apply under the current selection. Not hidden: it is part
+   of the control's shape, and a strip that changes width as you move between
+   ranges is harder to read than one greyed entry. */
+.tab--disabled { opacity: 0.4; cursor: default; }
+.tab--disabled:hover { color: var(--text-muted); }
 .tab.active { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
 .range-custom { position: relative; }
 .range-custom > summary { list-style: none; }
@@ -474,3 +484,27 @@
 
 /* Day columns — the release UI's chart primitive. One column per day, split
    into its series; no chart library, colors straight from the taxonomy tokens. */
+
+/* ── Code block ────────────────────────────────────────────────────────────
+   A command or a configuration snippet, standing on its own so it can be read
+   and copied as one thing. The only block-code style used to live in docs.css
+   scoped to `.doc-body pre`, so everywhere else a snippet had to be an inline
+   `<code>` — which is how three server configurations ended up chained inside
+   one sentence on /exposure, indistinguishable from the prose around them.
+
+   Scrolls rather than wraps, like the docs: a wrapped nginx directive changes
+   what the reader is looking at, and these are meant to be pasted. */
+.code-block {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.code-block code {
+  white-space: pre;
+  background: none;
+  padding: 0;
+  color: var(--text);
+}

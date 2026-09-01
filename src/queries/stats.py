@@ -12,6 +12,11 @@ from ._shared import (
     _EXCLUDED_OSES,
     _VISITOR_GROUP_CASE,
     _VISITOR_GROUP_ORDER,
+    _apply_drill_filters,
+    _apply_min_visits,
+    _apply_seen_filter,
+    _apply_signal_filter,
+    _apply_visitor_search,
     _date_conditions,
     seen_in_window,
     visit_window,
@@ -274,7 +279,9 @@ def get_attention_items(conn: sqlite3.Connection, baseline: dict | None = None) 
                     f"{'host' if row['hosts'] == 1 else 'hosts'}"
                 ),
                 "value": row["hosts"],
-                "signal": "dnsbl",
+                # Shodan, not dnsbl. It read the blocklist colour off a field
+                # naming a signal this finding does not carry.
+                "signal": "shodan",
                 "href": f"/shodan?vuln={quote(row['vuln'])}",
             }
         )
@@ -308,7 +315,10 @@ def get_attention_items(conn: sqlite3.Connection, baseline: dict | None = None) 
             items.append(
                 {
                     "tag": "Tor",
-                    "text": f"Tor traffic {factor:.0f}× the typical day of the last week",
+                    "text": (
+                        f"Tor traffic {factor:.0f}× the typical day of the last week "
+                        f"— {row['today']:,} requests"
+                    ),
                     "value": row["today"],
                     "signal": "tor",
                     "href": "/visitors?signal=is_tor",
@@ -330,10 +340,16 @@ def get_attention_items(conn: sqlite3.Connection, baseline: dict | None = None) 
             {
                 "tag": "Probe",
                 "text": (
-                    f"{row['path']} requested by {row['ips']:,} distinct "
-                    f"{'IP' if row['ips'] == 1 else 'IPs'} today"
+                    f"{row['path']} — {row['ips']:,} distinct "
+                    f"{'address' if row['ips'] == 1 else 'addresses'}, "
+                    f"{row['hits']:,} requests today"
                 ),
-                "value": row["hits"],
+                # The figure on the right restates the sentence. It used to be
+                # the request count while the sentence named the address count,
+                # so a reader saw "15 distinct IPs today · 26" with nothing
+                # saying what 26 was. Four of the six findings already worked
+                # this way; two did not, which taught the rule and then broke it.
+                "value": row["ips"],
                 "signal": "hosting",
                 "href": f"/visitors?group=path&q={quote(row['path'])}",
             }
@@ -391,6 +407,10 @@ def get_visitor_ip_counts(
     conn: sqlite3.Connection,
     date_from: str | None = None,
     date_to: str | None = None,
+    seen: str | None = None,
+    signal_filter: list[str] | None = None,
+    q: str | None = None,
+    drill: dict | None = None,
 ) -> dict[str, int]:
     """Flat dict mapping both full class strings and group prefixes to unique IP counts.
 
@@ -403,15 +423,40 @@ def get_visitor_ip_counts(
     said. The chip read as a filtered number because everything around it was
     one, so 274 threat IPs stood next to a day with 11,629 threat requests.
 
+    Every filter the page has except the one the chips themselves set. A count
+    beside a filter has to be the count that filter produces, and these reported
+    past three of them: under New the header said 6 483 visits while All still
+    read 723, and under `signal=is_tor` the page showed seven addresses while
+    the chips went on claiming 3 566.
+
+    The class selection is the exception, and deliberately: the chips are how a
+    class is chosen, so narrowing them by the chosen class would leave each one
+    showing only itself. Their whole job is to say what the *other* classes
+    would give before you click one.
+
+    `drill` carries the row-level narrowings — network, country, path, client,
+    address, port, minimum visits. Under `?asn=…` the table showed 21 addresses
+    while the chip beside it held 3 566.
+
     LEFT JOIN, so an IP that has visits but no intel yet still counts, folded
     into `unknown` exactly as _apply_class_filter folds it.
     """
     conditions, params = _date_conditions(date_from, date_to, "v.timestamp")
+    where = " AND ".join(["1=1", *conditions])
+    where, params = _apply_signal_filter(where, params, signal_filter)
+    where, params = _apply_visitor_search(where, params, q)
+    where, params = _apply_seen_filter(where, params, seen, date_from)
+    drill = dict(drill or {})
+    min_visits = drill.pop("min_visits", 0)
+    where, params = _apply_drill_filters(where, params, **drill)
+    # This chain has no WHERE of its own — the query below supplies it — and
+    # the subquery needs one.
+    where, params = _apply_min_visits(where, params, min_visits, "WHERE " + where, list(params))
     rows = conn.execute(
         f"""SELECT i.visitor_class AS visitor_class, COUNT(DISTINCT v.ip) AS cnt
             FROM visits v
             LEFT JOIN ip_intel i ON i.ip = v.ip
-            WHERE {' AND '.join(['1=1', *conditions])}
+            WHERE {where}
             GROUP BY i.visitor_class""",
         params,
     ).fetchall()

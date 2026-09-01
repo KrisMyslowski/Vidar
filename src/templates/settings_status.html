@@ -74,10 +74,15 @@
         {{ (enricher.tor_age_seconds / 3600) | round(1) }} h old{% endif %}
       {%- else %}<span class="label-muted">downloads with the first enrichment batch</span>{% endif %}
     {% endcall %}
-    {% call kv_row('DNSBL') %}
+    {#- State, not the provider names: those are DNSBL_PROVIDERS in the settings
+        section below, and printing them in both places invited the two to
+        disagree — which they did, in two different orders. -#}
+    {% call kv_row('DNSBL', ('Whether blocklist lookups are running.',
+                   'The providers queried are DNSBL_PROVIDERS in the settings below.')) %}
       {% if not dnsbl_enabled %}disabled
       {%- elif not dnsbl_key_set %}<strong>no DQS key — the signal records nothing</strong>
-      {%- else %}{{ dnsbl_providers | join(', ') }}{% endif %}
+      {%- else %}querying {{ dnsbl_providers | length }}
+        provider{{ '' if dnsbl_providers | length == 1 else 's' }}{% endif %}
     {% endcall %}
   {% endcall %}
 </div>
@@ -85,8 +90,8 @@
 <div class="panel">
   <h3>Daily passes</h3>
   {% call kv_table() %}
-    {% call kv_row('Retention') %}{{ state.retention_last_run or 'has not run yet' }}{% endcall %}
-    {% call kv_row('Snapshot') %}{{ state.backup_last_run or 'has not run yet' }}{% endcall %}
+    {% call kv_row('Retention') %}{{ state.retention_last_run | fmtdate or 'has not run yet' }}{% endcall %}
+    {% call kv_row('Snapshot') %}{{ state.backup_last_run | fmtdate or 'has not run yet' }}{% endcall %}
   {% endcall %}
   <p class="text-muted">
     Both run inside the application, not from cron. The window they enforce, the
@@ -101,7 +106,7 @@
     What the service actually loaded, which is not always what the file says —
     an environment variable overrides it. Read-only: everything here comes from
     the <code>.env</code> at the deploy root and is read once at startup, so a
-    change needs a redeploy. Retention is the exception and lives on Storage.
+    change needs a redeploy. Retention is the exception and lives on Storage &amp; Retention.
     Running version {{ version }}.
   </p>
   <table class="config-table">
@@ -115,6 +120,9 @@
           {%- if row.secret %}{{ row.value }}
           {%- elif row.empty %}<span class="label-muted">(empty)</span>
           {%- else %}<code>{{ row.value }}</code>{% endif %}
+          {%- if row.note %}
+          <div class="text-muted">{{ row.note }}</div>
+          {%- endif %}
         </td>
       </tr>
       {%- endfor %}

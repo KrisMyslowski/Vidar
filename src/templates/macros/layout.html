@@ -5,10 +5,13 @@
   to know which file a block lives in.
 #}
 {% from 'macros/_tip.html' import tip_attrs %}
-{%- macro page_header(title, count_label='', refresh=true) -%}
+{%- macro page_header(title, count_label='', refresh=true, count_id='') -%}
 <div class="page-header">
   <h2>{{ title }}</h2>
-  {%- if count_label %}<span class="page-header-count">{{ count_label }}</span>{% endif %}
+  {#- count_id is for a count something else rewrites — the map's, which follows
+      the viewport. Without it that one had to come through caller() and landed
+      in the actions row instead of beside the title. -#}
+  {%- if count_label %}<span class="page-header-count"{% if count_id %} id="{{ count_id }}"{% endif %}>{{ count_label }}</span>{% endif %}
   {%- if refresh or caller is defined %}
   <div class="page-header-actions">
     {%- if caller is defined %}{{ caller() }}{% endif %}
@@ -25,16 +28,22 @@
   noun: what is missing ("network", "visitor", "host").
   filters: list of {label, color} — the active filters, rendered as chips.
 #}
-{%- macro empty_state(noun, filters=none, clear_href='', clear_label='') -%}
+{%- macro empty_state(noun, filters=none, clear_href='', clear_label='', plural='', ranged=false) -%}
 <div class="empty-state">
   <div class="empty-state-text">
     {%- if filters %}
     No {{ noun }} matches
     {%- for f in filters %} <span class="empty-state-chip" style="--clr:{{ f.color }}">{{ f.label }}</span>{% if not loop.last %} +{% endif %}{% endfor %}
     in the selected range.
+    {%- elif ranged %}
+    {#- The date range is an exclusion too, it is simply not one of the chips.
+        Without this the timeline said "No visits recorded yet" over a database
+        holding 101 413 of them, because the reader had picked 24 h. -#}
+    No {{ plural or noun ~ 's' }} in the selected range.
     {%- else %}
-    {#- Nothing is filtered, so nothing was excluded: say what is actually true. -#}
-    No {{ noun }}s recorded yet.
+    {#- Nothing is filtered and no window is set, so nothing was excluded: say
+        what is actually true. -#}
+    No {{ plural or noun ~ 's' }} recorded yet.
     {%- endif %}
   </div>
   {%- if clear_href %}
@@ -45,8 +54,13 @@
 
 
 {# empty_state inside a table body — same block, spanning the whole row. #}
-{%- macro empty_row(colspan, noun, filters=none, clear_href='', clear_label='') -%}
-<tr class="empty-state-row"><td colspan="{{ colspan }}">{{ empty_state(noun, filters, clear_href, clear_label) }}</td></tr>
+{%- macro empty_row(colspan, noun, filters=none, clear_href='', clear_label='', plural='',
+                     ranged=false) -%}
+{#- `ranged` too. Without it this macro dropped the one argument that separates
+    "nothing has ever happened" from "nothing happened in the window you chose",
+    so Exposure said "No exposed paths recorded yet" and Incidents "No incidents
+    recorded yet" at ?range=24h, over a database holding both. -#}
+<tr class="empty-state-row"><td colspan="{{ colspan }}">{{ empty_state(noun, filters, clear_href, clear_label, plural, ranged) }}</td></tr>
 {%- endmacro -%}
 
 
@@ -59,7 +73,17 @@
   {%- if label %}<span class="tab-row-label">{{ label }}</span>{% endif %}
   <div class="tab-group">
     {%- for t in tabs %}
-    <a class="tab{% if t.active %} active{% endif %}" href="{{ t.href }}">{{ t.label }}</a>
+    {#- A tab can be inapplicable rather than merely inactive: it renders as a
+        span so it cannot be clicked, and carries the reason. Greying it out
+        without saying why is the version of this that generates a support
+        question. -#}
+    {%- if t.disabled %}
+    <span class="tab tab--disabled" {{ tip_attrs(t.tip) if t.tip else '' }}
+          {{ 'tabindex="0"' if t.tip else '' }} aria-disabled="true">{{ t.label }}</span>
+    {%- else %}
+    <a class="tab{% if t.active %} active{% endif %}" href="{{ t.href }}"
+       {{ tip_attrs(t.tip) if t.tip else '' }}>{{ t.label }}</a>
+    {%- endif %}
     {%- endfor %}
   </div>
 </div>
@@ -82,7 +106,8 @@
   <div class="tab-group">
   {%- for key, label in RANGE_PRESETS %}
   <a class="tab{% if active == key %} active{% endif %}" href="{{ base_path }}?range={{ key }}{{ extra_params }}"
-     {{ tip_attrs('Scope every number on this page to ' ~ label ~ '.',
+     {{ tip_attrs('Scope every number on this page to the whole retention window.'
+                  if key == 'all' else 'Scope every number on this page to the last ' ~ label ~ '.',
         'The window is remembered across pages; a link that names one wins over it.') }}>{{ label }}</a>
   {%- endfor %}
   <details class="range-custom" data-popover{% if active == 'custom' %} open{% endif %}>

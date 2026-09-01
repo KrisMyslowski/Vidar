@@ -153,8 +153,12 @@ def test_probe_finding_names_the_path_and_counts_distinct_ips(tmp_db):
     with get_conn(tmp_db) as conn:
         probe = next(i for i in get_attention_items(conn) if i["tag"] == "Probe")
     assert "/.env" in probe["text"]
-    assert "4 distinct" in probe["text"]  # five requests, four IPs
-    assert probe["value"] == 5
+    assert "4 distinct" in probe["text"]  # five requests, four addresses
+    assert "5 requests" in probe["text"]
+    # The number rendered on the right of the row restates the sentence. It
+    # used to be the request count while the sentence named the address count,
+    # so the row read "4 distinct IPs today · 5" with nothing saying what 5 was.
+    assert probe["value"] == 4
     assert probe["href"].startswith("/visitors?group=path")
 
 

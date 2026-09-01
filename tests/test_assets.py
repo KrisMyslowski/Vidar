@@ -163,6 +163,17 @@ def test_every_responsive_cell_names_its_column():
         text = template.read_text()
         for table in re.findall(r'<table[^>]*class="[^"]*responsive-table.*?</table>', text, re.S):
             for cell in re.findall(r"<td\b[^>]*>", table):
-                if "data-col=" in cell and "data-label=" not in cell:
+                # Every cell, not only the ones that declare a column. The
+                # first version of this check keyed on `data-col`, and the
+                # three Storage tables have never carried one — so they could
+                # be made responsive with no labels at all and the guard stayed
+                # green.
+                # A row-actions cell is exempt: it holds buttons, its header is
+                # deliberately empty, and there is nothing to name. So is a
+                # colspan cell — an empty state spans every column and belongs
+                # to none of them.
+                if "-actions" in cell or "colspan=" in cell:
+                    continue
+                if "data-label=" not in cell:
                     missing.append(f"{template.name}: {cell}")
     assert not missing, "cells with no name in card layout:\n" + "\n".join(missing)

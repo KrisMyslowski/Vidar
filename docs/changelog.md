@@ -9,7 +9,112 @@ The first entry is the exception: there is no "before" to compare a first releas
 lists the scope instead. The number lives in `src/__init__.py`, is echoed in `pyproject.toml`,
 and the dashboard prints it beside its name in the sidebar, linked to the tag it names.
 
+Patch releases are folded into the minor they belong to. There were eleven between 1.1.0 and
+1.2.0, each a day's work on the same few surfaces, and read one after another they described the
+same page four times. Nothing is dropped that changed what an operator sees or how a number is
+arrived at; what goes is the version headings between them.
+
 Versions follow [semantic versioning](https://semver.org).
+
+---
+
+## 1.2.0 — 2026-09-01
+
+1.1.0 built the surfaces. This one makes them usable: every table on them sorts, the long ones
+page, an event or a finding opens beside the list it came from, and the timeline stopped being a
+picture and became something with a scale on it.
+
+It is also where a set of counting errors came out. Several were found by asking why two numbers
+on one page disagreed — which is the argument this dashboard makes for showing its work, applied
+to itself.
+
+### Added in 1.2.0
+
+- **A comparison between all addresses and new ones.** The Addresses control has three states:
+  All, New — first seen inside the selected window — and both, drawn nested so the gap between
+  them is the thing you read rather than something you hold in your head between two clicks. On
+  a month of real traffic 40 % of one day's requests came from addresses seen before and 8 % of
+  another's; those are the same line otherwise. It filters nothing and says so, and it appears
+  only on the timeline: a table row is in or out and a map marker is one address.
+
+- **An Addresses chart beside the Activity one.** Activity counts requests, Addresses counts
+  distinct addresses, and the pair separates a thousand requests from one machine from a
+  thousand machines. Same five class bands, same window, same interactions.
+
+- **Everything sorts.** Exposure on all seven columns, Served on its own seven, Incidents on
+  eight of ten, and both tables inside the incident panel. Server-side, over the values rather
+  than the rendered text — the client-side sorter reads what is on screen, where every ISO
+  timestamp parses to the number 2026 and `980.0 B` outranks `6.0 KB`. No page changes what it
+  shows first, and every default order is a column you can click to get back to.
+
+  Signature and From on the Incidents page do not sort, and a session's requests do not either:
+  the order *is* the information there. The incident panel's path list is the exception that
+  proves it — it carries the arrival position in a column, so re-ordering the rows takes that
+  order along instead of destroying it.
+
+- **A finding and an incident open beside the list.** Same panel, same contract. A finding
+  answers from "must I act" down to "who was it": still served — asked over the whole database,
+  because a file is on disk or it is not — then what the server answered, size, when, how often
+  from how many, who by identity class, where from, every spelling, and what else those
+  addresses asked for here. That last line usually settles it: the nine addresses that fetched
+  `/.DS_Store` on the reference month also asked for 2 358 other paths.
+
+- **Served says what a finding is one of.** The findings table said "1 path" and never said one
+  of how many. Below it now sits every path this server answers 2xx for, marked Site or Finding
+  with the benign count each clears or fails — the same result set split on the same threshold,
+  so the two blocks cannot disagree about a number they share.
+
+### Changed in 1.2.0
+
+- **The activity chart is a total and five small multiples**, not five bands stacked into one
+  shape nobody could read a single class out of. The traffic-rhythm heatmap shades
+  logarithmically, because one busy hour flattened every other cell to the same tone.
+
+- **The map opens at a fixed zoom again.** Fitting the view to the markers looked tighter and
+  was not: whenever their spread did not quite fit, it dropped a level, and half-size world in a
+  full-size panel meant grey ground above, below and either side of it — and the world tiled
+  sideways to fill the gap, drawing North America twice. Zoom 2 covers the panel.
+
+### Fixed in 1.2.0
+
+Counting, mostly. Each of these produced a plausible number that was wrong.
+
+- **The incidents limit cut before the ordering.** `get_incidents` has no `ORDER BY` — the score
+  is computed in Python afterwards — so a SQL `LIMIT` kept an arbitrary handful and the sort
+  ordered only those. Asking for three on a real month returned incidents scoring 44, 39 and 37
+  while the actual top three scored 135, 104 and 101: a page whose purpose is to surface the
+  worst was able to drop exactly the worst.
+
+- **The fold added distinct address counts together.** Two spellings of one path, each fetched
+  by 30 addresses, were reported as 60 — anything that tried both was in both figures, under a
+  column that says "distinct". The same sum decided Site from Finding, so two spellings with one
+  benign visitor each reached the threshold of two and marked a path as part of the site on the
+  strength of one visitor counted twice.
+
+- **The timeline applied none of the drill-downs it displayed.** Network, country, path, client,
+  address, port and minimum visits each rendered as an active pill while the header and both
+  charts answered for everything. The filter chips ignored the signal filter and the search the
+  same way, and the All/New selection survived no link the page built.
+
+- **The Exposure context query took 35 seconds and answered the wrong thing.** `v.status` inside
+  its subquery bound to the outer `v`, an accidental correlation that reported 26 paths where
+  the truth is 2 358. Fetching the addresses first and binding them makes it 3 ms.
+
+- **The convention filter in the Exposure SQL hid true figures**, reporting `robots.txt` as one
+  request instead of 453 — it only ever caught the spellings the percent-encoding fold catches
+  anyway.
+
+- **The x-axis was not a time axis**, and a band's peak did not say what it counted — a bare
+  number beside an identically named one that counted something else. The map's viewport count
+  had no denominator, so a zoomed-in map never said what fraction it was showing.
+
+- **The incident panel hung past its own edge and lost most of its content.** Six fixed-width
+  columns in a 736px panel, with the whole drawer scrolling sideways instead of the table; and
+  the path list stopped at forty of 266, with the rest unreachable.
+
+- Smaller: the custom-range form dropped the sort; `empty_row` dropped `ranged`, so both new
+  pages claimed to be empty under every range but the default; and the drawer's failure message
+  still said "Could not load these IPs" on the three panels that are not lists of addresses.
 
 ---
 
@@ -28,163 +133,100 @@ anybody.
   strings, convention paths and percent-encoded spellings of the same file are all excluded,
   each because an earlier draft reported them and each with a test.
 
-  Each finding carries its own explanation: what the file is, why somebody asked for it, a
-  `curl` addressed to this site to check it, and how to stop serving it. The explanation hangs
-  on the *family* rather than the path — nine of them, from operating-system metadata to
-  diagnostic pages — because the reference deployment carries 26 609 distinct probed paths of
-  which the top 500 cover 30 %, and one vulnerability is probed under twenty-five prefixes. A
-  finding outside the nine is listed under *Not described here* with a `curl` and no prose,
-  rather than under an invented family — the command needs no knowledge of the file, a
-  description does. Detection never consults the registry: a file dropped in the document root
-  under a name nothing has seen is listed the first time a scanner fetches it.
+  Each finding carries its own explanation, hung on the *family* rather than the path — nine of
+  them — because the reference deployment carries 26 609 distinct probed paths and one
+  vulnerability is probed under twenty-five prefixes. A finding outside the nine is listed with
+  a `curl` and no prose rather than under an invented family. Detection never consults the
+  registry: a file dropped in the document root under a name nothing has seen is listed the
+  first time a scanner fetches it.
 
-- **From nine thousand addresses to ten events.** A new page answers what happened rather than
-  who came. A scanner is a program and a program starts the same way every run, so when three or
-  more addresses ask for the same first five missing paths, in the same order, within an hour,
-  that is one incident — with the paths it asked for, the addresses it came from, and how many of
-  them are on hosting ranges or blocklists.
+- **From nine thousand addresses to ten events.** `/incidents` answers what happened rather than
+  who came. Three or more addresses asking for the same first five missing paths, in the same
+  order, within an hour, is one incident. The score beside each is a sort key and the page prints
+  its arithmetic out of numbers already on the page. Volume is capped so one address hammering
+  all night cannot outrank a coordinated run, and an empty list is a valid result the page states
+  in words.
 
-  The score beside each is a sort key and the page says so: its arithmetic is printed out of
-  numbers already on the page, because a number whose derivation cannot be opened would put a
-  score where the evidence used to be. Volume is capped so one address hammering all night cannot
-  outrank a coordinated run. Empty is a valid result and the usual one on a small site, and the
-  page says that in words rather than showing an empty table.
+- **Behaviour, as a third axis.** Visits are cut into sessions — a run with no gap longer than
+  30 minutes — and each carries a behaviour: browsing, scraping, recon, enumeration or brute
+  force. Identity says what an address is, the signals say where it sits, and neither could say
+  what it did. Nothing is stored: sessionising one address measured 0.10 ms against the 0.42 ms
+  of the evidence query already running on it, which removes a migration, a backfill, and any
+  session that could go stale when a month is re-imported.
 
-- **Behaviour, as a third axis.** Identity says what an address is and the signals say where it
-  sits; neither could say what it did. Visits are now cut into **sessions** — a run of requests
-  with no gap longer than 30 minutes — and each carries a behaviour: browsing, scraping, recon,
-  enumeration or brute force. A human can scrape and a crawler can enumerate, and the classifier
-  no longer has to weigh those against each other and crown a winner. The detail page shows the
-  sentence the dashboard could not say before: arrived from a search engine, read three pages,
-  then tried eleven paths that do not exist, in 180 seconds.
+- **Reputation from Vidar's own data.** An address's detail page shows the class mix over its
+  /24 (its /64 for IPv6) and its ASN, which answers the cold start: a verdict needs history and
+  a first request has none, but its neighbours have been seen. Nothing is fetched for it.
 
-  Nothing is stored. Sessionising one address was measured against the evidence query that
-  already runs on it — 0.10 ms against 0.42 ms at 66 visits, and 24 ms against 70 ms at 20 000 —
-  because the visit index hands the rows over already ordered. That removes the migration, the
-  backfill, and any session that could go stale when a month is re-imported from an archive. The
-  30-minute threshold and every behaviour threshold are named constants with their reasoning
-  written beside them, since each is a model decision rather than a fact.
-
-- **Reputation from Vidar's own data.** The visitor detail page now shows what has already been
-  judged next to an address: the same class mix, over the peers in its /24 (its /64 for IPv6)
-  and at its ASN. It answers the cold start — a verdict needs history and a first request has
-  none, but its neighbours have been seen. Nothing is fetched for it; `ip_intel` already held
-  every judgement, and a `net()` SQL function derives the range. Where one group holds a
-  majority it is named in words; a plurality is not, because "the largest of five groups" is
-  not a character. On a new deployment the panel is empty and says so.
-
-- **A baseline, so Vidar can say when to look.** The Overview's findings gained one that names a
-  moment rather than an address: `140 addresses probing in the last hour — 6.7× the typical 21`.
-  Deliberately not a chart — a chart is another thing to read, and every number nobody acts on
-  makes the rest harder to. Each incident also carries one line placing it against an ordinary
-  hour in the same window, including when the answer is "barely above".
-
-  It is a **median**, and the existing Tor finding was moved onto the same footing. It compared
-  today against a seven-day *mean*, which is the wrong failure mode for a spike detector: one
-  busy day raises the bar, the next spike sits under it, and the finding goes quiet exactly when
-  something is happening repeatedly. Hours and days with no traffic are counted back in as zeros,
-  or a site busy for two hours a day has two busy hours as its normal.
-
-  Silent where it would be guessing: no baseline under a fortnight of log, none on a site whose
-  median hour is empty, and an absolute floor as well as a factor, because a multiple of almost
-  nothing is not an event. The hour compared is the last complete one — the current one is still
-  filling and would always compare low.
+- **A baseline, so Vidar can say when to look.** A finding that names a moment rather than an
+  address: `140 addresses probing in the last hour — 6.7× the typical 21`. A median, not a mean
+  — one busy day raises a mean, the next spike sits under it, and a spike detector goes quiet
+  exactly when something is happening repeatedly. Silent where it would be guessing: no baseline
+  under a fortnight of log, none where the median hour is empty, and an absolute floor as well as
+  a factor.
 
 - **An interface for deciding, without deciding.** `GET /api/decisions` hands the addresses
-  matching a stated selection to whatever acts — CrowdSec, nftables, a shell script. Vidar stays
-  the brain and something else is the hand, which makes it compatible with those tools rather
-  than a competitor to them.
+  matching a stated selection to whatever acts — CrowdSec, nftables, a shell script. The
+  selection travels with the answer and every address carries its reason after a `#`, so the file
+  is machine-readable and still reviewable by a person. Vidar stays the brain and something else
+  is the hand.
 
-  The selection travels with the answer, and every address carries its reason after a `#` — the
-  convention the usual consumers already strip, so the file is machine-readable and still
-  reviewable by a person. A feed whose membership rule is invisible is a blocklist, and a
-  blocklist nobody can open is what the rest of this dashboard argues against. Nothing is ranked
-  by a score; the order is what the address did here.
-
-  Asked nothing in particular it answers for `threats/*` over the last week and says that this
-  is a recommendation. An empty selection stays empty rather than widening to everything, and a
-  capped answer says it was capped rather than quietly handing over a prefix.
-
-- **The patterns are a file now.** 157 needles across fourteen lists lived in code, so every
-  newly announced AI crawler meant a code edit, a version bump and a release for one string — and
-  an operator with a company-internal scanner had to fork. They are in
-  `src/classifier/patterns.toml`, with every comment that explained them, and `PATTERNS_PATH`
-  names a second file merged on top. The merge is additive: a pack can add a needle and cannot
-  remove one, because removing one describes a rule change and a rule change belongs in a rule.
-
-  The thresholds did not move. Each carries a measurement against a real log and is meaningless
-  apart from the rule that reads it; a data file would invite tuning one away from its
-  measurement.
-
-  `CLASSIFIER_VERSION` is now `<rules>+<pack digest>` — the digest is a fingerprint of the
-  effective pack, so editing a needle reclassifies every stored address on the next start.
-  Without it an operator file would apply to addresses seen after the restart and to nothing
-  else, and the database would hold two vintages of judgement with no way to tell them apart.
-  Comments and formatting do not affect the fingerprint; needles do.
-
-  A broken pack stops the service naming the file, the table and the value, and
-  `python -m src.preflight` reports the same without starting it. Detection that quietly falls
-  back to no patterns produces a dashboard where everything is unknown and nothing is wrong.
+- **The patterns are a file.** 157 needles across fourteen lists lived in code, so every newly
+  announced AI crawler meant a release for one string. `src/classifier/patterns.toml`, with
+  `PATTERNS_PATH` naming a second file merged additively on top — a pack can add a needle and
+  cannot remove one, because removing one describes a rule change. `CLASSIFIER_VERSION` carries
+  the pack's fingerprint, so editing a needle reclassifies every stored address on the next
+  start rather than leaving two vintages of judgement in one database.
 
 - **The boundary between a log format and Vidar's own vocabulary has a name.** `Visit` is the
-  canonical event, `LogEntry` is nginx's spelling of it, and `process_entry()` maps one onto
-  the other — the mapping already existed, it was just anonymous. A second log format is now a
-  second adapter and nothing else. Verdicts are unchanged: 9 110 addresses classified before and
-  after, zero differences.
+  canonical event, `LogEntry` is nginx's spelling of it, and `process_entry()` maps one onto the
+  other. A second log format is now a second adapter and nothing else. Verdicts unchanged: 9 110
+  addresses classified before and after, zero differences.
 
-- The cost of a classifier-version bump is measured rather than guessed: 5.8 seconds to
-  reclassify a million visits across 24 000 addresses, linear in both directions, 5.5 MB peak.
-  [architecture.md](architecture.md) carries the table and the method. The risk table used to
-  call it "one slow pass"; it is not one.
+- **`/exposure` is now `/shodan`.** That page shows what Shodan knows about the hosts that
+  visited — the *visitor's* exposure — and the name was needed for the other direction.
+  `/tools/shodan` redirects there as it always did.
+
+### Changed in 1.1.0
 
 - **The new pages look like the rest of the dashboard.** Incidents, Exposure, the sessions and
-  the neighbourhood arrived as stacks of description lists and paragraphs, which read as free
-  text beside every other surface. They are what the rest of the app is: a row of tiles, then a
-  table whose columns carry their meaning in their own headers, with a column picker where there
-  are more columns than fit. The prose that was above the tables is in the tooltips it belonged
-  in, and the bespoke green "nothing found" box gave way to the empty state every other table
-  uses.
+  the neighbourhood arrived as stacks of description lists and paragraphs. They are now what the
+  rest of the app is: a row of tiles, then a table whose columns carry their meaning in their own
+  headers. The prose above the tables moved into the tooltips it belonged in.
 
-  One defect came out of that: below 1100px a table becomes cards and the field name comes from
-  `data-label`, which three of the new tables never carried — a card was a date, three numbers
-  and two rows of badges with nothing saying which was which. The structure suite checks
-  `data-col` agreement and the layout suite measures widths a card layout does not have, so
-  neither could see it. There is a test for it now.
-
-- **`/exposure` is now `/shodan`.** The page shows what Shodan knows about the hosts that
-  visited — their open ports, tags and CVEs. That is the visitor's exposure, and the name was
-  needed for the other direction: what the site itself gave away. `/tools/shodan` redirects
-  there as it always did.
+- **A claim and the evidence behind it are one click apart**, and the layout suite runs against a
+  real database rather than a fixture that could not produce the shapes it was measuring.
 
 ### Fixed in 1.1.0
 
 - **`/exposure` returned nothing under any date range.** The query put the benign class list in
-  its SELECT and the time window in its WHERE, then bound them the other way round: the window
-  received a class name, `v.timestamp >= 'bots/ai-crawlers'` matched no row, and the page was
-  empty under every range — which is every visit to it, since the default tab is 90 days. Ten
-  tests passed throughout, all of them calling the query unbounded, the one shape the page never
-  uses.
+  its SELECT and the time window in its WHERE, then bound them the other way round:
+  `v.timestamp >= 'bots/ai-crawlers'` matched no row. Ten tests passed throughout, all of them
+  calling the query unbounded — the one shape the page never uses.
+
+- **Incidents never fired**, and behaviour was measured on what the server answered rather than
+  on what the client asked for, so a session's requests read as 404s where the behaviour reads
+  unserved paths. The session row did not add up either.
 
 - **The Overview's findings became fifty times more expensive.** The hourly baseline's
   `COUNT(DISTINCT ip)` measured 290 ms on 520 000 visits against 6 ms for every other finding
-  together, and that list sits behind the nav badge on every page. It is computed once per hour
-  now, keyed on the hour rather than given a duration, and passed in.
+  together, behind the nav badge on every page. Computed once per hour now.
 
 - **A log without a timezone silenced every finding.** The naive timestamp made the baseline
-  raise, and the caller turns any exception into an empty findings list — so one unusable
-  timestamp removed all of them and not just the one it belonged to. A single malformed
-  timestamp took `/incidents` down the same way.
+  raise and the caller turns any exception into an empty list, so one unusable timestamp removed
+  all of them. A single malformed timestamp took `/incidents` down the same way.
 
-- **Settings answered 500 on a mount it could not write to.** The archive directory is created
-  on first use, and that create sat on a *read* path: listing the archives hit a read-only
-  mount, and Settings — where the gear leads — returned an error page instead of saying what was
-  wrong. The listing now answers "none" and the page names the directory, the reason and the
-  fix, in the same words `python -m src.preflight` uses.
+- **Settings answered 500 on a mount it could not write to.** Creating the archive directory sat
+  on a *read* path, so listing archives on a read-only mount returned an error page from the one
+  place that could have explained it. It now names the directory, the reason and the fix, in the
+  same words `python -m src.preflight` uses.
 
 - **Cards showed values with no field names.** Below 1100px a table becomes cards and the label
-  comes from `data-label`, which none of the new tables carried. Neither existing suite could
-  see it; there is a test for it now, and `/exposure` and `/incidents` joined the two page lists
-  that measure table structure and column widths.
+  comes from `data-label`, which none of the new tables carried. Neither existing suite could see
+  it — the structure suite checks `data-col`, the layout suite measures widths a card layout does
+  not have. There is a test for it now.
+
+- **A design review over every page**, and the defects it found across the dashboard.
 
 ---
 

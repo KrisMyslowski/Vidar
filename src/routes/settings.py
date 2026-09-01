@@ -111,6 +111,17 @@ def _config_rows() -> list[tuple[str, list[dict]]]:
     return groups
 
 
+# Settings whose value is real but whose effect is not. RETENTION_DAYS is still
+# declared (Settings forbids unknown keys, so removing it would stop the
+# container for anyone whose .env names it) and still reports 90 — while the
+# window that is actually enforced is the rolling/lifetime mode on Storage.
+# Printed unannotated between settings that do work, it is a wrong answer to the
+# question the page exists to answer.
+_INERT_SETTINGS: dict[str, str] = {
+    "retention_days": "not in effect — the window is set on Storage & Retention",
+}
+
+
 def _config_row(name: str) -> dict:
     value = getattr(settings, name)
     if name in _SECRET_SETTINGS:
@@ -120,9 +131,16 @@ def _config_row(name: str) -> dict:
             "value": "set" if value else "not set",
             "secret": True,
             "empty": not value,
+            "note": _INERT_SETTINGS.get(name, ""),
         }
     if isinstance(value, (list, tuple, set, frozenset)):
-        shown = ", ".join(str(v) for v in sorted(value)) if value else ""
+        # Configured order, not alphabetical. Sorting made DNSBL_PROVIDERS print
+        # here in one order and on the runtime panel above in another, which
+        # reads as two different configurations; for a list that is queried in
+        # order, alphabetical is also the wrong answer. Sets have no order of
+        # their own, so those still get sorted.
+        ordered = sorted(value) if isinstance(value, (set, frozenset)) else value
+        shown = ", ".join(str(v) for v in ordered) if value else ""
     else:
         shown = "" if value is None else str(value)
     return {
@@ -131,6 +149,7 @@ def _config_row(name: str) -> dict:
         "value": shown,
         "secret": False,
         "empty": shown == "",
+        "note": _INERT_SETTINGS.get(name, ""),
     }
 
 

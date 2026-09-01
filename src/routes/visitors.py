@@ -10,11 +10,16 @@ from fastapi import APIRouter, Query, Request
 from .. import search
 from ..config import settings
 from ..queries import (
+    SEEN_BOTH,
+    SEEN_NEW,
+    SEEN_TOTAL,
+    SEEN_VALUES,
     count_visitors_grouped,
     get_activity_timeline,
     get_geo_data,
     get_hourly_heatmap,
     get_visitor_ip_counts,
+    get_visitor_timeline,
     get_visitors_grouped,
 )
 from ..taxonomy import GROUP_COLOR_VARS, SIGNAL_COLOR_VARS, SIGNAL_LABELS, VISITOR_CATEGORIES
@@ -30,7 +35,14 @@ from ..validators import (
 )
 from ._app import templates
 from ._cache import fetch
-from ._charts import ACTIVITY_SERIES, HOUR_SWITCH_DAYS, build_heatmap_grid, day_rows, pick_bucket
+from ._charts import (
+    ACTIVITY_SERIES,
+    HOUR_SWITCH_DAYS,
+    build_heatmap_grid,
+    day_rows,
+    overlay_new,
+    pick_bucket,
+)
 from ._filters import _DRILL_KINDS, _GROUP_SPECS, _build_filter_context, _normalize_filters
 from ._helpers import total_pages
 from ._range import _RANGE_KEYS, _remember_range, _remembered_range, _resolve_range
@@ -62,6 +74,7 @@ async def visitors(
     browser: str | None = None,
     q: str | None = None,
     status: str | None = None,
+    seen: str | None = None,
 ):
     """Visitors — the one visitor surface.
 
@@ -74,6 +87,9 @@ async def visitors(
     """
     group = group if group in _GROUP_SPECS else "ip"
     view = view if view in ("table", "map", "timeline") else "table"
+    # An unknown value falls back to the unfiltered state rather than to
+    # something narrower: a typo in a URL must not quietly hide rows.
+    seen = seen if seen in SEEN_VALUES else SEEN_TOTAL
     spec = _GROUP_SPECS[group]
 
     sort = valid_choice(sort, spec["sorts"], spec["default_sort"])
@@ -107,6 +123,23 @@ async def visitors(
         ip = asn = path = browser = None
         port_int = 0
     active_classes, signal_filter = _normalize_filters(active_classes, signal_filter)
+    # The row-level narrowings, as one set. The timeline and the heatmap used to
+    # take none of them while the rail still drew a pill for each — the page
+    # claimed seven narrowings it did not perform. The chip counts took none of
+    # them either, on any view: under ?asn= the table read 21 addresses and the
+    # chip above it 3 566.
+    # Not `drill`: that name is taken further down by the pill list the rail
+    # renders, and the only reason this worked was that the closure below runs
+    # before the reassignment. One name, two meanings, correct by accident.
+    drill_filters = {
+        "country": country,
+        "ip": ip,
+        "port": port_int,
+        "asn": asn,
+        "path": path,
+        "browser": browser,
+        "min_visits": min_visits_int,
+    }
 
     # Everything that survives a tab click, a sort, or a page turn.
     params = {
@@ -123,6 +156,12 @@ async def visitors(
         "browser": browser or "",
         "q": q or "",
         "status": status or "",
+        # Anything but the default. "total" is the absence of the filter and
+        # carrying it would put ?seen=total on every URL; the comparison is not
+        # the default either, and leaving it out here meant it survived no link
+        # the page builds — a range tab, a sort, a page turn or a view switch
+        # each dropped it back to All without saying so.
+        "seen": seen if seen in (SEEN_NEW, SEEN_BOTH) else "",
         # active_range, not range_key: the window may come from the cookie
         # rather than the query string, and every link this dict builds — sort,
         # pager, drill-down — has to name the window it was built under.
@@ -136,8 +175,10 @@ async def visitors(
         markers: list[dict] = []
         geo_stats: dict = {}
         activity: list[dict] = []
+        visitors_over_time: list[dict] = []
         heatmap: tuple[list[dict], dict[str, int]] = ([], {})
         total = 0
+        unmapped = 0
         if view == "map":
             markers, geo_stats = get_geo_data(
                 conn,
@@ -148,18 +189,65 @@ async def visitors(
                 date_from=date_from,
                 date_to=date_to,
                 q=q,
+                seen=seen,
             )
             total = len(markers)
+            # An empty map has two causes that look identical and are not: no
+            # traffic at all, or traffic that has no coordinates yet. get_geo_data
+            # requires lat/lon, so it cannot tell them apart — hence one count of
+            # what the same selection matches without that requirement. Only on
+            # the empty path, so the normal render pays nothing for it.
+            if not markers:
+                unmapped = count_visitors_grouped(
+                    conn,
+                    country,
+                    None,
+                    active_classes,
+                    signal_filter,
+                    min_visits_int,
+                    date_from,
+                    date_to,
+                    q=q,
+                    seen=seen,
+                )
         elif view == "timeline":
-            activity = get_activity_timeline(
-                conn,
-                since=date_from,
-                until=date_to,
-                class_filter=active_classes or None,
-                signal_filter=signal_filter or None,
-                bucket=activity_bucket,
-                q=q,
-            )
+            # Two questions over one selection: how many requests arrived, and
+            # how many addresses made them. Same filters, same buckets, so the
+            # two charts sit on one x-axis and can be read against each other.
+            def _series(fn):
+                rows = fn(
+                    conn,
+                    since=date_from,
+                    until=date_to,
+                    class_filter=active_classes or None,
+                    signal_filter=signal_filter or None,
+                    bucket=activity_bucket,
+                    q=q,
+                    seen=seen,
+                    drill=drill_filters,
+                )
+                # The comparison draws both, so the New pass runs beside the All
+                # one. `seen` is SEEN_BOTH here, which filters nothing — the two
+                # views it compares are what these two calls produce.
+                if seen != SEEN_BOTH:
+                    return rows
+                return overlay_new(
+                    rows,
+                    fn(
+                        conn,
+                        since=date_from,
+                        until=date_to,
+                        class_filter=active_classes or None,
+                        signal_filter=signal_filter or None,
+                        bucket=activity_bucket,
+                        q=q,
+                        seen=SEEN_NEW,
+                        drill=drill_filters,
+                    ),
+                )
+
+            visitors_over_time = _series(get_visitor_timeline)
+            activity = _series(get_activity_timeline)
             # The same selection, folded onto weekday × hour instead of a date
             # axis. Deliberately not cached the way the Overview cached it: the
             # key would have to carry every filter, and the point of this view is
@@ -172,7 +260,11 @@ async def visitors(
                     class_filter=active_classes or None,
                     signal_filter=signal_filter or None,
                     q=q,
-                )
+                    seen=seen,
+                    drill=drill_filters,
+                ),
+                date_from,
+                date_to,
             )
             total = sum(d["total"] for d in activity)
         elif group == "ip":
@@ -194,6 +286,7 @@ async def visitors(
                 path_filter=path,
                 browser_filter=browser,
                 q=q,
+                seen=seen,
             )
             total = count_visitors_grouped(
                 conn,
@@ -209,6 +302,7 @@ async def visitors(
                 path_filter=path,
                 browser_filter=browser,
                 q=q,
+                seen=seen,
             )
         else:
             get_fn, count_fn = spec["get"], spec["count"]
@@ -226,19 +320,34 @@ async def visitors(
                 date_from,
                 date_to,
                 q=q,
+                seen=seen,
             )
-            total = count_fn(conn, active_classes, signal_filter, date_from, date_to, q=q)
+            total = count_fn(
+                conn, active_classes, signal_filter, date_from, date_to, q=q, seen=seen
+            )
         return (
             rows,
             markers,
             geo_stats,
             activity,
+            visitors_over_time,
             heatmap,
             total,
-            get_visitor_ip_counts(conn, date_from, date_to),
+            get_visitor_ip_counts(conn, date_from, date_to, seen, signal_filter, q, drill_filters),
+            unmapped,
         )
 
-    rows, markers, geo_stats, activity, heatmap, total, visitor_counts = await fetch(_load)
+    (
+        rows,
+        markers,
+        geo_stats,
+        activity,
+        visitors_over_time,
+        heatmap,
+        total,
+        visitor_counts,
+        unmapped,
+    ) = await fetch(_load)
     heatmap_grid, heatmap_max = heatmap
 
     # Sort links and the pager carry the full filter state minus what they set.
@@ -261,6 +370,10 @@ async def visitors(
             ("signal", signal_filter),
             # Without this the chart's own hourly refetch would drop the search.
             ("q", [q] if q else []),
+            # And without this it would drop the address selection: zooming past
+            # three days refetches hourly buckets, and they came back for every
+            # address while the page still said New.
+            ("seen", [seen] if seen == SEEN_NEW else []),
         )
         for v in vals
     )
@@ -274,6 +387,7 @@ async def visitors(
             # The search is part of the selection the drawer inherits, like the
             # class/signal/date filters — the clicked row supplies the dimension.
             ("q", [q] if q else []),
+            ("seen", [seen] if seen == SEEN_NEW else []),
         )
         for v in vals
     )
@@ -346,8 +460,10 @@ async def visitors(
                 "rows": rows,
                 "visitors": rows if group == "ip" else [],
                 "markers": markers,
+                "unmapped": unmapped,
                 "geo_stats": geo_stats,
                 "activity_days": day_rows(activity),
+                "visitor_days": day_rows(visitors_over_time),
                 "activity_series": ACTIVITY_SERIES,
                 "activity_bucket": activity_bucket,
                 "hour_switch_days": HOUR_SWITCH_DAYS,
@@ -414,6 +530,81 @@ async def visitors(
                         "active": view == "timeline",
                     },
                 ],
+                # All / New over addresses, and it applies to all three views —
+                # the table, the map's markers and the timeline's buckets are
+                # the same selection drawn three ways.
+                #
+                # New needs a lower bound to be new relative to. The `all` range
+                # has none, so every address would qualify and the answer would
+                # be the same as All while claiming to be different.
+                "seen_tabs": [
+                    {
+                        "label": "All",
+                        "href": _visitors_url(params, seen="", page=""),
+                        # SEEN_BOTH filters nothing, so off the timeline it *is*
+                        # All, and All is the tab that should look pressed.
+                        "active": seen != SEEN_NEW,
+                        "tip": (
+                            "Every address in the selected range.",
+                            "First-time and returning alike — the unfiltered state.",
+                        ),
+                    },
+                    {
+                        "label": "New",
+                        "href": _visitors_url(params, seen=SEEN_NEW, page=""),
+                        "active": seen == SEEN_NEW,
+                        "disabled": not date_from,
+                        "tip": (
+                            (
+                                "Addresses whose first request falls in the selected range."
+                                if date_from
+                                else "Needs a range to be new relative to."
+                            ),
+                            (
+                                "Nothing of them exists before the range starts. An archived"
+                                " month takes its addresses with it, so one whose earlier"
+                                " visits were archived reads as new."
+                                if date_from
+                                else "Every address would qualify under All, so this says"
+                                " nothing there. Pick 24 h, 7 days, 30 days, 90 days or a"
+                                " custom window."
+                            ),
+                        ),
+                    },
+                    # The comparison draws two series, so it exists where there
+                    # is something to draw them on. A table row is in or out and
+                    # a map marker is one address; the tab sat on both of those
+                    # views doing nothing, which is the shape of control this
+                    # route has repeatedly had to remove.
+                    *(
+                        [
+                            {
+                                "label": "All + New",
+                                "href": _visitors_url(params, seen=SEEN_BOTH, page=""),
+                                "active": seen == SEEN_BOTH,
+                                "disabled": not date_from,
+                                "tip": (
+                                    (
+                                        "Both series on the charts, so the gap between"
+                                        " them shows."
+                                        if date_from
+                                        else "Needs a range to compare against."
+                                    ),
+                                    (
+                                        "That gap is the returning traffic. The count above"
+                                        " and the heatmap below answer for All — there is"
+                                        " no both for a single number or a single shade."
+                                        if date_from
+                                        else "Over the whole retention window every address"
+                                        " is new, so there are no two series to compare."
+                                    ),
+                                ),
+                            }
+                        ]
+                        if view == "timeline"
+                        else []
+                    ),
+                ],
                 # Clearing filters keeps the grouping, the view and the time window:
                 # the range tabs are their own control, always visible, and picking
                 # "7 days" is not one of the filters the pills offer to remove.
@@ -472,6 +663,7 @@ async def visitor_rows(
     date_to: str | None = None,
     q: str | None = None,
     limit: int = Query(default=25, ge=1, le=100),
+    seen: str | None = None,
 ):
     """HTML fragment: the IPs behind one aggregation row, for the slide-over.
 
@@ -483,6 +675,7 @@ async def visitor_rows(
     asn, path, browser = valid_search(asn), valid_search(path), valid_search(browser)
     date_from, date_to = valid_date(date_from), valid_date(date_to)
     q = valid_search(q)
+    seen = seen if seen in SEEN_VALUES else SEEN_TOTAL
     active_classes, signal_filter = _normalize_filters(active_classes, signal_filter)
 
     def _load(conn):
@@ -503,6 +696,7 @@ async def visitor_rows(
             path_filter=path,
             browser_filter=browser,
             q=q,
+            seen=seen,
         )
         total = count_visitors_grouped(
             conn,
@@ -517,6 +711,7 @@ async def visitor_rows(
             path_filter=path,
             browser_filter=browser,
             q=q,
+            seen=seen,
         )
         return rows, total
 

@@ -167,7 +167,7 @@ class TestDashboardViews:
         with patch("src.config.settings.db_path", dashboard_db):
             response = client.get("/visitors?view=timeline")
         assert response.status_code == 200
-        assert "Traffic Rhythm" in response.text
+        assert "Traffic rhythm" in response.text
         assert 'class="heatmap"' in response.text
         assert "data-hm-group" not in response.text, "the grid grew its own group toggle again"
 
@@ -258,6 +258,305 @@ class TestDashboardViews:
             "grp-unknown",
         ]
 
+    def _seen_fixture(self, tmp_db):
+        """One address that was here before the window, one that arrived in it."""
+        with get_conn(tmp_db) as conn:
+            for ip, stamps in (
+                ("203.0.113.60", ("2026-06-01T10:00:00+00:00", "2026-08-20T10:00:00+00:00")),
+                ("203.0.113.61", ("2026-08-21T10:00:00+00:00",)),
+            ):
+                upsert_ip_intel(conn, {"ip": ip})
+                set_visitor_class(conn, ip, "bots/generic-bots")
+                for ts in stamps:
+                    insert_visit(conn, ip=ip, timestamp=ts, method="GET", path="/", status=200)
+            conn.commit()
+
+    def test_new_selects_only_addresses_first_seen_in_the_window(self, client, tmp_db):
+        """Returning is the whole distinction — an address with anything before
+        the window's start is not new in it, however busy it is inside."""
+        self._seen_fixture(tmp_db)
+        window = "date_from=2026-08-19&date_to=2026-08-22&range=custom"
+        with patch("src.config.settings.db_path", tmp_db):
+            every = client.get(f"/visitors?{window}").text
+            new = client.get(f"/visitors?{window}&seen=new").text
+        assert "203.0.113.60" in every and "203.0.113.61" in every
+        assert "203.0.113.61" in new
+        assert "203.0.113.60" not in new
+
+    def test_new_is_disabled_without_a_lower_bound(self, client, tmp_db):
+        """Over the whole retention window every address qualifies, so the tab
+        would say something different and mean the same thing."""
+        with patch("src.config.settings.db_path", tmp_db):
+            everything = client.get("/visitors?range=all").text
+            windowed = client.get("/visitors?range=30d").text
+        assert "tab--disabled" in everything
+        assert "tab--disabled" not in windowed
+
+    def test_the_selection_survives_a_view_change(self, client, tmp_db):
+        """It narrows the map's markers and the timeline's buckets too, so the
+        view tabs have to carry it or switching silently widens the answer."""
+        with patch("src.config.settings.db_path", tmp_db):
+            text = unescape(client.get("/visitors?range=30d&seen=new").text)
+        for view in ("view=map", "view=timeline"):
+            assert f"{view}&seen=new" in text, view
+
+    def test_the_comparison_draws_both_series_and_agrees_with_each(self, client, dashboard_db):
+        """All + New is a comparison, and it has to match the two views it
+        compares — a third way of counting the same thing is free to drift from
+        both. Every figure comes from the same query the single views use."""
+
+        def payloads(seen):
+            text = client.get(f"/visitors?view=timeline&range=90d&seen={seen}").text
+            return [
+                json.loads(b)
+                for b in re.findall(
+                    r'<script type="application/json">\s*(\{.*?\})\s*</script>', text, re.S
+                )
+                if '"rows"' in b
+            ]
+
+        with patch("src.config.settings.db_path", dashboard_db):
+            every, fresh, both = payloads("total"), payloads("new"), payloads("both")
+
+        for i, chart in enumerate(("visits", "addresses")):
+            rows = both[i]["rows"]
+            assert rows, chart
+            # The All half is what All shows.
+            assert [r["total"] for r in rows] == [r["total"] for r in every[i]["rows"]], chart
+            # The New half is what New shows.
+            by_day = {r["day"]: r["total"] for r in fresh[i]["rows"]}
+            assert [r["total_new"] for r in rows] == [by_day[r["day"]] for r in rows], chart
+            # Every group carries its own half too, and New never exceeds All.
+            for r in rows:
+                for g in ("humans", "bots", "automated", "threats", "unknown"):
+                    assert r[f"{g}_new"] <= r[g], (chart, r["day"], g)
+
+        # And the single views stay single-series, so nothing draws a comparison
+        # nobody asked for.
+        assert "total_new" not in every[0]["rows"][0]
+        assert "total_new" not in fresh[0]["rows"][0]
+
+    def test_the_comparison_only_exists_where_it_can_be_drawn(self, client, dashboard_db):
+        """It draws two series, so it belongs where there is something to draw
+        them on. A table row is in or out and a map marker is one address; the
+        tab sat on both of those views doing nothing at all."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            pages = {
+                v: client.get(f"/visitors?range=90d&view={v}").text
+                for v in ("table", "map", "timeline")
+            }
+        for view, text in pages.items():
+            strip = re.search(
+                r'tab-row-label">Addresses</span>\s*<div class="tab-group">(.*?)</div>',
+                text,
+                re.S,
+            )
+            assert strip, view
+            has_it = "All + New" in strip.group(1)
+            assert has_it == (view == "timeline"), view
+
+    def test_the_comparison_survives_the_links_the_page_builds(self, client, dashboard_db):
+        """A state that every range tab, sort and view switch drops is a state
+        nobody can hold. Only `new` was carried, from when there were two."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            text = unescape(client.get("/visitors?view=timeline&range=90d&seen=both").text)
+        for strip in ("View", "Addresses"):
+            block = re.search(
+                rf'tab-row-label">{strip}</span>\s*<div class="tab-group">(.*?)</div>',
+                text,
+                re.S,
+            )
+            assert block, strip
+        # Every view tab keeps it, so leaving the timeline and coming back does.
+        views = re.search(
+            r'tab-row-label">View</span>\s*<div class="tab-group">(.*?)</div>', text, re.S
+        )
+        hrefs = re.findall(r'href="([^"]+)"', views.group(1))
+        assert hrefs and all("seen=both" in h for h in hrefs), hrefs
+
+    def test_the_comparison_narrows_nothing(self, client, dashboard_db):
+        """It is not a filter. The table, the map, the counts and the heatmap
+        answer for All under it — there is no both for a single row or a single
+        number — and the control says so rather than leaving it to be found."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            every = client.get("/visitors?view=timeline&range=90d").text
+            both = client.get("/visitors?view=timeline&range=90d&seen=both").text
+
+        def head(html):
+            return re.search(r'page-header-count">([\d,]+)', html).group(1)
+
+        def chip(html):
+            return re.search(
+                r"filter-toggle--all.*?<strong[^>]*>([\d,]+)</strong>", html, re.S
+            ).group(1)
+
+        assert head(both) == head(every)
+        assert chip(both) == chip(every)
+        assert "answer for All" in unescape(both)
+
+    def test_the_timeline_carries_both_questions(self, client, dashboard_db):
+        """Requests and the addresses that made them are two questions, and one
+        number answers neither: six thousand requests from three addresses is a
+        scanner, three thousand addresses making two each is a crawl."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            text = client.get("/visitors?view=timeline&range=all").text
+        blobs = re.findall(r'<script type="application/json">\s*(\{.*?\})\s*</script>', text, re.S)
+        payloads = [json.loads(b) for b in blobs if '"rows"' in b]
+        assert [p["unit"] for p in payloads] == ["visits", "addresses"]
+        assert ">Activity<" in text and ">Addresses<" in text
+        # One x-axis: same buckets, in the same order, so the two read against
+        # each other rather than each on its own timeline.
+        assert [r["day"] for r in payloads[0]["rows"]] == [r["day"] for r in payloads[1]["rows"]]
+        # Addresses can never exceed requests in a bucket — one address makes at
+        # least one request.
+        for a, b in zip(payloads[0]["rows"], payloads[1]["rows"], strict=True):
+            assert b["total"] <= a["total"], (a, b)
+
+    def test_the_chip_counts_follow_the_address_selection(self, client, tmp_db):
+        """A count beside a filter has to be the count that filter produces.
+
+        The chips exist so a selection that would return nothing is visible as
+        such before it is clicked. Under New they went on reporting every
+        address: the header said 6 483 visits while All still read 723.
+        """
+        self._seen_fixture(tmp_db)
+        window = "date_from=2026-08-19&date_to=2026-08-22&range=custom"
+        with get_conn(tmp_db) as conn:
+            every = get_visitor_ip_counts(conn, "2026-08-19", "2026-08-22")
+            new = get_visitor_ip_counts(conn, "2026-08-19", "2026-08-22", "new")
+        # The fixture puts one returning address and one new one in the window.
+        assert every["all"] == 2 and new["all"] == 1
+        assert every["bots"] == 2 and new["bots"] == 1
+
+        # And the chip agrees with the table it sits above, in both states.
+        with patch("src.config.settings.db_path", tmp_db):
+            for seen, expected in (("", 2), ("&seen=new", 1)):
+                text = unescape(client.get(f"/visitors?{window}{seen}").text)
+                chip = re.search(
+                    r"filter-toggle--all.*?<strong[^>]*>([\d,]+)</strong>", text, re.S
+                )
+                assert chip and chip.group(1) == str(expected), (seen, chip and chip.group(1))
+                assert f"{expected} IPs" in text
+
+    def test_the_timeline_applies_every_filter_it_shows(self, client, tmp_db):
+        """The rail drew a pill for each drill-down and the charts took none.
+
+        Seven filters — network, country, path, client, address, port, minimum
+        visits — rendered as active while the header and both charts answered
+        for everything. The rule is written twice elsewhere in this route: the
+        UI must not claim a narrowing it does not perform.
+        """
+        with get_conn(tmp_db) as conn:
+            for ip, asn, country in (
+                ("203.0.113.80", "AS1 One", "DE"),
+                ("203.0.113.81", "AS2 Two", "FR"),
+            ):
+                upsert_ip_intel(conn, {"ip": ip, "asn": asn, "country_code": country})
+                set_visitor_class(conn, ip, "bots/generic-bots")
+                for _ in range(3):
+                    insert_visit(
+                        conn,
+                        ip=ip,
+                        timestamp="2026-08-20T10:00:00+00:00",
+                        method="GET",
+                        path="/only" if asn == "AS1 One" else "/other",
+                        status=200,
+                    )
+            conn.commit()
+
+        window = "view=timeline&date_from=2026-08-19&date_to=2026-08-21&range=custom"
+
+        def totals(extra=""):
+            text = client.get(f"/visitors?{window}{extra}").text
+            payloads = [
+                json.loads(b)
+                for b in re.findall(
+                    r'<script type="application/json">\s*(\{.*?\})\s*</script>', text, re.S
+                )
+                if '"rows"' in b
+            ]
+            head = re.search(r'page-header-count">([\d,]+)', text)
+            return (
+                int(head.group(1).replace(",", "")) if head else 0,
+                sum(r["total"] for r in payloads[0]["rows"]) if payloads else 0,
+            )
+
+        with patch("src.config.settings.db_path", tmp_db):
+            assert totals() == (6, 6)
+            # Each of these halves the page, and the charts have to follow.
+            for narrowing in ("&asn=AS1+One", "&country=DE", "&path=/only", "&ip=203.0.113.80"):
+                assert totals(narrowing) == (3, 3), narrowing
+            # And one that excludes everything.
+            assert totals("&min_visits=99") == (0, 0)
+
+    def test_the_chip_counts_follow_the_signal_and_the_search(self, client, tmp_db):
+        """The same rule as the address selection, two filters further along.
+
+        Under `signal=is_tor` the page showed seven addresses on the reference
+        month while the chips went on claiming 3 566. Every filter the page has
+        reaches these except the class selection, which is the one they set —
+        narrowing them by that would leave each chip showing only itself.
+        """
+        with get_conn(tmp_db) as conn:
+            for ip, hosting in (("203.0.113.70", 1), ("203.0.113.71", 0)):
+                upsert_ip_intel(conn, {"ip": ip, "is_hosting": hosting, "country_code": "DE"})
+                set_visitor_class(conn, ip, "bots/generic-bots")
+                insert_visit(
+                    conn,
+                    ip=ip,
+                    timestamp="2026-08-20T10:00:00+00:00",
+                    method="GET",
+                    path="/",
+                    status=200,
+                )
+            conn.commit()
+
+        with get_conn(tmp_db) as conn:
+            every = get_visitor_ip_counts(conn, "2026-08-19", "2026-08-21")
+            hosting = get_visitor_ip_counts(
+                conn, "2026-08-19", "2026-08-21", signal_filter=["is_hosting"]
+            )
+            searched = get_visitor_ip_counts(conn, "2026-08-19", "2026-08-21", q="country:DE")
+            elsewhere = get_visitor_ip_counts(conn, "2026-08-19", "2026-08-21", q="country:FR")
+        assert every["all"] == 2 and every["bots"] == 2
+        assert hosting["all"] == 1 and hosting["bots"] == 1
+        assert searched["all"] == 2
+        assert elsewhere.get("all", 0) == 0
+
+        # And the rendered chip agrees with the table it sits above.
+        window = "date_from=2026-08-19&date_to=2026-08-21&range=custom"
+        with patch("src.config.settings.db_path", tmp_db):
+            text = unescape(client.get(f"/visitors?{window}&signal=is_hosting").text)
+        chip = re.search(r"filter-toggle--all.*?<strong[^>]*>([\d,]+)</strong>", text, re.S)
+        assert chip and chip.group(1) == "1", chip and chip.group(1)
+        assert "1 IPs" in text
+
+    def test_the_chart_and_the_drawer_inherit_the_address_selection(self, client, dashboard_db):
+        """Both fetch on their own — the chart refetches hourly buckets, the
+        drawer fetches the IPs behind a row — and either one dropping `seen`
+        would answer for every address while the page said New."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            # The chart lives on the timeline view, the drawer on an aggregation.
+            timeline = unescape(client.get("/visitors?view=timeline&seen=new&range=all").text)
+            grouped = unescape(client.get("/visitors?group=asn&seen=new&range=90d").text)
+        chart = re.search(r'class="timeline"[^>]*data-params="([^"]*)"', timeline)
+        assert chart, "no activity chart on the timeline view"
+        assert "seen=new" in chart.group(1), "the chart drops it"
+        drawer = re.search(r'data-drawer-src="(/visitors/rows\?[^"]*)"', grouped)
+        assert drawer, "no drawer link on the grouped view"
+        assert "seen=new" in drawer.group(1), "the drawer drops it"
+
+    def test_the_map_ships_the_size_of_the_whole_selection(self, client, dashboard_db):
+        """The header counts the viewport. Zoomed in, nothing said what fraction
+        of the selection that was — the denominator was computed on every render
+        and handed to the template, which never rendered it."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            text = client.get("/visitors?view=map&range=all").text
+        total = re.search(r'id="map" data-total="(\d+)"', text)
+        assert total and int(total.group(1)) > 0
+        # It is the count the header starts at, before any zoom moves it.
+        assert f">{int(total.group(1)):,} IPs in viewport<" in text
+
     def test_map_view_has_selection_sidebar(self, client, dashboard_db):
         """The map view ships the viewport-driven selection panel, the country
         list, and the Cluster/Heat switch — map.js fills them from the markers."""
@@ -268,6 +567,33 @@ class TestDashboardViews:
         assert 'id="sel-threats"' in text and 'id="sel-mix"' in text
         assert 'id="sel-countries-list"' in text
         assert 'data-map-mode="cluster"' in text and 'data-map-mode="heat"' in text
+
+    def test_empty_map_says_whether_it_is_traffic_or_coordinates_missing(self, client, tmp_db):
+        """Visits with no geolocation are not an absence of visitors."""
+        with get_conn(tmp_db) as conn:
+            conn.execute(
+                "INSERT INTO visits (ip, timestamp, method, path, status, "
+                "user_agent, bytes_sent) VALUES (?, ?, 'GET', '/', 200, 'x', 10)",
+                ("203.0.113.7", datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+        with patch("src.config.settings.db_path", tmp_db):
+            text = client.get("/visitors?view=map").text
+        assert "none of them with coordinates yet" in text
+        assert "No mapped IPs recorded yet" not in text
+
+    def test_empty_map_with_no_traffic_at_all_says_so(self, client, tmp_db):
+        """And an empty window still reads as an empty window.
+
+        Two shapes of it: no window at all says "recorded yet", a window says
+        it is the window — the range is an exclusion even though it is not one
+        of the filter chips.
+        """
+        with patch("src.config.settings.db_path", tmp_db):
+            everything = client.get("/visitors?view=map&range=all").text
+            windowed = client.get("/visitors?view=map&range=24h").text
+        assert "No mapped IPs recorded yet" in everything
+        assert "No mapped IPs in the selected range" in windowed
 
     def test_analysis_cards_offer_a_table_view(self, client, dashboard_db):
         """Every distribution card can be read as plain numbers ("Table ⇄")."""
@@ -467,12 +793,23 @@ class TestDashboardViews:
         assert "3 rate-limited" in rate["text"]
 
     def test_empty_state_only_blames_a_filter_when_there_is_one(self, client, tmp_db):
-        """With nothing filtered, nothing was excluded — say so plainly."""
-        plain = client.get("/visitors?group=asn").text
+        """With nothing filtered, nothing was excluded — say so plainly.
+
+        Scoped to the empty-state block rather than the whole page: "the
+        selected range" is ordinary wording elsewhere on it, and asserting
+        against the full HTML made this fail on a tooltip.
+        """
+
+        def empty_state(html):
+            m = re.search(r'<div class="empty-state">.*?</div>\s*</div>', html, re.S)
+            assert m, "no empty state on the page"
+            return m.group(0)
+
+        plain = empty_state(client.get("/visitors?group=asn").text)
         assert "No networks recorded yet." in plain
         assert "in the selected range" not in plain
 
-        filtered = client.get("/visitors?group=asn&class=threats").text
+        filtered = empty_state(client.get("/visitors?group=asn&class=threats").text)
         assert "No network matches" in filtered
         assert "in the selected range" in filtered
 
@@ -748,6 +1085,19 @@ class TestSettings:
         assert resp.headers["location"] == "/settings/status"
         assert client.get("/settings/status", follow_redirects=False).status_code == 200
 
+    def test_list_settings_print_in_configured_order(self, client, tmp_db):
+        """Sorting them made DNSBL_PROVIDERS disagree with the panel above it."""
+        with patch("src.config.settings.dnsbl_providers", ["zen.spamhaus.org", "bl.spamcop.net"]):
+            text = client.get("/settings/status").text
+        assert "zen.spamhaus.org, bl.spamcop.net" in text
+        assert "bl.spamcop.net, zen.spamhaus.org" not in text
+
+    def test_a_setting_that_does_nothing_says_so(self, client, tmp_db):
+        """RETENTION_DAYS still reports 90 and enforces nothing."""
+        text = client.get("/settings/status").text
+        assert "RETENTION_DAYS" in text
+        assert "not in effect" in text
+
     def test_exports_still_lands_on_storage(self, client, tmp_db):
         """Exports folded into Storage, and that redirect did not move."""
         resp = client.get("/settings/exports", follow_redirects=False)
@@ -781,7 +1131,12 @@ class TestSettings:
             assert endpoint in text, endpoint
 
     def test_gear_reaches_settings_from_a_dashboard_page(self, client, tmp_db):
-        assert 'href="/settings/storage"' in client.get("/").text
+        # Followed rather than string-matched. Pinning the exact href let the
+        # gear point at /settings/storage — a working link, three pages past the
+        # landing page — without the test noticing.
+        href = re.search(r'class="sidebar-settings[^"]*"\s+href="([^"]+)"', client.get("/").text)
+        assert href, "no settings gear in the sidebar"
+        assert client.get(href.group(1), follow_redirects=True).status_code == 200
 
 
 class TestStorageSettings:

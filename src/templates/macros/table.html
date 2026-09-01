@@ -49,7 +49,7 @@
   <td data-col="port" data-label="Port" class="cell-mono" title="{{ v.ports or '' }}">{{ (v.ports or '—') | replace(',', ', ') }}</td>
   <td data-col="browser" data-label="Browser" class="cell-mono" title="{{ v.browsers or '' }}">{{ (v.browsers or '—') | replace(',', ', ') }}</td>
   <td data-col="os" data-label="OS" class="cell-mono" title="{{ v.oses or '' }}">{{ (v.oses or '—') | replace(',', ', ') }}</td>
-  <td data-label="Last Seen" class="nowrap">{{ v.last_seen | fmtdate }}</td>
+  <td data-label="Last seen" class="nowrap">{{ v.last_seen | fmtdate }}</td>
 </tr>
 {%- endmacro -%}
 
@@ -66,14 +66,18 @@
 {#
   pagination — prev/next page controls.
   extra_params: the query string tail after ?page=N (e.g. "&sort=last_seen&order=DESC&country=&ip=").
+  base: URL the links point at. Empty means "this page", which is what every
+  page wants. A drawer fragment passes its own route, because a bare "?page=2"
+  inside the panel resolves against the page behind it and navigates away from
+  the very panel it was meant to move.
   Only renders when there are multiple pages.
 #}
-{%- macro pagination(page, total_pages, extra_params='') -%}
+{%- macro pagination(page, total_pages, extra_params='', base='') -%}
 {% if total_pages > 1 or page > 1 %}
 <div class="pagination">
-  {% if page > 1 %}<a href="?page={{ page - 1 }}{{ extra_params }}">&laquo; Prev</a>{% endif %}
+  {% if page > 1 %}<a href="{{ base }}?page={{ page - 1 }}{{ extra_params }}">&laquo; Prev</a>{% endif %}
   <span>Page {{ page }} / {{ total_pages }}</span>
-  {% if page < total_pages %}<a href="?page={{ page + 1 }}{{ extra_params }}">Next &raquo;</a>{% endif %}
+  {% if page < total_pages %}<a href="{{ base }}?page={{ page + 1 }}{{ extra_params }}">Next &raquo;</a>{% endif %}
 </div>
 {% endif %}
 {%- endmacro -%}
@@ -87,10 +91,16 @@
   (Tooltip placement is tooltip.js's job — it clamps the overlay to the
   viewport, so a header needs no alignment hint of its own.)
   col_key: emits data-col so column_picker/columns.js can hide this column.
+  base: URL the link points at — see pagination above. Empty means "this page".
+  pfx: prefix for the sort/order parameter names, so a second table on the same
+  URL can be sorted without moving the first. A prefixed table is by definition
+  not the one that owns "page", so it leaves the page number alone; the
+  unprefixed table resets to page 1, because a sort that keeps you on page 7 of
+  an order you just replaced lands nowhere in particular.
 #}
-{%- macro sortable_th(col, label, tip, sort, order, suffix_params='', default_order='DESC', col_key='', w='') -%}
+{%- macro sortable_th(col, label, tip, sort, order, suffix_params='', default_order='DESC', col_key='', w='', base='', pfx='') -%}
 {% if sort == col %}{% if order == 'ASC' %}{% set next_order = 'DESC' %}{% else %}{% set next_order = 'ASC' %}{% endif %}{% else %}{% set next_order = default_order %}{% endif %}
-<th{% if col_key %} data-col="{{ col_key }}"{% endif %} class="{{ w }}{% if sort == col and order == 'ASC' %} sort-asc{% elif sort == col and order == 'DESC' %} sort-desc{% endif %}"><a{% if tip %} class="label-help"{% endif %}{{ tip_attrs(tip) }} href="?page=1&sort={{ col }}&order={{ next_order }}{{ suffix_params }}">{{ label }}</a></th>
+<th{% if col_key %} data-col="{{ col_key }}"{% endif %} class="{{ w }}{% if sort == col and order == 'ASC' %} sort-asc{% elif sort == col and order == 'DESC' %} sort-desc{% endif %}"><a{% if tip %} class="label-help"{% endif %}{{ tip_attrs(tip) }} href="{{ base }}?{% if not pfx %}page=1&{% endif %}{{ pfx }}sort={{ col }}&{{ pfx }}order={{ next_order }}{{ suffix_params }}">{{ label }}</a></th>
 {%- endmacro -%}
 
 

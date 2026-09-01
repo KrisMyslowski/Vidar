@@ -60,4 +60,38 @@ describe('drawer.js — the slide-over behind an aggregation row', () => {
     click(document.getElementById('plain'));
     await vi.waitFor(() => expect(panel().textContent).toContain('Could not load'));
   });
+
+  // A fragment that sorts and pages itself (/incidents/case) links back at its
+  // own route. Those links must move the panel; every other link in there is a
+  // real one and must still leave the page.
+  describe('a fragment that sorts and pages itself', () => {
+    const openOn = async (src, body) => {
+      document.body.innerHTML = `<table><tbody><tr data-drawer-src="${src}"><td id="cell">x</td></tr></tbody></table>`;
+      stubFetch(body);
+      click(document.getElementById('cell'));
+      await vi.waitFor(() => expect(panel().innerHTML).toContain('id="sort"'));
+    };
+    const fragment =
+      '<a id="sort" href="/incidents/case?page=2&sort=path&sig=abc">Path</a>' +
+      '<a id="address" href="/visitors/203.0.113.1">203.0.113.1</a>';
+
+    it('re-fetches a link back to its own route instead of navigating', async () => {
+      await openOn('/incidents/case?sig=abc', fragment);
+      const fetchMock = stubFetch('<a id="sort" href="#">sorted</a>');
+      click(document.getElementById('sort'));
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/incidents/case?page=2&sort=path'),
+        expect.anything(),
+      );
+      await vi.waitFor(() => expect(panel().textContent).toContain('sorted'));
+      expect(panel().classList.contains('open')).toBe(true);
+    });
+
+    it('leaves a link that points somewhere else alone', async () => {
+      await openOn('/incidents/case?sig=abc', fragment);
+      const fetchMock = stubFetch();
+      click(document.getElementById('address'));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
 });

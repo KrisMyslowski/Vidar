@@ -1,0 +1,161 @@
+{#
+  _exposure_finding.html — one finding, in the slide-over.
+
+  Two halves, stacked and not side by side. `.grid-2` breaks at 900px of
+  *viewport*, not of container, so inside a 736px drawer on a wide screen it
+  would stay two columns of ~344px and both halves would overflow. The incident
+  panel solves the same problem the same way: section labels, one under the
+  other.
+
+  General info first, ordered from "must I act" down to "who was it". The
+  verdict is the only line that decides whether the reader does anything today,
+  so it is the first thing in the panel rather than a conclusion at the end.
+#}
+{% from '_macros.html' import kv_table, kv_row, tip_attrs %}
+
+{%- if not finding %}
+<div class="drawer-head">
+  <div><span class="drawer-title">Finding</span></div>
+  <div class="drawer-head-actions">
+    <button type="button" class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+</div>
+<p class="text-muted">This path is not a finding in the selected range any more.</p>
+{%- else %}
+{% set served = detail.refused.hits == 0 or (detail.last_seen or '') > (detail.refused.last or '') %}
+<div class="drawer-head">
+  <div>
+    <span class="drawer-title">Finding</span>
+    <code class="drawer-value">{{ finding.path }}</code>
+    {% if served %}<span class="badge badge-red">still served</span>
+    {%- else %}<span class="badge badge-muted">no longer served</span>{% endif %}
+  </div>
+  <div class="drawer-head-actions">
+    <span class="table-block-count">{{ detail.ips | fmtnum }} address{{ '' if detail.ips == 1 else 'es' }} ·
+      {{ detail.hits | fmtnum }} request{{ '' if detail.hits == 1 else 's' }}</span>
+    <button type="button" class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+</div>
+
+<p class="section-label">Detail</p>
+{% call kv_table() %}
+  {#- First, because it is the only row that decides whether there is anything
+      to do today. Asked without a window: whether the file is still on disk is
+      not a property of the range the reader happened to pick. -#}
+  {% call kv_row('Still served', ('Whether the server still hands it out.',
+      'A 404 after the last successful fetch means it is gone. Asked over the whole
+       database, not the selected range — the file is on disk or it is not.')) %}
+    {%- if served %}Yes — {{ detail.hits | fmtnum }} successful
+      {{ 'fetch' if detail.hits == 1 else 'fetches' }}, and it has never answered 404.
+    {%- else %}No — last refused {{ detail.refused.last | fmtdate }}.{% endif %}
+  {% endcall %}
+
+  {% call kv_row('What the server answered', ('Status and port, over these requests.',
+      'A 301 on port 80 is the HTTP to HTTPS redirect and is never counted as a
+       finding — it is shown here so its absence from the counts is visible.')) %}
+    {%- for a in detail.answers %}
+    <span class="badge badge-muted">{{ a.status }} × {{ a.hits | fmtnum }} · port {{ a.port }}</span>
+    {%- endfor %}
+  {% endcall %}
+
+  {% call kv_row('Size', ('Bytes of the response body.',
+      'A size that never varies is a static file; one that moves is generated.')) %}
+    {%- set a = detail.answers[0] if detail.answers else none %}
+    {%- if a and a.min_bytes == a.max_bytes %}{{ a.max_bytes | fmtbytes }}, identical every time
+    {%- elif a %}{{ a.min_bytes | fmtbytes }} – {{ a.max_bytes | fmtbytes }}, it varies
+    {%- else %}<span class="text-muted">—</span>{% endif %}
+  {% endcall %}
+
+  {% call kv_row('When', ('First and last successful fetch in the selected range.',
+      'The span between them is how long it has been reachable, as far as this window sees.')) %}
+    {{ detail.first_seen | fmtdate }} → {{ detail.last_seen | fmtdate }}
+  {% endcall %}
+
+  {#- The ratio is the character of the finding, and neither number alone says
+      it: one request per address is a wordlist being walked, many from few is
+      somebody who found something and came back. -#}
+  {% call kv_row('How often, by how many', ('Requests against distinct addresses.',
+      'One request each is a scan sweeping a list. Many from few is a return visit.')) %}
+    {{ detail.hits | fmtnum }} from {{ detail.ips | fmtnum }}
+    {%- if detail.ips %} — {{ (detail.hits / detail.ips) | round(1) }} each{% endif %}
+  {% endcall %}
+
+  {% call kv_row('Who fetched it', ('The identity classes behind those addresses.',
+      'Two benign addresses take a path off this list. That threshold is what makes
+       this a finding rather than a page.')) %}
+    {%- for c in detail.classes %}
+    <span class="badge badge-muted">{{ c.visitor_class }} × {{ c.ips }}</span>
+    {%- endfor %}
+    <div class="text-muted">{{ finding.benign_ips }} of the 2 benign addresses that would
+      take this off the list</div>
+  {% endcall %}
+
+  {% call kv_row('Where from', ('Networks and countries, and what is known about them.',
+      'From ip-api and the blocklist lookups — not from these requests.')) %}
+    {%- for o in detail.origins %}
+    <span class="badge badge-muted">{{ o.asn or '—' }}{% if o.country_code %} · {{ o.country_code }}{% endif %} × {{ o.ips }}</span>
+    {%- endfor %}
+    {%- set s = detail.signals %}
+    {%- if s.hosting or s.proxy or s.tor or s.dnsbl %}
+    <div class="text-muted">
+      {%- if s.hosting %}{{ s.hosting }} hosting{% endif %}
+      {%- if s.proxy %}{{ ', ' if s.hosting }}{{ s.proxy }} proxy{% endif %}
+      {%- if s.tor %}{{ ', ' if s.hosting or s.proxy }}{{ s.tor }} Tor{% endif %}
+      {%- if s.dnsbl %}{{ ', ' if s.hosting or s.proxy or s.tor }}{{ s.dnsbl }} blocklisted{% endif %}
+    </div>
+    {%- endif %}
+  {% endcall %}
+
+  {% if finding.spellings | length > 1 %}
+  {% call kv_row('Spellings', ('Every way this one resource was asked for.',
+      'They fold together because they reach the same file. The table shows the
+       canonical one and abbreviates the rest.')) %}
+    {%- for s in finding.spellings %}<code>{{ s }}</code>{{ ', ' if not loop.last }}{% endfor %}
+  {% endcall %}
+  {% endif %}
+
+  {% call kv_row('Clients', ('The user agents that asked, and the method.',
+      'A client sets this freely. A forged browser string beside an honest curl is
+       the plainest evidence on this panel that it was automated.')) %}
+    {%- for c in detail.clients %}
+    <div><span class="text-muted">{{ c.hits }} × {{ c.method }}</span>
+      <code>{{ c.user_agent or 'no User-Agent' }}</code></div>
+    {%- endfor %}
+  {% endcall %}
+
+  {#- Last, and one line: it reframes the finding from "nine people wanted this
+      file" to "nine scanners walked a list and this was one entry". The list
+      itself belongs on /visitors, which filters and pages it properly. -#}
+  {% call kv_row('What else they asked for', ('Everything else those addresses requested here.',
+      'Counted over the whole database. A finding is usually one entry in a list
+       being walked, not a thing somebody came for.')) %}
+    {{ detail.context.paths | fmtnum }} other path{{ '' if detail.context.paths == 1 else 's' }},
+    {{ detail.context.hits | fmtnum }} request{{ '' if detail.context.hits == 1 else 's' }}
+  {% endcall %}
+{% endcall %}
+
+<p class="section-label">What this is</p>
+{% if family %}
+{% call kv_table('family-table') %}
+  {% call kv_row('What it is') %}{{ family.family.what | inline_code }}{% endcall %}
+  {% call kv_row('Why it was asked for') %}{{ family.family.why | inline_code }}{% endcall %}
+  {% call kv_row('Check it yourself') %}
+    {%- for check in family.checks %}<pre class="code-block"><code>{{ check }}</code></pre>{% endfor %}
+  {% endcall %}
+  {% call kv_row('How to stop serving it') %}{{ family.family.fix | inline_code }}{% endcall %}
+  {% for server, snippet in family.family.config %}
+  {% call kv_row(server) %}<pre class="code-block"><code>{{ snippet }}</code></pre>{% endcall %}
+  {% endfor %}
+{% endcall %}
+{% else %}
+{#- No description, on purpose. A sentence broad enough to cover any file says
+    nothing about this one, and once it appears under every unrecognised finding
+    the reader learns to skip it — and then skips the real ones too. The command
+    is still worth having: it needs to know nothing about the file. -#}
+{% call kv_table('family-table') %}
+  {% call kv_row('Not in the registry') %}The registry covers the accidents that recur, not
+    every file anybody might leave in a web root.{% endcall %}
+  {% call kv_row('Go and look') %}<pre class="code-block"><code>{{ generic_check }}</code></pre>{% endcall %}
+{% endcall %}
+{% endif %}
+{%- endif %}

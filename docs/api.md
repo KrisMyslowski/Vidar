@@ -64,9 +64,19 @@ enough that the chart wants hours.
 | `class` | — | Repeatable. Identity class or group prefix; unknown values dropped |
 | `signal` | — | Repeatable. `is_tor`, `is_proxy`, `is_hosting`, `dnsbl_listed`, `has_tags`, `clean` |
 | `q` | — | Free-text search, same grammar as the dashboard ([data-reference.md §4.4](data-reference.md#44-free-text-search-q)) |
+| `seen` | `total` | `new` restricts to addresses whose first request falls inside the window; anything else falls back to `total` |
+| `metric` | `visits` | `addresses` counts the distinct addresses per bucket instead of the requests they made; anything else falls back to `visits` |
 
-Returns `{"bucket": "...", "rows": [...]}`. The filters match `/visitors?view=timeline`
-exactly, so the chart and the page always describe one selection.
+Returns `{"bucket": "...", "metric": "...", "rows": [...]}`. `metric` is the one
+that was answered with, not the one that was asked for — an unknown value comes
+back as `visits`, because a column of request counts labelled `addresses` is
+worse than a rejected parameter.
+
+**Address counts do not sum across buckets.** An address that visits on two days
+is counted in both. Buckets with no traffic come back as explicit
+zeros, so the series is continuous in time and a caller can plot it against a linear axis
+without reconstructing the gaps. The filters match `/visitors?view=timeline` exactly, so
+the chart and the page always describe one selection.
 
 ---
 

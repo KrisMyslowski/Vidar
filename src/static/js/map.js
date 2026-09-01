@@ -291,7 +291,11 @@ function countryRowsHtml(byCountry, gradient) {
   const top = Object.entries(byCountry).sort((a, b) => b[1].ips - a[1].ips).slice(0, 12);
   const peak = top.length ? top[0][1].ips : 0;
   return top.map(([cc, c]) =>
-    `<a class="facet-row" href="#" data-country="${esc(cc)}" title="Zoom to ${esc(cc)} and filter by it">` +
+    // The styled tooltip, like the viewport pill below — a native title= here
+    // drew the browser's own delayed box beside it saying the same thing.
+    `<a class="facet-row" href="#" data-country="${esc(cc)}" ` +
+    `data-tip-what="Zoom to ${esc(cc)} and filter by it." ` +
+    `data-tip-source="The map fits this country's markers and the country filter is set.">` +
     `<span class="facet-label">${esc(cc)}</span>` +
     `<span class="facet-bar"><span class="facet-bar-fill" style="width:${peak ? (c.ips / peak * 100).toFixed(1) : 0}%;` +
     `background:${gradient(c.groups, c.ips)}"></span></span>` +
@@ -366,7 +370,10 @@ function addServerMarker(map) {
   if (!srvEl) return;
   const srv = JSON.parse(srvEl.textContent);
   const icon = L.divIcon({
-    html: '<div class="server-marker">⬡</div>',
+    html: '<div class="server-marker">' +
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" ' +
+          'stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M12 2.5 21 7.5v9L12 21.5 3 16.5v-9z"></path></svg></div>',
     className: '', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -14],
   });
   L.marker([srv.lat, srv.lon], { icon, interactive: true, zIndexOffset: 1000 })
@@ -464,6 +471,7 @@ function createSelectionPanel(map, activeMarkers) {
   const selLegend    = document.getElementById('sel-legend');
   const selList      = document.getElementById('sel-countries-list');
   const headCount    = document.getElementById('map-count');
+  const mapEl        = document.getElementById('map');
   const gradient = (counts, total) => mixGradient(counts, total, cssVar);
 
   /**
@@ -489,7 +497,16 @@ function createSelectionPanel(map, activeMarkers) {
       selIps.textContent = fmtNum(data.length);
       selCountries.textContent = fmtNum(Object.keys(byCountry).length);
       selThreats.textContent = fmtNum(counts.threats);
-      if (headCount) headCount.textContent = fmtNum(data.length) + ' IPs in viewport';
+      // "2,208 of 3,669 IPs in viewport" — the denominator is the selection,
+      // and without it a zoomed-in map never says what fraction it is showing.
+      // Dropped when the viewport holds everything: a denominator equal to the
+      // numerator is noise.
+      if (headCount) {
+        const total = Number(mapEl.dataset.total || 0);
+        headCount.textContent =
+          (total > data.length ? fmtNum(data.length) + ' of ' + fmtNum(total) : fmtNum(data.length)) +
+          ' IPs in viewport';
+      }
 
       selMix.style.background = gradient(counts, data.length);
       selMix.dataset.tip = mixSummary(counts);
@@ -532,6 +549,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // cssVar and esc are provided by utils.js loaded in base.html
 
   const rows = JSON.parse(document.getElementById('markers-data').textContent);
+  // A fixed zoom 2, and minZoom 2 under it. At that level the world is 1024px
+  // and covers the panel, which is what keeps the frame full: fitBounds on the
+  // markers looks tighter and is not — it drops to zoom 1 whenever the marker
+  // spread does not quite fit, and a 512px world in a wider panel is a small
+  // map with empty ground either side of it and above and below.
   _geoMap = L.map('map', {
     minZoom: 2, maxBounds: [[-85, -180], [85, 180]],
     maxBoundsViscosity: 1.0,

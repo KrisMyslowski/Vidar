@@ -17,12 +17,52 @@
   {{ range_tabs(active_range, '/', date_from=date_from, date_to=date_to) }}
 {% endcall %}
 
+{#- Directly under the header, because the page says so twice and did the
+    opposite: this file's own first line reads "triage first, numbers second",
+    and usage.md §3 opens "Leads with Needs attention". It sat fourth, nine
+    tiles down and below the fold on a 900px viewport, while carrying the red
+    rim and the nav badge that exist to say "look here". -#}
+{# ── Needs attention: findings, each linking to the view that shows it.
+       The sidebar carries a red count badge for this panel. When the panel it
+       points at looked like every other panel, that badge read as a stray
+       number — so the panel takes the same red, and the count is the same chip
+       the nav uses rather than a muted "4 open". Only when something is open:
+       a permanently red-rimmed panel is a rim nobody sees any more. ── #}
+<div class="panel{% if attention %} panel--attention{% endif %}">
+  <div class="table-block-head">
+    {% if attention %}<span class="attention-dot" aria-hidden="true"></span>{% endif %}
+    <span class="table-block-title">Needs attention</span>
+    {% if attention %}
+    <span class="nav-badge">{{ attention | length }}</span>
+    <span class="table-block-count">open</span>
+    {% else %}
+    <span class="table-block-count">all clear</span>
+    {% endif %}
+  </div>
+  {% if attention %}
+  <div class="card-note">clicking a row opens the view with the filter applied</div>
+  <ul class="attention">
+    {% for a in attention %}
+    <li>
+      <a class="attention-row" href="{{ a.href }}">
+        <span class="attention-tag" style="--clr: {{ a.color }}">{{ a.tag }}</span>
+        <span class="attention-text">{{ a.text }}</span>
+        <span class="attention-value">{{ a.value | fmtnum }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Nothing needs attention right now.</p>
+  {% endif %}
+</div>
+
 {# ── Hero tiles: the four numbers worth a glance. ── #}
 <div class="cards cards--hero">
   {{ stat_card('Visits', total_visits | fmtnum, ('Requests logged in the selected range.',
       'One row per nginx access-log line, after static assets and internal IPs are dropped.'), delta=visits_delta, spark=spark_visits) }}
   {{ stat_card('Unique IPs', unique_ips | fmtnum, ('Distinct visitor IPs in the selected range.',
-      'COUNT(DISTINCT ip) over the same rows the Visits tile counts.')) }}
+      'Distinct addresses behind the requests the Visits tile counts.')) }}
   {{ stat_card('Threat IPs', threat_ips | fmtnum, ('IPs the classifier put in the Threats group.',
       'Exploit probers and protocol abusers — judged on what they did, not where they came from.'), color_class='text-red') }}
   {{ stat_card('Error rate', error_rate ~ '%', ('Share of requests answered with 4xx or 5xx.',
@@ -60,41 +100,6 @@
   {{ mix_legend(class_mix) }}
 </div>
 
-{# ── Needs attention: findings, each linking to the view that shows it.
-       The sidebar carries a red count badge for this panel. When the panel it
-       points at looked like every other panel, that badge read as a stray
-       number — so the panel takes the same red, and the count is the same chip
-       the nav uses rather than a muted "4 open". Only when something is open:
-       a permanently red-rimmed panel is a rim nobody sees any more. ── #}
-<div class="panel{% if attention %} panel--attention{% endif %}">
-  <div class="table-block-head">
-    {% if attention %}<span class="attention-dot" aria-hidden="true"></span>{% endif %}
-    <span class="table-block-title">Needs attention</span>
-    {% if attention %}
-    <span class="nav-badge">{{ attention | length }}</span>
-    <span class="table-block-count">open</span>
-    {% else %}
-    <span class="table-block-count">all clear</span>
-    {% endif %}
-  </div>
-  <div class="card-note">clicking a row opens the view with the filter applied</div>
-  {% if attention %}
-  <ul class="attention">
-    {% for a in attention %}
-    <li>
-      <a class="attention-row" href="{{ a.href }}">
-        <span class="attention-tag" style="--clr: {{ a.color }}">{{ a.tag }}</span>
-        <span class="attention-text">{{ a.text }}</span>
-        <span class="attention-value">{{ a.value | fmtnum }}</span>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="text-muted">Nothing needs attention right now.</p>
-  {% endif %}
-</div>
-
 {# ── Top: one tabbed block (tabs.js — the data is already on the page,
       so switching costs no reload). ── #}
 <div class="panel" data-tabs>
@@ -119,7 +124,7 @@
     <table class="sortable responsive-table">
       <thead>
         <tr>{{ th_tip('IP', ('A visiting IP address.', 'Click to open its full history.'), w='c-ip') }}{{ th_tip('Class mix', ('Which identity group this IP belongs to.',
-      'One full band: an IP has exactly one class. The class name is in the bar\'s own tooltip.'), w='c-mix') }}{{ th_tip('Country', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}{{ th_tip('Visits', ('Requests from this IP in the range.', 'Rows in the visits table, not distinct pages.'), w='c-num') }}</tr>
+      'One full band: an IP has exactly one class. The class name is in the bar\'s own tooltip.'), w='c-mix') }}{{ th_tip('Country', ('Where the IP geolocates to.', 'Country code from ip-api.com.'), w='c-cc') }}{{ th_tip('Visits', ('Requests from this IP in the range.', 'One per logged request, not per distinct page.'), w='c-num') }}</tr>
       </thead>
       <tbody>
         {% for row in top_ips %}
@@ -129,6 +134,10 @@
           <td data-label="Country">{{ row.country_code or '—' }}</td>
           <td data-label="Visits">{{ row.count | fmtnum }}</td>
         </tr>
+        {% else %}
+        {#- The five sibling tabs are bar_rows, which carries its own empty
+            state; this one is a table and rendered a head over nothing. -#}
+        <tr><td colspan="4" class="text-muted">Nothing recorded yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

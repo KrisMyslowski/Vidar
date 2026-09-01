@@ -48,7 +48,7 @@
 </div>
 {%- if note %}<div class="daybars-note">{{ note }}</div>{% endif %}
 {%- else %}
-<p class="text-muted">No activity in this range.</p>
+<p class="text-muted">No activity in the selected range.</p>
 {%- endif %}
 {%- endmacro -%}
 
@@ -65,13 +65,22 @@
     hourly rows as dates. `hour_switch` travels with it so the threshold behind
     both decisions — which bucket to ship, and which one a zoom drops to — is
     one number in one place (routes/_charts.HOUR_SWITCH_DAYS). -#}
-{%- macro activity_chart(days, series, params='', bucket='day', hour_switch=3) -%}
+{%- macro activity_chart(days, series, params='', bucket='day', hour_switch=3,
+                          title='Activity', note='', unit='visits') -%}
 <div class="timeline" data-endpoint="/api/activity" data-params="{{ params }}">
   <script type="application/json">
-    {{ {'series': series, 'rows': days, 'bucket': bucket, 'hourSwitchDays': hour_switch} | tojson }}
+    {{ {'series': series, 'rows': days, 'bucket': bucket,
+        'hourSwitchDays': hour_switch, 'unit': unit} | tojson }}
   </script>
-  <div class="timeline-plot"></div>
-  <div class="timeline-tip" style="display:none"></div>
+  {#- The head belongs to the chart, not to the panel around it: the zoombar and
+      the range readout both describe the chart's own state, and the zoombar sat
+      absolutely positioned above the plot until it landed on top of a wrapped
+      subtitle at 420px. -#}
+  <div class="table-block-head">
+    <span class="table-block-title">{{ title }}</span>
+    <span class="table-block-count">{{ note }}</span>
+    {#- What is on screen right now, which the two buttons never said. -#}
+    <span class="table-block-count timeline-range"></span>
   {#- Zoom controls. Dragging a range on the chart still works and is the precise
       way in; these are the coarse one, and the only way back out — each step out
       undoes one step in, including the jump from days to hours. Disabled is the
@@ -88,6 +97,12 @@
       </svg>
     </button>
   </div>
+  </div>
+  <div class="timeline-plot"></div>
+  <div class="timeline-tip" style="display:none"></div>
+  {#- The gesture is not conventional and nothing announced it. The map teaches
+      its own the same way, one panel over. -#}
+  <p class="timeline-hint">Drag across the chart to zoom.</p>
 </div>
 {%- endmacro -%}
 
@@ -165,7 +180,9 @@
     </table>
   </div>
   {%- endif %}
-  {%- if note %}<div class="card-note">{{ note }}</div>{% endif %}
+  {#- Not when the card is empty: these notes are instructions ("click to add a
+      port filter") and there is nothing to click. -#}
+  {%- if note and rows %}<div class="card-note">{{ note }}</div>{% endif %}
 </div>
 {%- endmacro -%}
 

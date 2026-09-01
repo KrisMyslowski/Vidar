@@ -124,7 +124,10 @@ _GROUP_SPECS: dict[str, dict] = {
         "label": "Network",
         "title": "Networks",
         "noun": "network",
-        "unit": "ASNs",
+        # The label under a count, so it names the thing and not its
+        # identifier: the column holding AS15169 stays "ASN", what is
+        # counted is networks.
+        "unit": "networks",
         "get": get_networks,
         "count": count_networks,
         "sorts": _AGG_SORTS["networks"],
@@ -170,8 +173,122 @@ _GROUP_SPECS: dict[str, dict] = {
     },
 }
 
+
 # Drill-down filters, in the order they render as pills. Each maps a /visitors
 # query param to the aggregation row that sets it.
+# Sorting for the two pages whose rows are built in Python rather than ordered
+# by SQL. A map of key → the value to sort on, not key → SQL column: on Exposure
+# the figures that matter are produced by folding percent-encoded spellings
+# together *after* the query, so the query's own ORDER BY is decorative and a
+# SQL sort key would order by pre-fold values. On Incidents the score, the
+# duration and "against normal" exist only in Python.
+#
+# Descending is the default for every count and every date — the interesting end
+# of all of them is the top — and ascending for the two text columns, where
+# alphabetical is what a reader means by sorted.
+def _text(key):
+    """Case-folded, so `Zeta` does not sort before `alpha`."""
+    return lambda r: str(r.get(key) or "").lower()
+
+
+EXPOSURE_SORTS: dict[str, tuple] = {
+    "path": (_text("path"), "ASC"),
+    "family": (_text("family_title"), "ASC"),
+    "addresses": (lambda r: r["ips"], "DESC"),
+    "requests": (lambda r: r["hits"], "DESC"),
+    "size": (lambda r: r["bytes_sent"] or 0, "DESC"),
+    "first": (lambda r: r["first_seen"] or "", "DESC"),
+    "last": (lambda r: r["last_seen"] or "", "DESC"),
+}
+EXPOSURE_DEFAULT_SORT = "addresses"
+
+# Served — the block under the findings, listing everything the server answers
+# 2xx for. Its own map because it shows different columns: Kind and Benign are
+# here and Family is not, and Addresses means the same thing under a different
+# key on the row (`ips`).
+#
+# "kind" is the default and reproduces the order the block already had — Site
+# before Finding, then the most benign, then the most requested. It stays one
+# key rather than becoming three columns to click, because the split is the
+# point of the block and Benign is what the split is made of.
+SERVED_SORTS: dict[str, tuple] = {
+    "path": (_text("path"), "ASC"),
+    "kind": (lambda r: (r["is_finding"], -r["benign_ips"], -r["hits"]), "ASC"),
+    "addresses": (lambda r: r["ips"], "DESC"),
+    "benign": (lambda r: r["benign_ips"], "DESC"),
+    "requests": (lambda r: r["hits"], "DESC"),
+    "size": (lambda r: r["bytes_sent"] or 0, "DESC"),
+    "last": (lambda r: r["last_seen"] or "", "DESC"),
+}
+SERVED_DEFAULT_SORT = "kind"
+
+INCIDENT_SORTS: dict[str, tuple] = {
+    "started": (lambda r: r["started"], "DESC"),
+    "duration": (lambda r: r["duration"], "DESC"),
+    "addresses": (lambda r: r["addresses"], "DESC"),
+    "asns": (lambda r: r["asns"], "DESC"),
+    "probes": (lambda r: r["probe_404"], "DESC"),
+    "listed": (lambda r: r["blocklisted"], "DESC"),
+    # None sorts last in both directions, the way an em dash reads on the page.
+    "normal": (lambda r: (r["against_normal"] is None, r["against_normal"] or 0), "DESC"),
+    "score": (lambda r: r["score"], "DESC"),
+}
+INCIDENT_DEFAULT_SORT = "score"
+
+# ── The incident drawer's own two tables ─────────────────────────────────────
+#
+# Both default to the order the panel already had, so an untouched drawer is
+# what it was: paths in the order they arrived, sessions in the order the
+# addresses joined.
+#
+# The paths table is sortable where the page's Signature column is not, and the
+# difference is the "#" column. It carries the arrival position as a value in
+# the row, so sorting by Requests moves the rows without destroying the order
+# that makes five paths a signature — the position travels with the path. The
+# page's Signature cell has no such column: there the order is the only place
+# the information lives, which is why the rule in apply_sort still holds there
+# and in a visitor's session requests.
+INCIDENT_PATH_SORTS: dict[str, tuple] = {
+    "pos": (lambda r: r["pos"], "ASC"),
+    "path": (lambda r: r["path"], "ASC"),
+    "addresses": (lambda r: r["addresses"], "DESC"),
+    "requests": (lambda r: r["requests"], "DESC"),
+}
+INCIDENT_PATH_DEFAULT_SORT = "pos"
+
+INCIDENT_SESSION_SORTS: dict[str, tuple] = {
+    "started": (lambda r: r["started"], "ASC"),
+    "duration": (lambda r: r["duration"], "DESC"),
+    # Lexical, like every other IP ordering here (VISITOR_SORT_MAP sorts on
+    # v.ip). It puts 10.x before 9.x; matching the rest of the dashboard beats
+    # being right in one panel and different everywhere else.
+    "ip": (lambda r: r["ip"], "ASC"),
+    # Enrichment has not reached every address. Blank sorts last in both
+    # directions, the way the em dash it renders as reads in the cell.
+    "org": (lambda r: (not (r["org"] or r["asn"]), (r["org"] or r["asn"] or "").lower()), "ASC"),
+    "probes": (lambda r: r["probe_404"], "DESC"),
+}
+INCIDENT_SESSION_DEFAULT_SORT = "started"
+
+
+def apply_sort(rows: list[dict], sorts: dict, sort: str, order: str, default: str) -> list[dict]:
+    """Order rows by one of `sorts`, with the current order.
+
+    Signature and From are deliberately absent from both maps. A signature is an
+    *ordered* path list and that order is its identity — alphabetising by its
+    first element destroys what the column is for, which is the same reason a
+    session's requests are not sortable. From is a truncated eight of N, so
+    sorting by its first address sorts by an accident of DISTINCT.
+
+    The route validates `sort` against the same map before calling, and this
+    falls back anyway — the executors in the query layer defend twice the same
+    way, because a KeyError here is a 500 on a page that had one bad character
+    in its URL.
+    """
+    key, _ = sorts.get(sort) or sorts[default]
+    return sorted(rows, key=key, reverse=order == "DESC")
+
+
 _DRILL_KINDS = (
     ("asn", "Network"),
     ("country", "Country"),

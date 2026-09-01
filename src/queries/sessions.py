@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from ..classifier.evidence_sql import _INTERNAL_NAV_CASE, _classify_params
+from ..classifier.evidence_sql import _CONTENT_REQUEST_CASE, _INTERNAL_NAV_CASE, _classify_params
 from ..classifier.patterns import _CONVENTION_404_MATCH
 from ..sessions import SESSION_GAP_SECONDS, behaviour_for
 
@@ -45,6 +45,7 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
         WITH ordered AS (
             SELECT v.id, v.timestamp, v.path, v.status, v.method, v.referer,
                    v.sec_fetch_site,
+                   {_CONTENT_REQUEST_CASE} AS is_content,
                    LAG(v.timestamp) OVER (ORDER BY v.timestamp, v.id) AS prev_ts,
                    {_INTERNAL_NAV_CASE} AS is_internal_nav,
                    CASE WHEN v.status = 404 AND NOT ({_CONVENTION_404_MATCH})
@@ -73,6 +74,7 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
                COUNT(DISTINCT CASE WHEN m.is_probe_404 THEN m.path END)
                    AS distinct_404_paths,
                SUM(m.is_ok)           AS ok_requests,
+               SUM(m.is_content)      AS content_requests,
                COUNT(DISTINCT CASE WHEN m.is_ok THEN m.path END) AS distinct_2xx_paths,
                SUM(m.is_internal_nav) AS internal_nav,
                SUM(CASE WHEN m.method = 'POST' THEN 1 ELSE 0 END) AS post_requests,
@@ -101,6 +103,21 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
     for row in rows:
         session = dict(row)
         session["duration"] = _duration_seconds(session["started"], session["ended"])
+        # Paths the client asked for and did not get: everything it asked for,
+        # minus what came back 2xx. Behaviour is read from this rather than
+        # from 404s, because a redirect, a 404, a 503 and a 403 all mean the
+        # same thing to the client — and keying on 404s went quiet in exactly
+        # the two places where the probing was heaviest.
+        #
+        # Subtraction, so the row adds up: Read + Unserved is Paths, in every
+        # session. An earlier version counted error paths instead, to keep a
+        # redirect from reading as a failure. It cost the identity — a path
+        # that answered only 3xx fell in neither column, one that answered both
+        # 200 and 404 fell in both, and 51 of 1 568 real sessions did not add
+        # up — and bought nothing: across that week exactly one session changed
+        # label, the operator's own afternoon of poking at the site, which the
+        # clever version called enumeration and this one does not.
+        session["unserved_paths"] = session["unique_paths"] - session["distinct_2xx_paths"]
         session["behaviour"] = behaviour_for(session)
         out.append(session)
     return out

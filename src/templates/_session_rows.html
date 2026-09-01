@@ -1,0 +1,59 @@
+{#
+  _session_rows.html — slide-over body: the requests one session is made of.
+  Served as a fragment by /visitors/{ip}/session and injected by drawer.js, so
+  the sessions table stays on the page underneath.
+
+  Deliberately not sortable. In a session the order *is* the information — it
+  is what makes a scanner's signature visible, and the incidents page reads the
+  same order to identify a program. A sortable column here would offer to throw
+  that away.
+#}
+{% from '_macros.html' import th_tip %}
+<div class="drawer-head">
+  <div>
+    <span class="drawer-title">Session</span>
+    <code class="drawer-value">{{ started | fmtdate }} · {{ duration | fmtduration }}</code>
+    {%- if behaviour %}
+    <span class="badge {{ BEHAVIOUR_BADGES[behaviour] }}">{{ BEHAVIOUR_LABELS[behaviour] }}</span>
+    {%- endif %}
+  </div>
+  <div class="drawer-head-actions">
+    <span class="table-block-count">{{ total | fmtnum }} request{{ '' if total == 1 else 's' }}{% if total > limit %} · showing the first {{ limit }}{% endif %}</span>
+    <button type="button" class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+</div>
+
+{% if rows %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Time', ('When the request arrived.',
+                'In arrival order, which is the one thing about a session that cannot be
+                 reordered without losing it.'), w='c-date') }}
+      {{ th_tip('Method', ('The HTTP method.',
+                'NON-HTTP, TLS and UNKNOWN mean nginx could not parse the request line
+                 at all.'), w='c-badge') }}
+      {{ th_tip('Path', ('What was asked for.',
+                'Exactly as the client wrote it, including any percent-encoding.'), w='c-wide') }}
+      {{ th_tip('Status', ('What the server answered.',
+                'Anything but a 2xx means the client did not get what it asked for — that is
+                 what the session row counts as Unserved.'), w='c-num') }}
+      {{ th_tip('Bytes', ('Size of the response body.',
+                'Headers are not counted.'), w='c-num') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td data-label="Time" class="nowrap">{{ r.timestamp | fmtdate }}</td>
+      <td data-label="Method">{{ r.method }}</td>
+      <td data-label="Path" class="col-path"><code>{{ r.path }}</code></td>
+      <td data-label="Status" class="num">{{ r.status }}</td>
+      <td data-label="Bytes" class="num">{{ r.bytes_sent | fmtbytes }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="text-muted">No requests in the selected range.</p>
+{% endif %}

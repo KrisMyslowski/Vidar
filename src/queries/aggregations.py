@@ -23,6 +23,7 @@ from ._shared import (
     _STATUS_CLASS_SQL,
     _apply_class_filter,
     _apply_date_filter,
+    _apply_seen_filter,
     _apply_signal_filter,
     _group_match,
     _like,
@@ -116,6 +117,7 @@ def _exec_agg_rows(
     date_to: str | None,
     extra_where: str = "",
     extra_params: Sequence = (),
+    seen: str | None = None,
 ) -> list[dict]:
     """Run a GROUP BY aggregation over visits⋈ip_intel with the shared class/signal/
     date legend filters and the unified breakdown columns. `where` is a complete
@@ -133,6 +135,7 @@ def _exec_agg_rows(
     query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_date_filter(query, params, date_from, date_to)
+    query, params = _apply_seen_filter(query, params, seen, date_from)
     query += f" GROUP BY {group_by} ORDER BY {sort_col} {order_dir} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     return [dict(r) for r in conn.execute(query, params).fetchall()]
@@ -149,6 +152,7 @@ def _exec_agg_count(
     date_to: str | None,
     extra_where: str = "",
     extra_params: Sequence = (),
+    seen: str | None = None,
 ) -> int:
     """Count distinct aggregation groups for pagination (mirrors _exec_agg_rows filters)."""
     params: list = list(extra_params)
@@ -159,6 +163,7 @@ def _exec_agg_count(
     query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_date_filter(query, params, date_from, date_to)
+    query, params = _apply_seen_filter(query, params, seen, date_from)
     query += f" GROUP BY {group_by})"
     row = conn.execute(query, params).fetchone()
     return row[0] if row else 0
@@ -265,6 +270,7 @@ def get_networks(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Visitors grouped by network (ASN): one row per autonomous system.
     `q` searches org + ISP + ASN."""
@@ -285,6 +291,7 @@ def get_networks(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -295,6 +302,7 @@ def count_networks(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Count distinct networks (ASNs). Used for pagination."""
     extra_where, extra_params = _agg_q_filter(q, _NETWORKS_Q_COLS)
@@ -308,6 +316,7 @@ def count_networks(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -322,6 +331,7 @@ def get_countries(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Visitors grouped by country: one row per country code.
     `q` searches country name + code."""
@@ -342,6 +352,7 @@ def get_countries(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -352,6 +363,7 @@ def count_countries(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Count distinct countries. Used for pagination."""
     extra_where, extra_params = _agg_q_filter(q, _COUNTRIES_Q_COLS)
@@ -365,6 +377,7 @@ def count_countries(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -379,6 +392,7 @@ def get_clients(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Visitors grouped by client: one row per Browser/OS/Device combination.
     `q` searches browser + OS + device."""
@@ -399,6 +413,7 @@ def get_clients(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -409,6 +424,7 @@ def count_clients(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Count distinct Browser/OS/Device combinations. Used for pagination."""
     extra_where, extra_params = _agg_q_filter(q, _CLIENTS_Q_COLS)
@@ -422,6 +438,7 @@ def count_clients(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -437,6 +454,7 @@ def get_paths(
     date_to: str | None = None,
     q: str | None = None,
     status: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Visitors grouped by request path: one row per path with a status-code mix.
     `q` searches path + user-agent; `status` narrows to a 2xx-5xx class."""
@@ -457,6 +475,7 @@ def get_paths(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 
@@ -468,6 +487,7 @@ def count_paths(
     date_to: str | None = None,
     q: str | None = None,
     status: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Count distinct request paths. Used for pagination."""
     extra_where, extra_params = _paths_extra_filters(q, status)
@@ -481,6 +501,7 @@ def count_paths(
         date_to=date_to,
         extra_where=extra_where,
         extra_params=extra_params,
+        seen=seen,
     )
 
 

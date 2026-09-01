@@ -6,7 +6,7 @@
 
 [![tests](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f4a54?style=flat-square)](LICENSE)
-[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-3f4a54?style=flat-square)](docs/changelog.md)
+[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-3f4a54?style=flat-square)](docs/changelog.md)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3f4a54?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-3f4a54?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)

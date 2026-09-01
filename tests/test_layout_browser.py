@@ -17,6 +17,7 @@ import socket
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,11 @@ REPORT = LAYOUT_DIR / "report.js"
 MAP_REPORT = LAYOUT_DIR / "map_report.js"
 TIMELINE_REPORT = LAYOUT_DIR / "timeline_report.js"
 RANGE_REPORT = LAYOUT_DIR / "range_report.js"
+# The seeded window is anchored to today, not to a fixed July: the chart
+# fills silent buckets with zeros now, so data outside the default range
+# leaves the axis it is measured on empty.
+_TODAY = datetime.now(timezone.utc).date()
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # The widths the stylesheet assigns per column type, in rem (c-group is 132px).
@@ -84,14 +90,29 @@ def _node():
 
 @pytest.fixture(scope="module")
 def server(_node, tmp_path_factory):
-    """The real app on a real port, seeded like the dashboard_db fixture."""
+    """The real app on a real port, seeded like the dashboard_db fixture.
+
+    VIDAR_LAYOUT_DB points it at an existing database instead. The seed here is
+    three addresses chosen to be awkward — a long IPv6, a deep probe path — and
+    that measures whether a cell *can* overflow, not whether it does at the
+    volume this runs at in production. A month restored out of the archive is
+    100 000 visits with real user agents, real ASN names and real probe paths,
+    and it is the only way to answer the second question.
+    """
     from src.db import get_conn, init_db
     from src.queries import insert_visit, set_visitor_class, upsert_ip_intel
     from tests.test_dashboard_routes import _intel
 
-    db = tmp_path_factory.mktemp("layout") / "layout.db"
     log = tmp_path_factory.mktemp("layout-log") / "access.log"
     log.write_text("")
+    existing = os.environ.get("VIDAR_LAYOUT_DB")
+    if existing:
+        db = Path(existing)
+        assert db.is_file(), f"VIDAR_LAYOUT_DB does not exist: {db}"
+        yield from _serve(db, log)
+        return
+
+    db = tmp_path_factory.mktemp("layout") / "layout.db"
     init_db(db)
     with get_conn(db) as conn:
         for ip, path, status in [
@@ -99,14 +120,18 @@ def server(_node, tmp_path_factory):
             ("203.0.113.20", "/wp-admin/setup-config.php", 404),
             ("2001:db8:1234:5678::1", "/api/v1/status", 200),
         ]:
-            # Spread over a fortnight and across the clock: the activity chart
-            # needs something to zoom into, and hourly buckets need hours that
-            # differ.
-            for n in range(14):
+            # One visit a day for the last four weeks, at a different hour each
+            # time: the activity chart needs something to zoom into, hourly
+            # buckets need hours that differ, and every day of the window needs
+            # a point — the chart fills silent buckets with zeros now, so a
+            # fixed July fortnight left the middle of a 90-day axis empty and a
+            # drag across it had nothing to zoom into.
+            for n in range(28):
+                day = _TODAY - timedelta(days=27 - n)
                 insert_visit(
                     conn,
                     ip=ip,
-                    timestamp=f"2026-07-{20 + n // 2:02d}T{(n * 5) % 24:02d}:00:00+00:00",
+                    timestamp=f"{day.isoformat()}T{(n * 5) % 24:02d}:00:00+00:00",
                     method="GET",
                     path=path,
                     status=status,
@@ -124,7 +149,7 @@ def server(_node, tmp_path_factory):
             insert_visit(
                 conn,
                 ip=probe_ip,
-                timestamp="2026-07-25T10:00:00+00:00",
+                timestamp=f"{_TODAY - timedelta(days=3)}T10:00:00+00:00",
                 method="GET",
                 path="/.DS_Store",
                 status=200,
@@ -138,7 +163,7 @@ def server(_node, tmp_path_factory):
                 insert_visit(
                     conn,
                     ip=member,
-                    timestamp=f"2026-07-25T11:{n * 5:02d}:{k * 3:02d}+00:00",
+                    timestamp=f"{_TODAY - timedelta(days=3)}T11:{n * 5:02d}:{k * 3:02d}+00:00",
                     method="GET",
                     path=probe_path,
                     status=404,
@@ -178,6 +203,11 @@ def server(_node, tmp_path_factory):
         set_visitor_class(conn, "203.0.113.20", "threats/exploit-probers")
         set_visitor_class(conn, "2001:db8:1234:5678::1", "bots/security-researchers")
 
+    yield from _serve(db, log)
+
+
+def _serve(db, log):
+    """The app on a free port against `db`, torn down afterwards."""
     port = _free_port()
     env = {**os.environ, "DB_PATH": str(db), "LOG_PATH": str(log)}
     proc = subprocess.Popen(
@@ -438,20 +468,31 @@ def timeline_view(_node, server):
     the current selection. This pointed at "/" until the suite first ran on a
     machine that had a browser, which was CI.
     """
+    # A window the seed actually fills. The default is 90 days, and silent
+    # buckets are drawn as zeros now — so on 28 days of data the middle of that
+    # axis is empty, and a drag across it has nothing to zoom into. That is the
+    # chart being honest; it is not a state to measure the zoom in.
     return measure(
         _node,
-        [{"key": "tl", "url": server + "/visitors?view=timeline", "width": 1600}],
+        [{"key": "tl", "url": server + "/visitors?view=timeline&range=30d", "width": 1600}],
         expression=TIMELINE_REPORT,
     )["tl"]
 
 
-def test_activity_draws_one_line_per_group(timeline_view):
-    """Stacked bars showed the total and hid the groups; a segment in the middle
-    of a stack sits on whatever is below it."""
+def test_activity_draws_a_total_and_one_band_per_group(timeline_view):
+    """Stacked bars showed the total and hid the groups. Overlaid lines showed
+    the groups and crushed three of five against the baseline — one linear axis
+    over series three orders of magnitude apart. Each gets its own now, and the
+    total gets the hero band."""
     assert not timeline_view.get("missing"), "no activity chart on the timeline view"
-    assert timeline_view["initial"]["lines"] == 5
-    assert timeline_view["initial"]["buckets"] > 5
-    assert timeline_view["initial"]["xLabels"], "no date marks on the axis"
+    initial = timeline_view["initial"]
+    assert initial["bands"] == 5
+    # The hero's total plus one line inside each band.
+    assert initial["lines"] == 6
+    assert initial["buckets"] > 5
+    assert initial["xLabels"], "no date marks on the axis"
+    # The scale left the axis, so every band has to print what it is worth.
+    assert len(initial["peaks"]) == 5 and all(initial["peaks"])
     assert timeline_view["fits"], "the chart runs outside its panel"
 
 

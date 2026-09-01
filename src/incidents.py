@@ -32,12 +32,27 @@ from __future__ import annotations
 SIGNATURE_PATHS = 5
 
 # Sessions with the same signature further apart than this are separate runs.
-# An hour: a distributed scan spreads its addresses over minutes, not days, and
-# the same tool returning tomorrow is a second event rather than a longer first
-# one. A campaign that trickles for a week does split into daily incidents —
-# that is a visible, honest under-reporting rather than one incident whose
-# duration is meaningless.
-INCIDENT_GAP_SECONDS = 3600
+#
+# A day, and that number came from the traffic rather than from taste. An hour
+# was the first guess — "a distributed scan spreads its addresses over minutes"
+# — and against one week of the reference deployment it produced **no incidents
+# at all**, on a site where eighteen addresses ran the same five-path probe.
+# They simply did not overlap: the campaign has a daily cadence, one or two
+# addresses at a time.
+#
+#   window   incidents   largest
+#     1 h        0           0
+#     6 h        4           4
+#    12 h        6           6
+#    24 h        3          18
+#     3 d        3          18
+#     7 d        3          18
+#
+# Twenty-four hours is where the structure stops changing: wider finds nothing
+# more, narrower splits one campaign into fragments that each fall under the
+# reporting threshold and disappear. A feature that never fires is not cautious,
+# it is broken, and an hour was making this one never fire.
+INCIDENT_GAP_SECONDS = 86400
 
 # Correlation without volume is noise. Two addresses running the same tool an
 # hour apart is a tool being popular, not a coordinated event; the word

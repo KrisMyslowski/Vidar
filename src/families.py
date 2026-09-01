@@ -31,7 +31,14 @@ from typing import NamedTuple
 
 
 class Family(NamedTuple):
-    """One kind of accidentally served file, and the four things worth knowing."""
+    """One kind of accidentally served file, and what is worth knowing about it.
+
+    `fix` is prose and `config` is not. A server directive chained into a
+    sentence cannot be copied without selecting mid-paragraph, and reads as
+    prose rather than as something to paste — three of them ran together in one
+    line here before this field existed. Each snippet gets its own block, named
+    by the server it belongs to.
+    """
 
     key: str
     title: str
@@ -39,7 +46,20 @@ class Family(NamedTuple):
     why: str
     check: str
     fix: str
+    config: tuple[tuple[str, str], ...] = ()
 
+
+# The dotfile deny rule. Three families need it, and each renders on its own —
+# explain_paths() only emits the families actually present, so "deny dotfiles as
+# above" pointed at nothing on a deployment whose only finding was /.git/config.
+#
+# nginx only, and not for lack of ambition: Vidar reads nginx's JSON log and
+# nothing else. limit_req_status, request_time and server_protocol are nginx
+# variables, and deploy/nginx-log-format.conf is the format contract. An Apache
+# and a Caddy snippet sat here for one revision — advice for servers whose logs
+# this service cannot ingest, printed to an operator who by definition runs
+# nginx. They come back if a second log format ever does.
+_DENY_DOTFILES: tuple[tuple[str, str], ...] = (("nginx", "location ~ /\\. {\n    deny all;\n}"),)
 
 # The literal `{path}` in a check is replaced with the path that was found, so a
 # reader can paste the command rather than adapt it.
@@ -59,12 +79,12 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
             ),
             check="curl -sI https://{host}{path}",
             fix=(
-                "Delete it from the document root and stop it being uploaded again — it is "
-                "usually rsync or an FTP client carrying the whole folder. Then refuse dotfiles "
-                "in the server config: nginx `location ~ /\\. { deny all; }`, Apache "
-                '`<FilesMatch "^\\.">Require all denied</FilesMatch>`, Caddy `@dot path '
-                "/.* respond @dot 403`. Spare /.well-known — certificate renewal uses it."
+                "Delete it from the document root and stop it being uploaded again — that is "
+                "usually rsync or an FTP client carrying the whole folder. Then refuse "
+                "dotfiles in the server config. Spare /.well-known: certificate renewal "
+                "uses it."
             ),
+            config=_DENY_DOTFILES,
         ),
     ),
     (
@@ -84,10 +104,11 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
             check="curl -s https://{host}{path} | head",
             fix=(
                 "Do not deploy the repository. Build or copy the files rather than syncing the "
-                "working tree, and deny dotfiles in the server config as above. If it was "
-                "reachable, treat every secret that ever appeared in that history as "
-                "compromised — deleting the file does not un-publish what was already fetched."
+                "working tree, then deny dotfiles in the server config. If it was reachable, "
+                "treat every secret that ever appeared in that history as compromised — "
+                "deleting the file does not un-publish what was already fetched."
             ),
+            config=_DENY_DOTFILES,
         ),
     ),
     (
@@ -133,10 +154,10 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
             ),
             check="curl -s https://{host}{path} | head",
             fix=(
-                "Delete it, and keep backups outside the document root. Add the suffixes to the "
-                "server's deny rules so the next one is refused rather than served: nginx "
-                "`location ~* \\.(bak|old|sql|swp)$ { deny all; }`."
+                "Delete it, and keep backups outside the document root. Add the suffixes to "
+                "the server's deny rules so the next one is refused rather than served."
             ),
+            config=(("nginx", "location ~* \\.(bak|old|sql|swp)$ {\n    deny all;\n}"),),
         ),
     ),
     (
@@ -196,10 +217,10 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
             ),
             check="curl -sI https://{host}{path}",
             fix=(
-                "The same deny rule that covers .DS_Store covers these. The underlying cause is "
-                "usually the same too: a deployment that copies a working directory instead of "
-                "a build output."
+                "One deny rule covers all of these. The underlying cause is usually the same "
+                "too: a deployment that copies a working directory instead of a build output."
             ),
+            config=_DENY_DOTFILES,
         ),
     ),
     (
@@ -260,7 +281,21 @@ def family_for(path: str) -> Family | None:
     return None
 
 
-def explain_paths(paths: Iterable[str], host: str) -> list[tuple[Family, list[str]]]:
+class Explained(NamedTuple):
+    """A family, the findings it covers, and a check command for each of them.
+
+    One command per path rather than one per family. The panel lists every path
+    the family was found at, and a single command addressed to the first of them
+    read as if it checked all three — the reader had to edit it for the rest,
+    which is the one thing the check exists not to require.
+    """
+
+    family: Family
+    paths: list[str]
+    checks: list[str]
+
+
+def explain_paths(paths: Iterable[str], host: str) -> list[Explained]:
     """The families present among these paths, each with the paths it covers.
 
     Grouped, because that is what "families, not paths" means on the page too:
@@ -268,10 +303,10 @@ def explain_paths(paths: Iterable[str], host: str) -> list[tuple[Family, list[st
     printing the same four paragraphs beside each of them would say so less
     clearly. In first-appearance order, so the sections follow the table.
 
-    The check is addressed to `host` and to the first path in the group, so it
-    is a command rather than a template. A blank SITE_BASE_URL leaves a host
-    that cannot be mistaken for a real one — a wrong hostname in a command the
-    reader is invited to paste is worse than an obvious placeholder.
+    Each check is addressed to `host` and to one path, so it is a command rather
+    than a template. A blank SITE_BASE_URL leaves a host that cannot be mistaken
+    for a real one — a wrong hostname in a command the reader is invited to
+    paste is worse than an obvious placeholder.
     """
     grouped: dict[str, list[str]] = {}
     families: dict[str, Family] = {}
@@ -282,9 +317,10 @@ def explain_paths(paths: Iterable[str], host: str) -> list[tuple[Family, list[st
         grouped.setdefault(family.key, []).append(path)
         families[family.key] = family
     return [
-        (
-            families[key]._replace(check=families[key].check.format(host=host, path=covered[0])),
+        Explained(
+            families[key],
             covered,
+            [families[key].check.format(host=host, path=path) for path in covered],
         )
         for key, covered in grouped.items()
     ]
@@ -306,7 +342,7 @@ def unexplained_paths(paths: Iterable[str], host: str) -> list[tuple[str, str]]:
 
     What it deliberately does not get is a description. A sentence broad enough
     to cover any file says nothing about this one, and once it appears under
-    every unrecognised finding the reader learns to skip it — and then skips the
+    every unrecognized finding the reader learns to skip it — and then skips the
     real ones too.
     """
     return [

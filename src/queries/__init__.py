@@ -26,6 +26,10 @@ from ..classifier import _decisive_rule as _decisive_rule
 from ..classifier import _scanner_path_match as _scanner_path_match
 from ..classifier import classify_ip as classify_ip
 from ..classifier import explain_classification as explain_classification
+from ._shared import SEEN_BOTH as SEEN_BOTH
+from ._shared import SEEN_NEW as SEEN_NEW
+from ._shared import SEEN_TOTAL as SEEN_TOTAL
+from ._shared import SEEN_VALUES as SEEN_VALUES
 from ._shared import VISIT_SORT_MAP as VISIT_SORT_MAP
 from ._shared import VISITOR_REQUEST_SORT_MAP as VISITOR_REQUEST_SORT_MAP
 from ._shared import VISITOR_SORT_MAP as VISITOR_SORT_MAP
@@ -67,6 +71,7 @@ from .analysis import get_top_ports as get_top_ports
 from .analysis import get_top_tags as get_top_tags
 from .analysis import get_top_vulns as get_top_vulns
 from .analysis import get_unusual_methods as get_unusual_methods
+from .analysis import get_visitor_timeline as get_visitor_timeline
 from .archive_sql import delete_visits_for_month as delete_visits_for_month
 from .archive_sql import get_intel_for_month as get_intel_for_month
 from .archive_sql import get_visit_months as get_visit_months
@@ -81,6 +86,8 @@ from .decisions import DEFAULT_GROUPS as DEFAULT_GROUPS
 from .decisions import MAX_ADDRESSES as MAX_ADDRESSES
 from .decisions import get_decisions as get_decisions
 from .decisions import valid_selection as valid_selection
+from .incidents import get_incident_paths as get_incident_paths
+from .incidents import get_incident_sessions as get_incident_sessions
 from .incidents import get_incidents as get_incidents
 from .intel import backfill_visitor_classes as backfill_visitor_classes
 from .intel import count_export_hits as count_export_hits
@@ -107,6 +114,7 @@ from .sessions import get_sessions as get_sessions
 from .stats import get_attention_items as get_attention_items
 from .stats import get_stats as get_stats
 from .stats import get_visitor_ip_counts as get_visitor_ip_counts
+from .visitors import count_visitor_requests as count_visitor_requests
 from .visitors import count_visitors_grouped as count_visitors_grouped
 from .visitors import get_visitor_detail as get_visitor_detail
 from .visitors import get_visitor_requests as get_visitor_requests

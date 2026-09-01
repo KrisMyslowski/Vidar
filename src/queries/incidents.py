@@ -25,8 +25,9 @@ plainly how long a signature is.
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..classifier.patterns import _CONVENTION_404_MATCH
 from ..incidents import INCIDENT_GAP_SECONDS, MIN_ADDRESSES, SIGNATURE_PATHS, score
@@ -46,33 +47,24 @@ _SIG_PIVOT = " || char(10) || ".join(
 _GAP = "(strftime('%s', timestamp) - strftime('%s', prev_ts))"
 
 
-def get_incidents(
-    conn: sqlite3.Connection,
-    since: str | None = None,
-    until: str | None = None,
-    limit: int = 50,
-) -> list[dict]:
-    """Runs of one program across several addresses, most notable first.
-
-    Empty is a valid and frequent answer, especially on a small site. The page
-    has to say that rather than showing an empty table — correlation without
-    volume is noise, and a surface that manufactures incidents to avoid looking
-    idle is worse than one that admits there were none.
-    """
-    # Named, not positional: the window sits inside the first of five CTEs and
-    # every other parameter sits elsewhere. Ordering those by hand is how
-    # get_exposures bound its window to a class name and went silently empty.
-    conds, window = _date_conditions(since, until, column="v.timestamp", named=True)
-    where = "".join(f" AND {c}" for c in conds)
-    rows = conn.execute(
-        f"""
-        WITH ordered AS (
+# The chain from raw visits to one row per session, with its signature.
+#
+# Two queries read it: get_incidents() groups these spans into events, and
+# get_incident_sessions() hands the spans themselves back for one event. A
+# second copy is how the two would start disagreeing about what a session is,
+# and that would surface as an incident whose panel lists a different set of
+# addresses than its own row counts.
+#
+# Built here so the module-level fragments are substituted once; `{where}`
+# stays open because the window is per call, and the caller closes it with
+# .format(where=...).
+_SESSION_SPANS_CTE = f"""        WITH ordered AS (
             SELECT v.ip, v.id, v.timestamp, v.path,
                    LAG(v.timestamp) OVER (PARTITION BY v.ip ORDER BY v.timestamp, v.id)
                        AS prev_ts
             FROM visits v
             WHERE v.status = 404 AND NOT ({_CONVENTION_404_MATCH})
-              {where}
+              {{where}}
         ),
         marked AS (
             SELECT ip, id, timestamp, path,
@@ -114,7 +106,43 @@ def get_incidents(
             SELECT s.signature, s.ip, p.started, p.ended, p.probe_404
             FROM sessions s
             JOIN per_session p ON p.ip = s.ip AND p.session_no = s.session_no
-        ),
+        )
+"""
+
+
+def get_incidents(
+    conn: sqlite3.Connection,
+    since: str | None = None,
+    until: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """Runs of one program across several addresses, most notable first.
+
+    Empty is a valid and frequent answer, especially on a small site. The page
+    has to say that rather than showing an empty table — correlation without
+    volume is noise, and a surface that manufactures incidents to avoid looking
+    idle is worse than one that admits there were none.
+
+    **`limit` cuts after the ordering, not before it.** It used to be a SQL
+    LIMIT on a query with no ORDER BY, and the score that orders these rows is
+    computed in Python afterwards — so the limit kept an arbitrary handful and
+    the sort then ordered only those. Against a real month, asking for three
+    returned incidents scoring 44, 39 and 37 while the actual top three scored
+    135, 104 and 101. A page whose whole purpose is to surface the worst was
+    able to drop exactly the worst.
+
+    Latent rather than live at the default of 50 against twelve incidents, and
+    it would have become live the moment a busier deployment crossed it.
+    """
+    # Named, not positional: the window sits inside the first of five CTEs and
+    # every other parameter sits elsewhere. Ordering those by hand is how
+    # get_exposures bound its window to a class name and went silently empty.
+    conds, window = _date_conditions(since, until, column="v.timestamp", named=True)
+    where = "".join(f" AND {c}" for c in conds)
+    spans_cte = _SESSION_SPANS_CTE.format(where=where)
+    rows = conn.execute(
+        f"""
+        {spans_cte},
         chained AS (
             SELECT *,
                    SUM(CASE WHEN prev_ts IS NULL OR {_GAP} > :incident_gap
@@ -145,17 +173,15 @@ def get_incidents(
         LEFT JOIN ip_intel i ON i.ip = c.ip
         GROUP BY c.signature, c.incident_no
         HAVING COUNT(DISTINCT c.ip) >= :min_addresses
-        LIMIT :limit
     """,
         {
             **window,
             "session_gap": SESSION_GAP_SECONDS,
             "incident_gap": INCIDENT_GAP_SECONDS,
             "min_addresses": MIN_ADDRESSES,
-            "limit": limit,
         },
     ).fetchall()
-    return _decorate(rows)
+    return _decorate(rows)[:limit]
 
 
 def _decorate(rows) -> list[dict]:
@@ -168,7 +194,13 @@ def _decorate(rows) -> list[dict]:
     out = []
     for row in rows:
         incident = dict(row)
-        incident["paths"] = [p for p in incident.pop("signature").split("\n") if p]
+        signature = incident.pop("signature")
+        incident["paths"] = [p for p in signature.split("\n") if p]
+        # A short name for the signature, because a URL has to carry it and the
+        # signature itself is five paths — on this deployment one of them is a
+        # 120-character PHP payload. The digest is over the same canonical form
+        # the pivot builds, so it is stable across calls and across processes.
+        incident["digest"] = _signature_digest(signature)
         incident["members"] = sorted((incident.pop("member_ips") or "").split(","))
         incident["duration"] = _seconds_between(incident["started"], incident["ended"])
         incident["score"] = score(incident)
@@ -191,3 +223,134 @@ def _seconds_between(started: str, ended: str) -> int:
         )
     except (ValueError, TypeError):
         return 0
+
+
+def _signature_digest(signature: str) -> str:
+    """A short, stable name for one signature."""
+    return hashlib.sha256(signature.encode()).hexdigest()[:16]
+
+
+def _padded(since: str) -> str:
+    """One session gap earlier, so a boundary can be recognised at the edge.
+
+    Session starts are found by looking for silence before a request. Cut the
+    visits at the incident's first moment and an address that was already busy
+    looks as though it had just started — its run would be split at the cut and
+    the tail could carry the signature. An unparseable bound means no padding
+    rather than no answer; the caller still holds the result to the incident's
+    own window.
+    """
+    try:
+        return (datetime.fromisoformat(since) - timedelta(seconds=SESSION_GAP_SECONDS)).isoformat()
+    except (ValueError, TypeError):
+        return since
+
+
+def get_incident_sessions(
+    conn: sqlite3.Connection, since: str, until: str, digest: str
+) -> tuple[str, list[dict]]:
+    """The signature an incident carries, and the sessions it is made of.
+
+    The signature comes back because the caller needs it to ask what those
+    sessions requested, and only this query knows it — the digest is a name for
+    it, not a way back to it.
+
+    An incident is a signature and a stretch of time, and that pair names it —
+    no stored id, the same way a session needs none. The signature travels as a
+    digest because five paths do not fit comfortably in a URL.
+
+    **The window is padded backwards by one session gap**, and that is the whole
+    correctness of this query. Session boundaries are found by looking for
+    silence before a request; truncate the visits at the incident's first
+    moment and the first request of every member session has nothing before it,
+    which is right — but a session that had a neighbour just before the cut
+    would be split there and carry a different first five paths. Padding by the
+    gap means the emptiness that defines a start is inside the window and can
+    be seen. Sessions that then begin before the incident are dropped: they are
+    not part of it.
+    """
+    padded = _padded(since)
+    conds, window = _date_conditions(padded, until, column="v.timestamp", named=True)
+    where = "".join(f" AND {c}" for c in conds)
+    rows = conn.execute(
+        f"""
+        {_SESSION_SPANS_CTE.format(where=where)}
+        SELECT s.signature, s.ip, s.started, s.ended, s.probe_404,
+               COALESCE(i.asn, '') AS asn,
+               COALESCE(i.org, '') AS org,
+               COALESCE(i.country_code, '') AS country_code,
+               -- The full signal set, not just two of them: the panel draws the
+               -- same ip_signal_bar as every other surface, and selecting a
+               -- subset here made an address on Tor read as having no signals.
+               COALESCE(i.is_tor, 0)       AS is_tor,
+               COALESCE(i.is_proxy, 0)     AS is_proxy,
+               COALESCE(i.is_hosting, 0)   AS is_hosting,
+               COALESCE(i.dnsbl_listed, 0) AS dnsbl_listed,
+               COALESCE(i.dnsbl_sources, '') AS dnsbl_sources,
+               (SELECT GROUP_CONCAT(tag) FROM ip_intel_tags WHERE ip = s.ip) AS tags,
+               (i.ip IS NOT NULL)          AS enriched
+        FROM spans s
+        LEFT JOIN ip_intel i ON i.ip = s.ip
+        WHERE s.started >= :from_ts AND s.started <= :to_ts
+        ORDER BY s.started, s.ip
+    """,
+        {**window, "session_gap": SESSION_GAP_SECONDS, "from_ts": since, "to_ts": until},
+    ).fetchall()
+    # Matched in Python rather than in SQL: the digest is ours, not SQLite's,
+    # and hashing in the query would mean registering a second scalar function
+    # for one comparison over a handful of rows.
+    signature, out = "", []
+    for row in rows:
+        session = dict(row)
+        found = session.pop("signature")
+        if _signature_digest(found) != digest:
+            continue
+        signature = found
+        session["duration"] = _seconds_between(session["started"], session["ended"])
+        out.append(session)
+    return signature, out
+
+
+def get_incident_paths(
+    conn: sqlite3.Connection, since: str, until: str, signature: str
+) -> list[dict]:
+    """What an incident asked for, in the order the paths first arrived.
+
+    Only the paths the incident is built from — requests for something that
+    does not exist, convention files excluded, the same set every other figure
+    on the row counts. Widening it to every request the member sessions made
+    would put a different total under a row that already states one, and two
+    numbers describing one event is how a page stops being believed.
+
+    Unbounded on purpose: the largest campaign on the reference deployment
+    asks for 266 distinct paths, which is a list, not a load. The caller
+    decides how much of it to draw at once and pages the rest.
+    """
+    padded = _padded(since)
+    conds, window = _date_conditions(padded, until, column="v.timestamp", named=True)
+    where = "".join(f" AND {c}" for c in conds)
+    rows = conn.execute(
+        f"""
+        {_SESSION_SPANS_CTE.format(where=where)}
+        SELECT m.path,
+               COUNT(DISTINCT m.ip) AS addresses,
+               COUNT(*)             AS requests,
+               MIN(m.id)            AS first_id
+        FROM marked m
+        JOIN sessions s    ON s.ip = m.ip AND s.session_no = m.session_no
+        JOIN per_session p ON p.ip = m.ip AND p.session_no = m.session_no
+        WHERE s.signature = :signature
+          AND p.started >= :from_ts AND p.started <= :to_ts
+        GROUP BY m.path
+        ORDER BY first_id
+    """,
+        {
+            **window,
+            "session_gap": SESSION_GAP_SECONDS,
+            "signature": signature,
+            "from_ts": since,
+            "to_ts": until,
+        },
+    ).fetchall()
+    marks = set(signature.split("\n"))
+    return [{**dict(r), "in_signature": r["path"] in marks} for r in rows]

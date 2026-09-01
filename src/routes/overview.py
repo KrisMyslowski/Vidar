@@ -84,6 +84,7 @@ async def overview(
         "tor": SIGNAL_COLOR_VARS["is_tor"],
         "hosting": SIGNAL_COLOR_VARS["is_hosting"],
         "dnsbl": SIGNAL_COLOR_VARS["dnsbl_listed"],
+        "shodan": SIGNAL_COLOR_VARS["has_tags"],
     }
     for item in attention:
         item["color"] = _finding_colors.get(item["signal"], GROUP_COLOR_VARS["unknown"])

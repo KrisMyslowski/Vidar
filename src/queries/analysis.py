@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from urllib.parse import unquote
 
-from ..classifier.patterns import _CONVENTION_404_MATCH, _CONVENTION_404_PATTERNS
+from ..classifier.patterns import _CONVENTION_404_PATTERNS
+from ..config import settings
 from ..taxonomy import CLEAN_SIGNAL_COLUMNS, GROUPS_WITH_UNKNOWN, SIGNALS
 from ._shared import (
     _THREAT_FLAGS_SQL,
     _VISITOR_GROUP_CASE,
+    _VISITOR_GROUP_IP_COUNTS,
     _VISITOR_GROUP_ORDER,
     _VISITOR_GROUP_SUMS,
     SHODAN_CHILD_COLUMNS,
@@ -20,6 +23,9 @@ from ._shared import (
     SHODAN_CHILDREN,
     _apply_class_filter,
     _apply_date_filter,
+    _apply_drill_filters,
+    _apply_min_visits,
+    _apply_seen_filter,
     _apply_signal_filter,
     _apply_visitor_search,
     _date_conditions,
@@ -41,6 +47,7 @@ def get_geo_data(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> tuple[list[dict], dict]:
     """Return (markers, geo_stats) for the /geo route.
 
@@ -49,6 +56,17 @@ def get_geo_data(
     geo_stats keys: total_ips, total_countries, proxy_count, tor_count,
                     hosting_count, dnsbl_count, clean_count, mobile_count,
                     and per-group counts (humans_count, bots_count, …).
+
+    Two of those are load-bearing and the rest are not, which is worth writing
+    down before somebody deletes the lot as dead. `total_ips` is the map
+    header's denominator — the header counts the viewport, and zoomed in there
+    is otherwise nothing saying what fraction of the selection that is.
+    `clean_count` is not rendered at all: it anchors the cross-check that the
+    map and the `clean` filter agree on what clean means, a definition that has
+    disagreed with itself before over whether Shodan tags count against it.
+    Everything else here is computed and unread — the map's selection panel
+    counts the same things in the browser, scoped to the viewport, which is the
+    more useful scoping.
     """
     marker_query = """
         SELECT i.ip, i.lat, i.lon, i.country, i.country_code, i.city,
@@ -67,6 +85,7 @@ def get_geo_data(
     marker_query, marker_params = _apply_date_filter(
         marker_query, marker_params, date_from, date_to
     )
+    marker_query, marker_params = _apply_seen_filter(marker_query, marker_params, seen, date_from)
     # Same search the table applies, so panning the map shows the same selection.
     marker_query, marker_params = _apply_visitor_search(marker_query, marker_params, q)
     marker_query += " GROUP BY i.ip"
@@ -112,6 +131,8 @@ def get_activity_timeline(
     signal_filter: list[str] | None = None,
     bucket: str = "day",
     q: str | None = None,
+    seen: str | None = None,
+    drill: dict | None = None,
 ) -> list[dict]:
     """Return [{day, total, humans, bots, automated, threats, unknown}] for the activity chart.
 
@@ -124,6 +145,79 @@ def get_activity_timeline(
     one. Anything but a known bucket falls back to days rather than reaching the
     SQL, which is why the width comes from a lookup and not from the argument.
     """
+    return _timeline(
+        conn,
+        "COUNT(*) as total, " + _VISITOR_GROUP_SUMS,
+        since,
+        until,
+        class_filter,
+        signal_filter,
+        bucket,
+        q,
+        seen,
+        drill,
+    )
+
+
+def get_visitor_timeline(
+    conn: sqlite3.Connection,
+    since: str | None = None,
+    until: str | None = None,
+    class_filter: list[str] | None = None,
+    signal_filter: list[str] | None = None,
+    bucket: str = "day",
+    q: str | None = None,
+    seen: str | None = None,
+    drill: dict | None = None,
+) -> list[dict]:
+    """The same shape over distinct addresses instead of requests.
+
+    Identical columns to get_activity_timeline, so one chart renders both — and
+    identical filters, so both answer for the selection the page has set. What
+    changes is the question: how many *addresses* were here, rather than how
+    many requests they made. Six thousand requests from three addresses is a
+    scanner and three thousand addresses making two each is a crawl, and the
+    request count alone cannot separate them.
+
+    Under the New selection this is the count that reads directly: how many
+    addresses arrived here for the first time, per bucket.
+
+    **These do not add up across buckets.** An address that visits on two days
+    is counted in both. The range's own distinct total is a different question,
+    and the filter chips answer it — nothing here presents a sum.
+    """
+    return _timeline(
+        conn,
+        "COUNT(DISTINCT v.ip) as total, " + _VISITOR_GROUP_IP_COUNTS,
+        since,
+        until,
+        class_filter,
+        signal_filter,
+        bucket,
+        q,
+        seen,
+        drill,
+    )
+
+
+def _timeline(
+    conn: sqlite3.Connection,
+    select: str,
+    since: str | None,
+    until: str | None,
+    class_filter: list[str] | None,
+    signal_filter: list[str] | None,
+    bucket: str,
+    q: str | None,
+    seen: str | None,
+    drill: dict | None = None,
+) -> list[dict]:
+    """One bucketed timeline. `select` decides what is counted, nothing else.
+
+    The two callers differ in one pivot and in nothing else. Kept as one body
+    so a filter added to one cannot be missing from the other — which is how
+    two charts on one page start describing two different selections.
+    """
     width = _BUCKET_WIDTH.get(bucket, _BUCKET_WIDTH["day"])
     conditions, params = _date_conditions(since, until, column="v.timestamp")
     query = "WHERE 1=1" + ("".join(f" AND {c}" for c in conditions))
@@ -132,18 +226,85 @@ def get_activity_timeline(
     # Search selects visitors, so the chart shows those visitors' activity over
     # time — the same selection the table and the map show.
     query, params = _apply_visitor_search(query, params, q)
-    return [
+    query, params = _apply_seen_filter(query, params, seen, since)
+    # A copy: both charts are handed the same dict, and popping min_visits out
+    # of the caller's would leave the second one unfiltered by it.
+    drill = dict(drill or {})
+    min_visits = drill.pop("min_visits", 0)
+    query, params = _apply_drill_filters(query, params, **drill)
+    # Last, and given the chain above: the bar has to be cleared by the traffic
+    # the page is showing, not by everything the address ever did.
+    query, params = _apply_min_visits(query, params, min_visits, query, list(params))
+    rows = [
         dict(r)
         for r in conn.execute(
-            f"""SELECT substr(v.timestamp,1,{width}) as day,
-                       COUNT(*) as total,
-                       {_VISITOR_GROUP_SUMS}
+            f"""SELECT substr(v.timestamp,1,{width}) as day, {select}
                FROM visits v LEFT JOIN ip_intel i ON v.ip = i.ip
                {query}
                GROUP BY day ORDER BY day""",
             params,
         ).fetchall()
     ]
+    return _fill_gaps(rows, bucket, since, until)
+
+
+# A ceiling on generated buckets, so a pathological window cannot make this
+# produce a list nothing can draw. `pick_bucket` keeps hours to a few days and
+# days to whatever the retention window holds, so nothing real approaches it.
+_MAX_BUCKETS = 5000
+
+
+def _fill_gaps(rows: list[dict], bucket: str, since: str | None, until: str | None) -> list[dict]:
+    """Put the silent buckets back, as explicit zeros.
+
+    GROUP BY returns only buckets that have rows, and the chart positions points
+    by index — so a day with no traffic was not drawn as zero, it was not drawn
+    at all, and the two neighbours either side of it closed up. On the reference
+    month, `class=humans` over 90 days returned six buckets spanning 27 days: an
+    eleven-day silence and a one-day silence were given the same width, and a
+    continuous line was drawn across three weeks in which no person visited.
+
+    An axis that is not linear in time cannot answer the one question the chart
+    exists for. Filling here rather than in the drawing code keeps it true for
+    every caller, /api/activity included.
+
+    An empty result stays empty. A window with no traffic at all is not a flat
+    line at zero — it is nothing to draw, and the page says so in words.
+    """
+    if not rows:
+        return rows
+    step = timedelta(hours=1) if bucket == "hour" else timedelta(days=1)
+    fmt = "%Y-%m-%dT%H" if bucket == "hour" else "%Y-%m-%d"
+
+    def _parse(key: str) -> datetime:
+        return datetime.strptime(key, fmt)
+
+    # The window's own bounds where it has them, so a quiet start or end of the
+    # range is visible as quiet rather than cropped away. `until` is inclusive
+    # of its whole day, which is what the last hour is for.
+    #
+    # Nothing here parses a timestamp it has not been handed by SQLite's substr,
+    # and a row whose timestamp is not a timestamp would take the whole page
+    # down with a 500 rather than draw one bad point. The same trap emptied
+    # every Overview finding once, from get_hourly_baseline. Unfilled is the
+    # right failure: the chart draws what it drew before this function existed.
+    try:
+        first = _parse(since[:10] + ("T00" if bucket == "hour" else "")) if since else None
+        last = _parse(until[:10] + ("T23" if bucket == "hour" else "")) if until else None
+        start = min(_parse(rows[0]["day"]), first) if first else _parse(rows[0]["day"])
+        end = max(_parse(rows[-1]["day"]), last) if last else _parse(rows[-1]["day"])
+    except (ValueError, TypeError):
+        return rows
+
+    zero = {k: 0 for k in rows[0] if k != "day"}
+    present = {r["day"]: r for r in rows}
+    out: list[dict] = []
+    moment = start
+    while moment <= end and len(out) < _MAX_BUCKETS:
+        key = moment.strftime(fmt)
+        out.append(present.get(key) or {"day": key, **zero})
+        moment += step
+    return out
 
 
 def get_hourly_heatmap(
@@ -153,13 +314,18 @@ def get_hourly_heatmap(
     class_filter: list[str] | None = None,
     signal_filter: list[str] | None = None,
     q: str | None = None,
+    seen: str | None = None,
+    drill: dict | None = None,
 ) -> list[dict]:
     """Visit counts per (weekday, hour) cell for the traffic-rhythm heatmap.
 
-    Returns [{dow, hr, total, humans, bots, automated, threats, unknown}] for
-    non-empty cells — the per-group split drives the heatmap's own group toggle,
-    mirroring the activity chart's series. dow follows SQLite strftime ('%w'):
-    0 = Sunday … 6 = Saturday. Timestamps are UTC.
+    Returns [{dow, hr, total}] for non-empty cells. dow follows SQLite strftime
+    ('%w'): 0 = Sunday … 6 = Saturday. Timestamps are UTC.
+
+    The total and nothing else. It carried a per-group split for the toggle
+    above the grid, which was removed when the page's own group chips took that
+    job — five SUM() aggregates per cell, computed on every render and read by
+    nothing, and a docstring still describing the control they fed.
 
     Takes the same class/signal/search filters as get_activity_timeline, and for
     the same reason: both sit on /visitors?view=timeline, where every other view
@@ -172,13 +338,17 @@ def get_hourly_heatmap(
     query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_visitor_search(query, params, q)
+    query, params = _apply_seen_filter(query, params, seen, since)
+    drill = dict(drill or {})
+    min_visits = drill.pop("min_visits", 0)
+    query, params = _apply_drill_filters(query, params, **drill)
+    query, params = _apply_min_visits(query, params, min_visits, query, list(params))
     return [
         dict(r)
         for r in conn.execute(
             f"""SELECT CAST(strftime('%w', v.timestamp) AS INTEGER) AS dow,
                        CAST(strftime('%H', v.timestamp) AS INTEGER) AS hr,
-                       COUNT(*) AS total,
-                       {_VISITOR_GROUP_SUMS}
+                       COUNT(*) AS total
                FROM visits v LEFT JOIN ip_intel i ON v.ip = i.ip
                {query}
                GROUP BY dow, hr""",
@@ -649,6 +819,7 @@ def get_exposures(
     conn: sqlite3.Connection,
     since: str | None = None,
     until: str | None = None,
+    findings_only: bool = True,
 ) -> list[dict]:
     """Paths that answered 2xx and that no benign visitor ever asked for.
 
@@ -665,10 +836,14 @@ def get_exposures(
     distinct paths on the reference log are that one phenomenon, and listing them
     as 125 exposures would bury the one real finding. See get_probe_echo().
 
-    **Convention paths are excluded** — the same list the 404 ratio uses.
+    **Convention paths are not findings** — the same list the 404 ratio uses.
     `/.well-known/acme-challenge/…` is fetched by nobody but a certificate
     authority, which is the exact shape of a finding and the exact opposite of
-    one.
+    one. That test now runs once, in the fold, against the decoded path: doing
+    it in SQL as well only ever caught the spellings the fold would have caught
+    anyway, and it hid the true figures from get_served_paths — `/robots.txt`
+    came back as one request instead of 452, because only its percent-encoded
+    spelling had slipped past the LIKE.
 
     **The benign test runs on the resource, not on the spelling.** It used to
     run per raw path in SQL, which made a finding depend on how each individual
@@ -678,6 +853,13 @@ def get_exposures(
     under another spelling. A count that moves because one visitor was judged
     differently is not a count. Spellings fold first; the question "did anything
     benign ever fetch this" is then asked once, of the resource.
+
+    **And "ever" means ever, not "within the selected range".** The counts are
+    windowed — that is what the range tabs are for — but the benign test is not,
+    because a path does not stop being part of the site on a quiet day. Both
+    inside one window it read `/` as a finding on the 24 h range: 42 addresses,
+    one of them benign, one short of the threshold. The site's own homepage,
+    reported as something the server gave away.
     """
     conds, params = _date_conditions(since, until, column="v.timestamp")
     where = "".join(f" AND {c}" for c in conds)
@@ -686,37 +868,109 @@ def get_exposures(
         dict(r)
         for r in conn.execute(
             f"""
+        WITH benign_ever AS (
+            SELECT v.path AS path, COUNT(DISTINCT v.ip) AS benign_ips
+            FROM visits v
+            JOIN ip_intel i ON i.ip = v.ip
+            WHERE v.status BETWEEN 200 AND 299
+              AND i.visitor_class IN ({benign})
+            GROUP BY v.path
+        )
         SELECT v.path,
                COUNT(DISTINCT v.ip) AS ips,
                COUNT(*)             AS hits,
                MIN(v.timestamp)     AS first_seen,
                MAX(v.timestamp)     AS last_seen,
                MAX(v.bytes_sent)    AS bytes_sent,
-               COUNT(DISTINCT CASE WHEN i.visitor_class IN ({benign})
-                                  THEN v.ip END) AS benign_ips
+               COALESCE(b.benign_ips, 0) AS benign_ips
         FROM visits v
         JOIN ip_intel i ON i.ip = v.ip
+        LEFT JOIN benign_ever b ON b.path = v.path
         WHERE v.status BETWEEN 200 AND 299
           AND v.path NOT LIKE '%?%'
-          AND NOT ({_CONVENTION_404_MATCH})
           {where}
         GROUP BY v.path
         ORDER BY ips DESC, hits DESC
     """,
-            # Bound in the order the placeholders appear in the text, and here
-            # the benign list sits in the SELECT, ahead of the window in the
-            # WHERE. get_probe_echo() below has the two the other way round and
-            # therefore binds them the other way round. Reversed, this still
-            # runs: the window gets a class name, `v.timestamp >= 'bots/…'`
-            # matches no timestamp, and the page is empty under every range
-            # while every test that passes no window keeps passing.
+            # Bound in the order the placeholders appear in the text, and the
+            # CTE is the first thing in it, so the benign list binds ahead of
+            # the window in the outer WHERE. get_probe_echo() below has the two
+            # the other way round and therefore binds them the other way round.
+            # Reversed, this still runs: the window gets a class name,
+            # `v.timestamp >= 'bots/…'` matches no timestamp, and the page is
+            # empty under every range while every test that passes no window
+            # keeps passing.
             [*_BENIGN_CLASSES, *params],
         ).fetchall()
     ]
-    return _fold_encodings(rows)
+    return _fold_encodings(rows, findings_only, conn=conn, where=where, params=params)
 
 
-def _fold_encodings(rows: list[dict]) -> list[dict]:
+def get_served_paths(
+    conn: sqlite3.Connection,
+    since: str | None = None,
+    until: str | None = None,
+) -> list[dict]:
+    """Everything this server handed out, findings and site pages alike.
+
+    The same query and the same fold as get_exposures, without the last step —
+    the benign threshold. Findings are the rows below it; these are all of them,
+    each carrying `is_finding`.
+
+    One result set rather than a second query, and the page splits it. Both
+    routes already state the reason for that: a number queried twice can
+    disagree with itself, and here the two blocks sit one above the other where
+    a disagreement would be plainly visible.
+
+    On the reference month this is seven rows — the homepage, index.html, four
+    content pages and `/.DS_Store` — which is what makes the split worth showing
+    at all. The findings table says "1 path"; it does not say one of how many.
+    """
+    return get_exposures(conn, since, until, findings_only=False)
+
+
+def _recount_folded(
+    conn: sqlite3.Connection, spellings: list[str], where: str, params: list
+) -> tuple[int, int]:
+    """Distinct addresses over several spellings of one path, and benign ones.
+
+    A distinct count does not survive being added up. Two spellings each fetched
+    by 30 addresses are not 60 addresses — anything that tried both is in both
+    figures — and the column that shows this says "distinct". The sum was also
+    what decided Site from Finding: two spellings with one benign address each
+    summed to the threshold and marked a path as part of the site on the
+    strength of one visitor counted twice.
+
+    Asked only of the groups that actually folded, which is a handful of rows.
+    The window applies to the addresses the way it applies everywhere on this
+    page; the benign count is unwindowed, because "ever" means ever — the same
+    split get_exposures makes between its two queries.
+    """
+    marks = ",".join("?" for _ in spellings)
+    benign = ",".join("?" for _ in _BENIGN_CLASSES)
+    ips = conn.execute(
+        f"""SELECT COUNT(DISTINCT v.ip) FROM visits v
+            JOIN ip_intel i ON i.ip = v.ip
+            WHERE v.status BETWEEN 200 AND 299 AND v.path IN ({marks}){where}""",
+        [*spellings, *params],
+    ).fetchone()[0]
+    benign_ips = conn.execute(
+        f"""SELECT COUNT(DISTINCT v.ip) FROM visits v
+            JOIN ip_intel i ON i.ip = v.ip
+            WHERE v.status BETWEEN 200 AND 299 AND v.path IN ({marks})
+              AND i.visitor_class IN ({benign})""",
+        [*spellings, *_BENIGN_CLASSES],
+    ).fetchone()[0]
+    return ips, benign_ips
+
+
+def _fold_encodings(
+    rows: list[dict],
+    findings_only: bool = True,
+    conn: sqlite3.Connection | None = None,
+    where: str = "",
+    params: list | None = None,
+) -> list[dict]:
     """Collapse percent-encoded spellings of one path, and drop the harmless ones.
 
     Without this the reference log reports eight findings where there is one.
@@ -733,8 +987,6 @@ def _fold_encodings(rows: list[dict]) -> list[dict]:
     folded: dict[str, dict] = {}
     for row in rows:
         canonical = _canonical_path(row["path"])
-        if _is_convention_path(canonical):
-            continue
         seen = folded.get(canonical)
         if seen is None:
             folded[canonical] = {**row, "path": canonical, "spellings": {row["path"]}}
@@ -746,14 +998,158 @@ def _fold_encodings(rows: list[dict]) -> list[dict]:
         seen["bytes_sent"] = max(seen["bytes_sent"], row["bytes_sent"])
         seen["last_seen"] = max(seen["last_seen"], row["last_seen"])
         seen["first_seen"] = min(seen["first_seen"], row["first_seen"])
-    # Now, and only now, ask the question — of the resource, once.
+    # The two counts above were added up across spellings, which is right for
+    # requests and wrong for addresses — see _recount_folded. Corrected before
+    # the threshold below reads benign_ips, not after.
+    if conn is not None:
+        for row in folded.values():
+            if len(row["spellings"]) > 1:
+                row["ips"], row["benign_ips"] = _recount_folded(
+                    conn, sorted(row["spellings"]), where, params or []
+                )
+    # Now, and only now, ask the question — of the resource, once. The answer is
+    # recorded on every row rather than used to drop rows, because the page shows
+    # both sides of it: what was handed out, and which of it nothing legitimate
+    # asked for. `findings_only` keeps get_exposures' own contract.
+    #
+    # A convention path and a fragment the site's own JavaScript fetches are not
+    # findings — but they *are* things this server hands out, and a list of what
+    # it hands out that omits robots.txt and four content pages would be a
+    # stranger answer than either. They are marked rather than dropped, and only
+    # the findings view filters on it.
+    for row in folded.values():
+        row["is_site"] = _is_convention_path(row["path"]) or _is_site_fragment(row["path"])
+        row["is_finding"] = not row["is_site"] and row["benign_ips"] < _BENIGN_ADDRESSES_FOR_SITE
     out = sorted(
-        (r for r in folded.values() if r["benign_ips"] < _BENIGN_ADDRESSES_FOR_SITE),
+        (r for r in folded.values() if r["is_finding"] or not findings_only),
         key=lambda r: (-r["ips"], -r["hits"]),
     )
     for row in out:
         row["spellings"] = sorted(row["spellings"])
     return out
+
+
+def get_exposure_detail(
+    conn: sqlite3.Connection,
+    spellings: list[str],
+    since: str | None = None,
+    until: str | None = None,
+) -> dict:
+    """Everything one finding's own requests can be asked, for the side panel.
+
+    The findings table carries aggregates and nothing else — a count of
+    addresses, a count of requests, two timestamps and a maximum byte size.
+    That is enough to list a finding and not enough to decide anything about
+    it, which is what the panel is for.
+
+    **Keyed on spellings, not on the path.** A finding is the fold of every
+    percent-encoded way the same resource was asked for, so `/.DS_Store` is
+    `/.DS_Store` and `/%2eDS_Store` together. Matching the canonical path alone
+    would answer for a subset of the row it claims to describe.
+
+    **The window is the page's, but the served/not-served question is not.**
+    Whether a 404 ever came back for these spellings decides whether the file is
+    still on disk, and that is the one fact worth knowing regardless of which
+    range the reader happens to have picked — so it is asked unwindowed. The
+    counts beside it stay windowed, like everything else on the page.
+    """
+    if not spellings:
+        return {}
+    marks = ", ".join("?" for _ in spellings)
+    conds, params = _date_conditions(since, until, column="v.timestamp")
+    where = "".join(f" AND {c}" for c in conds)
+    served = " AND v.status BETWEEN 200 AND 299"
+
+    def one(select: str, extra: str = "", args: list | None = None) -> list[dict]:
+        return [
+            dict(r)
+            for r in conn.execute(
+                f"""SELECT {select} FROM visits v LEFT JOIN ip_intel i ON i.ip = v.ip
+                    WHERE v.path IN ({marks}){served}{where}{extra}""",
+                [*spellings, *params, *(args or [])],
+            ).fetchall()
+        ]
+
+    answers = one(
+        "v.status AS status, v.server_port AS port, COUNT(*) AS hits,"
+        " MIN(v.bytes_sent) AS min_bytes, MAX(v.bytes_sent) AS max_bytes",
+        " GROUP BY v.status, v.server_port ORDER BY hits DESC",
+    )
+    classes = one(
+        "COALESCE(NULLIF(i.visitor_class, ''), 'unknown') AS visitor_class,"
+        " COUNT(DISTINCT v.ip) AS ips",
+        " GROUP BY 1 ORDER BY ips DESC",
+    )
+    clients = one(
+        "COALESCE(NULLIF(v.user_agent, ''), '') AS user_agent, v.method AS method,"
+        " COUNT(*) AS hits",
+        " GROUP BY 1, 2 ORDER BY hits DESC LIMIT 8",
+    )
+    origins = one(
+        "COALESCE(i.asn, '') AS asn, COALESCE(i.org, '') AS org,"
+        " COALESCE(i.country_code, '') AS country_code, COUNT(DISTINCT v.ip) AS ips",
+        " GROUP BY 1, 2, 3 ORDER BY ips DESC LIMIT 8",
+    )
+    signals = one(
+        "COUNT(DISTINCT CASE WHEN i.is_hosting THEN v.ip END) AS hosting,"
+        " COUNT(DISTINCT CASE WHEN i.is_proxy THEN v.ip END) AS proxy,"
+        " COUNT(DISTINCT CASE WHEN i.is_tor THEN v.ip END) AS tor,"
+        " COUNT(DISTINCT CASE WHEN i.dnsbl_listed THEN v.ip END) AS dnsbl"
+    )
+    per_address = one(
+        "COUNT(DISTINCT v.ip) AS ips, COUNT(*) AS hits,"
+        " MIN(v.timestamp) AS first_seen, MAX(v.timestamp) AS last_seen"
+    )
+    # Unwindowed, and the only unwindowed thing here: a 404 after the last 200
+    # means the file is gone, and that answer must not depend on the range.
+    refused = conn.execute(
+        f"""SELECT COUNT(*) AS n, MAX(timestamp) AS last FROM visits
+            WHERE path IN ({marks}) AND status = 404""",
+        spellings,
+    ).fetchone()
+    # What else those addresses asked this server for. It reframes a finding
+    # from "nine people wanted this file" to "nine scanners walked a list and
+    # this was one entry", which is usually what it is.
+    #
+    # In two steps, and both halves of that matter. Written as one statement with
+    # `v.ip IN (SELECT ip FROM visits WHERE … AND v.status BETWEEN 200 AND 299)`
+    # the status term binds to the *outer* v — an accidental correlation that
+    # filtered the wrong rows and answered 26 paths where the truth is 2 358.
+    # It also took 32 seconds against 101 413 visits, because SQLite re-ran the
+    # subquery per row; the address list is nine entries, so binding it is one
+    # millisecond.
+    fetchers = [
+        r[0]
+        for r in conn.execute(
+            f"SELECT DISTINCT ip FROM visits WHERE path IN ({marks})"
+            " AND status BETWEEN 200 AND 299",
+            spellings,
+        )
+    ]
+    if fetchers:
+        ip_marks = ", ".join("?" for _ in fetchers)
+        context = conn.execute(
+            f"""SELECT COUNT(DISTINCT path) AS paths, COUNT(*) AS hits FROM visits
+                WHERE ip IN ({ip_marks}) AND path NOT IN ({marks})""",
+            [*fetchers, *spellings],
+        ).fetchone()
+    else:
+        context = {"paths": 0, "hits": 0}
+
+    totals = per_address[0] if per_address else {}
+    return {
+        "answers": answers,
+        "classes": classes,
+        "clients": clients,
+        "origins": origins,
+        "signals": signals[0] if signals else {},
+        "refused": {"hits": refused["n"], "last": refused["last"]},
+        "context": {"paths": context["paths"], "hits": context["hits"]},
+        "ips": totals.get("ips") or 0,
+        "hits": totals.get("hits") or 0,
+        "first_seen": totals.get("first_seen"),
+        "last_seen": totals.get("last_seen"),
+    }
 
 
 def _canonical_path(path: str) -> str:
@@ -772,6 +1168,21 @@ def _is_convention_path(path: str) -> bool:
     """The same list the 404 ratio uses, applied to an already-decoded path."""
     lowered = path.lower()
     return any(fnmatch(lowered, p.replace("%", "*")) for p in _CONVENTION_404_PATTERNS)
+
+
+def _is_site_fragment(path: str) -> bool:
+    """A path the site's own JavaScript fetches, and therefore not a finding.
+
+    JS_ONLY_PATH_PREFIXES already names them — the classifier reads a fetch of
+    one as browser evidence. A path fetched by the page is part of the site as
+    published; it only looks like a finding because no crawler follows a link
+    that does not exist in the HTML, which is the one test this page applies.
+    The reference deployment reported a real content page this way.
+
+    Empty unless configured, so a deployment that has not named its prefixes
+    loses nothing here.
+    """
+    return any(path.startswith(prefix) for prefix in settings.js_only_path_prefixes)
 
 
 def get_probe_echo(

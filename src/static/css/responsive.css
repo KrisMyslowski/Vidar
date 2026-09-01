@@ -18,6 +18,38 @@
     display: none;
   }
 
+  /* overflow.js states the contract in its own header: "on the mobile card
+     layout (≤1100px) every item is shown", and it returns early here so no
+     [+N] chip is ever appended. The stylesheet never got the message —
+     .cell-overflow kept `overflow: hidden` and `flex-wrap: nowrap`, so the
+     items nothing was hiding were clipped instead, with no counter to say so.
+     Measured on /incidents at 1000px: a cell 427px wide holding 2 194px of
+     content, zero elements hidden, zero chips. Four of five signature paths
+     gone and nothing on the page admitting it — the same silent loss
+     `.data-table` once caused with `overflow: hidden` for rounded corners. */
+  .cell-overflow {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  /* Wrapping alone was not enough: items are `flex: 0 0 auto` so overflow.js
+     can measure what fits, and a single path badge is wider than a card. They
+     spilled instead of being cut, which `html, body { overflow-x: hidden }`
+     then cut anyway — the same silent loss by a different route. In card mode
+     nothing is measuring, so they may shrink, and a path may break inside a
+     word rather than leave the card. Vertical space is the one thing this
+     layout has. */
+  .cell-overflow > * {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    /* Both, or neither works: overflow-wrap has nothing to act on while the
+       badge is nowrap, and the longest signature path here is 120 characters
+       of PHP payload — wider than any card at any breakpoint. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .responsive-table,
   .responsive-table tbody,
   .responsive-table tr,
@@ -57,6 +89,18 @@
 
   .responsive-table td:last-child {
     border-bottom: none;
+  }
+
+  /* A row-actions cell has no header and so no label. Left in the two-column
+     grid it still reserved the 110px label track, which indented Download and
+     Delete out of line with every value above them. */
+  .responsive-table td.storage-actions {
+    display: flex;
+    grid-template-columns: none;
+  }
+
+  .responsive-table td.storage-actions::before {
+    content: none;
   }
 
   .responsive-table td::before {
@@ -115,6 +159,33 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
+}
+
+@media (max-width: 900px) {
+  /* The range strip is ~450px of tabs pinned to the right of the title, and it
+     never wrapped: at 420px the body scrolled sideways to 630px, which this
+     dashboard forbids itself everywhere else. Measured while fixing the
+     heatmap's own overflow one panel below. */
+  .page-header { flex-wrap: wrap; }
+  .page-header-actions { margin-left: 0; flex-wrap: wrap; }
+  .range-tabs, .tab-group { flex-wrap: wrap; }
+
+  /* An open class or signal menu is 32rem of popover anchored to the chip that
+     opened it, and the rail is 176px here. In the rail instead, the way the
+     search help already works one row below — and for the reason written
+     there: the rail grows and pushes the table down, so nothing is covered and
+     there is nothing to scroll. */
+  .filter-disclosure[open] > .filter-disclosure-menu,
+  .group-filter[open] > .filter-disclosure-menu {
+    position: static;
+    max-width: none;
+    width: auto;
+  }
+
+  /* Five bands side by side need 5 x 110px; there are 176px. They stack. */
+  .tl-mults { grid-template-columns: minmax(0, 1fr); }
+  .heatmap-legend { flex-wrap: wrap; }
+  .heatmap-legend-zero { margin-left: 0; }
 }
 
 @media (max-width: 640px) {

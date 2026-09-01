@@ -99,7 +99,7 @@ def test_explanations_group_by_family_in_first_appearance_order():
     grouped = explain_paths(
         ["/.DS_Store", "/.git/config", "/.git/HEAD", "/robots.txt"], "example.com"
     )
-    assert [(family.key, paths) for family, paths in grouped] == [
+    assert [(e.family.key, e.paths) for e in grouped] == [
         ("os-metadata", ["/.DS_Store"]),
         ("vcs-directory", ["/.git/config", "/.git/HEAD"]),
     ]
@@ -107,8 +107,17 @@ def test_explanations_group_by_family_in_first_appearance_order():
 
 def test_the_check_is_a_command_and_not_a_template():
     """The reader is invited to paste it, so it must not still say {host}."""
-    ((family, _),) = explain_paths(["/.DS_Store"], "example.com")
-    assert family.check == "curl -sI https://example.com/.DS_Store"
+    (explained,) = explain_paths(["/.DS_Store"], "example.com")
+    assert explained.checks == ["curl -sI https://example.com/.DS_Store"]
+
+
+def test_every_covered_path_gets_its_own_command():
+    """A single command under three paths reads as checking all three."""
+    (explained,) = explain_paths(["/.git/config", "/.git/HEAD"], "example.com")
+    assert explained.checks == [
+        "curl -s https://example.com/.git/config | head",
+        "curl -s https://example.com/.git/HEAD | head",
+    ]
 
 
 def test_every_check_survives_being_addressed():
@@ -116,9 +125,10 @@ def test_every_check_survives_being_addressed():
     paths = [REPRESENTATIVES[family.key] for _, family in FAMILIES]
     grouped = explain_paths(paths, "example.com")
     assert len(grouped) == len(FAMILIES)
-    for family, _ in grouped:
-        assert "{" not in family.check and "}" not in family.check
-        assert "example.com" in family.check
+    for explained in grouped:
+        for check in explained.checks:
+            assert "{" not in check and "}" not in check
+            assert "example.com" in check
 
 
 def test_every_family_answers_all_four_questions():
@@ -158,7 +168,7 @@ def test_the_generic_check_only_asks_for_headers():
 def test_every_path_is_either_explained_or_given_a_command():
     """No finding falls between the two blocks and comes out with nothing."""
     paths = ["/.DS_Store", "/.git/config", "/notes.html", "/a", "/error.log"]
-    explained = {p for _, covered in explain_paths(paths, "h") for p in covered}
+    explained = {p for e in explain_paths(paths, "h") for p in e.paths}
     listed = {p for p, _ in unexplained_paths(paths, "h")}
     assert explained | listed == set(paths)
     assert explained & listed == set()

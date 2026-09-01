@@ -40,11 +40,18 @@ _TAIL_LINES = 50
 
 @dataclass(frozen=True)
 class Check:
-    """One question, its verdict, and what to do about a bad one."""
+    """One question, its verdict, and what to do about a bad one.
+
+    `command` is separate from `detail` because the two are rendered
+    differently. On /settings/storage a command belongs in a block of its own —
+    inline in a sentence it cannot be copied without selecting mid-paragraph,
+    and the backticks that marked it print literally there.
+    """
 
     name: str
     status: str
     detail: str
+    command: str = ""
 
 
 def _last_entries(path: Path, limit: int = _TAIL_LINES) -> list[dict]:
@@ -170,8 +177,9 @@ def _check_writable() -> list[Check]:
                     f"{label} directory",
                     FAIL,
                     f"cannot write {path}: {exc.strerror}. The container runs as uid "
-                    f"1000 and everything it writes must be under the /data mount — "
-                    f"`chown 1000 {path}` on the host, and check VIDAR_DATA_DIR.",
+                    f"1000 and everything it writes must be under the /data mount. "
+                    f"Check VIDAR_DATA_DIR, then on the host:",
+                    f"chown 1000 {path}",
                 )
             )
         else:
@@ -272,6 +280,8 @@ def main() -> int:
     width = max(len(c.name) for c in checks)
     for c in checks:
         print(f"{c.status.upper():<4} {c.name:<{width}}  {c.detail}")
+        if c.command:
+            print(f"{'':<4} {'':<{width}}    {c.command}")
     failed = sum(c.status == FAIL for c in checks)
     warned = sum(c.status == WARN for c in checks)
     print()

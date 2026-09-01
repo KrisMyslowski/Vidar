@@ -7,6 +7,9 @@ crawler signals.") or listed the member classes instead of the evidence. These
 hold the contract mechanically, because prose has no other way to stay honest.
 """
 
+import re
+from pathlib import Path
+
 import pytest
 
 from src.taxonomy import CLASS_TIPS, GROUP_TIPS, SIGNALS, VALID_CLASSES, VISITOR_CATEGORIES
@@ -111,3 +114,33 @@ class TestAmericanSpelling:
         joined = " ".join(tip).lower()
         found = [w for w in self.BRITISH if w in joined]
         assert not found, f"{name}: {found}"
+
+
+class TestSpellingBeyondTheTips:
+    """The same convention, on the template text the tip registries do not reach.
+
+    TestAmericanSpelling above guards four registries. Template prose — every
+    tooltip written inline, every label, every help paragraph — was unguarded,
+    and drifted: `Scanning organization` in taxonomy.py sat beside `recognised`
+    in the search help and `recognises` on Exposure, three files apart in one
+    screen.
+
+    Comments are stripped first. They are not user-facing text, and holding
+    rationale prose to a style rule nobody reads would be churn.
+
+    `behaviour` is the deliberate exception. It is not a spelling choice here
+    but the name of the third taxonomy axis, carried by a column header, a URL
+    parameter and the BEHAVIOUR_* constants; spelling it the other way would
+    rename a feature to settle a style question.
+    """
+
+    BRITISH = ("organisation", "recognised", "recognises", "analyse", "colour", "centre")
+    COMMENT = re.compile(r"\{#.*?#\}|<!--.*?-->", re.S)
+
+    def test_no_british_spelling_in_template_text(self):
+        offenders = []
+        templates = Path(__file__).resolve().parent.parent / "src" / "templates"
+        for path in sorted(templates.rglob("*.html")):
+            text = self.COMMENT.sub(" ", path.read_text()).lower()
+            offenders += [f"{path.name}: {w}" for w in self.BRITISH if w in text]
+        assert not offenders, "British spelling in template text:\n" + "\n".join(offenders)

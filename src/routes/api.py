@@ -24,11 +24,14 @@ from ..queries import (
     DEFAULT_DAYS,
     DEFAULT_GROUPS,
     MAX_ADDRESSES,
+    SEEN_TOTAL,
+    SEEN_VALUES,
     VISIT_SORT_MAP,
     count_visits,
     get_activity_timeline,
     get_decisions,
     get_stats,
+    get_visitor_timeline,
     get_visits,
     stream_visits_for_export,
     valid_selection,
@@ -112,17 +115,33 @@ async def activity(
     cls: list[str] = Query(default=[], alias="class"),
     signal: list[str] = Query(default=[]),
     q: str | None = None,
+    seen: str | None = None,
+    metric: str = "visits",
 ):
-    """Visits per bucket, split by identity group — the activity chart's data.
+    """Requests or addresses per bucket, split by identity group.
+
+    Two charts on /visitors?view=timeline read from here — one counting
+    requests, one counting the distinct addresses that made them — and both
+    refetch through this when a zoom goes finer than the page shipped. The
+    metric has to travel with them, or zooming the Addresses chart would answer
+    with the Activity chart's numbers under the Addresses chart's labels.
 
     The page ships its daily rows inline, so this is only called once a reader
     zooms in far enough that days become single points and the chart wants
-    hours. Same filters as /visitors?view=timeline, so both show one selection.
+    hours. Same filters as /visitors?view=timeline, so both show one selection —
+    `seen` included, or zooming past three days would answer for every address
+    while the page still said New.
     """
     if bucket not in ("day", "hour"):
         bucket = "day"
+    seen = seen if seen in SEEN_VALUES else SEEN_TOTAL
+    # Normalised, not echoed: the response names the metric it answered with,
+    # and handing an unknown value straight back would have it say "addresses"
+    # over a column of request counts.
+    metric = "addresses" if metric == "addresses" else "visits"
+    timeline = get_visitor_timeline if metric == "addresses" else get_activity_timeline
     rows = await fetch(
-        lambda conn: get_activity_timeline(
+        lambda conn: timeline(
             conn,
             since=valid_date(date_from),
             until=valid_date(date_to),
@@ -130,9 +149,10 @@ async def activity(
             signal_filter=[s for s in signal if s in VALID_SIGNALS],
             bucket=bucket,
             q=valid_search(q),
+            seen=seen,
         )
     )
-    return {"bucket": bucket, "rows": rows}
+    return {"bucket": bucket, "metric": metric, "rows": rows}
 
 
 @router.get("/visits")

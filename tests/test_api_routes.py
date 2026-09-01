@@ -516,28 +516,112 @@ class TestActivityEndpoint:
         return tmp_db
 
     def test_days_are_the_default(self, client, timeline_db):
+        """The silent day between the two busy ones comes back as a zero.
+
+        GROUP BY skips it, and the chart positions points by index — so a day
+        with no traffic was not drawn as zero, it was not drawn at all, and its
+        neighbours closed up. The axis has to be linear in time.
+        """
         body = client.get("/api/activity").json()
         assert body["bucket"] == "day"
-        assert [r["day"] for r in body["rows"]] == ["2026-08-01", "2026-08-03"]
-        assert body["rows"][0]["total"] == 3
+        assert [r["day"] for r in body["rows"]] == [
+            "2026-08-01",
+            "2026-08-02",
+            "2026-08-03",
+        ]
+        assert [r["total"] for r in body["rows"]] == [3, 0, 1]
 
     def test_hours_split_a_day_apart(self, client, timeline_db):
         """The reason the endpoint exists: 03:00 and 21:00 are one bar as days."""
         body = client.get("/api/activity", params={"bucket": "hour"}).json()
         assert body["bucket"] == "hour"
-        assert [r["day"] for r in body["rows"]] == [
-            "2026-08-01T03",
-            "2026-08-01T21",
-            "2026-08-03T09",
-        ]
-        assert body["rows"][0]["total"] == 2
+        # Hour buckets are filled the same way — 03:00 to 09:00 two days later
+        # is 55 hours, and only three of them carry anything.
+        days = [r["day"] for r in body["rows"]]
+        assert days[0] == "2026-08-01T03" and days[-1] == "2026-08-03T09"
+        assert len(days) == 55
+        assert days == sorted(days)
+        busy = {r["day"]: r["total"] for r in body["rows"] if r["total"]}
+        assert busy == {"2026-08-01T03": 2, "2026-08-01T21": 1, "2026-08-03T09": 1}
 
     def test_an_unknown_bucket_falls_back_to_days(self, client, timeline_db):
         """The bucket picks a substring length in SQL, so it never takes the
         caller's word for it."""
         body = client.get("/api/activity", params={"bucket": "10) UNION SELECT 1--"}).json()
         assert body["bucket"] == "day"
-        assert len(body["rows"]) == 2
+        assert len(body["rows"]) == 3
+
+    def test_the_metric_picks_which_question_is_answered(self, client, timeline_db):
+        """Two charts read from here: one counts requests, one counts the
+        addresses that made them. The metric travels with the zoom refetch or
+        the Visitors chart would come back with the Activity chart's numbers
+        under its own labels."""
+        visits = client.get("/api/activity").json()
+        addrs = client.get("/api/activity", params={"metric": "addresses"}).json()
+        assert visits["metric"] == "visits" and addrs["metric"] == "addresses"
+        # The fixture is four requests from two addresses.
+        assert sum(r["total"] for r in visits["rows"]) == 4
+        assert max(r["total"] for r in addrs["rows"]) <= 2
+        # Same buckets either way, so the two charts share one x-axis.
+        assert [r["day"] for r in visits["rows"]] == [r["day"] for r in addrs["rows"]]
+
+    def test_an_unknown_metric_answers_in_requests_and_says_so(self, client, timeline_db):
+        """The default, not an error — and the answer names what it answered
+        with. Echoing the unknown value back would label a column of request
+        counts "addresses"."""
+        body = client.get("/api/activity", params={"metric": "nonsense"}).json()
+        assert body["metric"] == "visits"
+        assert body["rows"] == client.get("/api/activity").json()["rows"]
+
+    def test_the_address_selection_carries_too(self, client, timeline_db):
+        """The chart refetches hourly buckets from here once a reader zooms past
+        three days. Without `seen` those came back for every address while the
+        page still said New — a selection that silently widens, which is the one
+        thing every filter on this dashboard is built not to do."""
+        with get_conn(timeline_db) as conn:
+            # An address whose first request predates the window: not new in it.
+            insert_visit(
+                conn,
+                ip="10.0.0.9",
+                timestamp="2026-07-01T09:00:00+00:00",
+                method="GET",
+                path="/",
+                status=200,
+            )
+            insert_visit(
+                conn,
+                ip="10.0.0.9",
+                timestamp="2026-08-03T09:00:00+00:00",
+                method="GET",
+                path="/",
+                status=200,
+            )
+        window = {"from": "2026-08-02", "to": "2026-08-04"}
+        every = client.get("/api/activity", params=window).json()
+        new = client.get("/api/activity", params={**window, "seen": "new"}).json()
+        assert sum(r["total"] for r in every["rows"]) > sum(r["total"] for r in new["rows"])
+
+    def test_a_timestamp_that_is_not_one_leaves_the_chart_unfilled(self, client, tmp_db):
+        """Filling gaps means parsing every bucket key, and a row whose
+        timestamp is not a timestamp would take the page down with a 500 rather
+        than draw one bad point. The same trap emptied every Overview finding
+        once."""
+        with get_conn(tmp_db) as conn:
+            conn.execute(
+                "INSERT INTO visits (ip, timestamp, method, path, status, "
+                "user_agent, bytes_sent) VALUES ('10.0.0.1', 'not-a-date', "
+                "'GET', '/', 200, 'x', 1)"
+            )
+            conn.commit()
+        # The client fixture already points the app at tmp_db.
+        resp = client.get("/api/activity")
+        assert resp.status_code == 200
+        assert resp.json()["rows"]
+
+    def test_an_unknown_seen_value_widens_rather_than_narrows(self, client, timeline_db):
+        """A typo must not quietly hide rows."""
+        full = client.get("/api/activity").json()
+        assert client.get("/api/activity", params={"seen": "nonsense"}).json() == full
 
     def test_it_carries_the_same_filters_as_the_page(self, client, timeline_db):
         body = client.get("/api/activity", params={"class": "threats"}).json()
@@ -553,4 +637,12 @@ class TestActivityEndpoint:
         body = client.get(
             "/api/activity", params={"from": "2026-08-02", "to": "2026-08-04"}
         ).json()
-        assert [r["day"] for r in body["rows"]] == ["2026-08-03"]
+        # The window's own bounds, not the first and last busy day inside it: a
+        # quiet start or end of the range is a fact about the range, and
+        # cropping it away made a three-day window render as a single point.
+        assert [r["day"] for r in body["rows"]] == [
+            "2026-08-02",
+            "2026-08-03",
+            "2026-08-04",
+        ]
+        assert [r["total"] for r in body["rows"]] == [0, 1, 0]

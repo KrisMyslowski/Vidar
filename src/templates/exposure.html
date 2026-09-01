@@ -13,7 +13,7 @@
   the family and not the path: three findings under .git/ are one thing to fix.
 #}
 {% extends "base.html" %}
-{% from '_macros.html' import page_header, range_tabs, table_block, th_tip,
+{% from '_macros.html' import page_header, range_tabs, table_block, sortable_th,
     stat_card, empty_row, kv_table, kv_row %}
 {% block title %}Exposure — Vidar{% endblock %}
 
@@ -22,19 +22,21 @@
      (findings | length | fmtnum) ~ (' path' if findings | length == 1 else ' paths')
      ~ ' this server handed out') %}
   {{ range_tabs(active_range, '/exposure', extra_params=range_params,
-     date_from=date_from, date_to=date_to) }}
+     date_from=date_from, date_to=date_to,
+     hidden_params=range_fields) }}
 {% endcall %}
 
 <div class="cards">
-  {{ stat_card('Handed out', findings | length | fmtnum,
-     ('Paths that answered 2xx and that no human and no crawler ever requested.',
-      'Crawlers follow links, robots.txt and sitemaps, so a path none of them reached is not
-       part of the site as published.')) }}
+  {#- No "Handed out" tile: the page header above it already reads "N paths this
+      server handed out", and the table below it says the same number a third
+      time. -#}
   {{ stat_card('Addresses', totals.ips | fmtnum,
      ('How many distinct addresses got one of them.',
       'A path drops off this list once two humans or crawlers have fetched it.')) }}
   {{ stat_card('Largest', totals.bytes_sent | fmtbytes,
-     ('The biggest single response among them.',), size_class='card-value-md') }}
+     ('The biggest single response among them.',
+      'The body of one response, not the total handed out — body_bytes_sent at its maximum.'),
+     size_class='card-value-md') }}
   {{ stat_card('Described', described ~ ' of ' ~ (findings | length | fmtnum),
      ('How many findings a family describes.',
       'Most will not be: the registry covers the accidents that recur, not every file anybody
@@ -46,34 +48,66 @@
        probes keep arriving.')) }}
 </div>
 
-{% call table_block('Handed out',
-     (findings | length | fmtnum) ~ (' path' if findings | length == 1 else ' paths')) %}
-<table class="responsive-table">
+{#- Both tails, at template level: {% call %} opens its own scope, so a set
+    inside the Findings block is gone by the time Served is rendered. Each block
+    carries the other's sort, so ordering one does not reset the other, and both
+    carry the window — a header link that drops it sends the reader back to the
+    default range. -#}
+{% set find_tail = sort_params ~ '&vsort=' ~ vsort ~ '&vorder=' ~ vorder %}
+{% set served_tail = sort_params ~ '&sort=' ~ sort ~ '&order=' ~ order %}
+
+{% call table_block('Findings',
+     (findings | length | fmtnum) ~ (' path' if findings | length == 1 else ' paths'),
+     table_key='exposure',
+     columns=[{'key': 'family', 'label': 'Family'}, {'key': 'size', 'label': 'Size'},
+              {'key': 'first', 'label': 'First seen'}, {'key': 'last', 'label': 'Last seen'}]) %}
+{#- server-sort, and it has to be: sort.js reads the rendered text, where every
+    ISO date parses to the number 2026 and 980 B outranks 6 KB. The order comes
+    from the route, over the folded list, before anything is rendered. -#}
+<table class="responsive-table sortable server-sort">
   <thead>
     <tr>
-      {{ th_tip('Path', ('A path that answered 2xx. Redirects, query strings and the
-                          conventional paths (robots.txt, /.well-known/, favicons) are
-                          never counted.',
-                         'Percent-encoded spellings of the same path are folded together.'),
+      {{ sortable_th('path', 'Path', ('A path that answered 2xx and that nothing legitimate requested.',
+                         'Redirects, query strings and convention paths are never counted;
+                          percent-encoded spellings fold together.'),
+                sort, order, suffix_params=find_tail, default_order='ASC',
                 col_key='path', w='c-wide') }}
-      {{ th_tip('Family', ('What kind of file this is, where Vidar recognises it.',
-                           'The explanation is below the table. Blank is normal — the registry
-                            covers the accidents that recur, not everything.'),
+      {{ sortable_th('family', 'Family', ('What kind of file this is, where Vidar recognizes it.',
+                           'Sorting by it groups the findings that share one fix. Blank is
+                            normal — the registry covers the accidents that recur.'),
+                sort, order, suffix_params=find_tail, default_order='ASC',
                 col_key='family', w='c-text') }}
-      {{ th_tip('Addresses', ('How many distinct addresses got it.',
+      {{ sortable_th('addresses', 'Addresses', ('How many distinct addresses got it.',
                               'A path drops off this list once two humans or crawlers have
                                fetched it. Where one has, it is counted here.'),
-                col_key='addresses', w='c-num') }}
-      {{ th_tip('Requests', ('How often, in the selected window.',), col_key='requests', w='c-num') }}
-      {{ th_tip('Size', ('Bytes of the largest response.',), col_key='size', w='c-num') }}
-      {{ th_tip('First seen', ('When it was first handed out.',), col_key='first', w='c-date') }}
-      {{ th_tip('Last seen', ('The most recent time.',), col_key='last', w='c-date') }}
+                sort, order, suffix_params=find_tail,
+                col_key='addresses', w='c-num-wide') }}
+      {{ sortable_th('requests', 'Requests', ('How often it was fetched, in the selected window.',
+                             'Every fetch — the column beside it counts distinct addresses.'),
+                sort, order, suffix_params=find_tail,
+                col_key='requests', w='c-num-wide') }}
+      {{ sortable_th('size', 'Size', ('Bytes of the largest response.',
+                         'The body of the single biggest one, not the total handed out.'),
+                sort, order, suffix_params=find_tail,
+                col_key='size', w='c-num') }}
+      {{ sortable_th('first', 'First seen', ('When it was first handed out.',
+                               'The oldest successful fetch in the selected range — widen
+                                the range to see further back.'),
+                sort, order, suffix_params=find_tail,
+                col_key='first', w='c-date') }}
+      {{ sortable_th('last', 'Last seen', ('The most recent successful fetch.',
+                              'If this has stopped moving, the path is no longer served.'),
+                sort, order, suffix_params=find_tail,
+                col_key='last', w='c-date') }}
     </tr>
   </thead>
   <tbody>
     {% for f in findings %}
-    <tr>
-      <td data-label="Path" data-col="path">
+    {#- Same contract as an incident row: drawer.js is global, and
+        tr[data-drawer-src] already carries the pointer cursor. The window rides
+        along so the panel counts what the table counted. -#}
+    <tr data-drawer-src="/exposure/finding?path={{ f.path | urlencode }}{{ sort_params }}">
+      <td data-label="Path" data-col="path" class="col-path">
         <code>{{ f.path }}</code>
         {%- if f.spellings | length > 1 %}
           <span class="text-muted">· also {{ f.spellings | reject('equalto', f.path) | join(', ') }}</span>
@@ -88,63 +122,80 @@
         {%- if f.benign_ips %}<span class="text-muted"> ({{ f.benign_ips }})</span>{% endif %}
       </td>
       <td data-label="Requests" data-col="requests" class="num">{{ f.hits | fmtnum }}</td>
-      <td data-label="Size" data-col="size" class="num">{{ f.bytes_sent | filesizeformat }}</td>
+      <td data-label="Size" data-col="size" class="num">{{ f.bytes_sent | fmtbytes }}</td>
       <td data-label="First seen" data-col="first">{{ f.first_seen | fmtdate }}</td>
       <td data-label="Last seen" data-col="last">{{ f.last_seen | fmtdate }}</td>
     </tr>
     {% else %}
-    {{ empty_row(7, 'exposed path') }}
+    {{ empty_row(7, 'exposed path', ranged=date_from or date_to) }}
     {% endfor %}
   </tbody>
 </table>
 {% endcall %}
 
-{% if families or unexplained %}
-<p class="section-label">What these are</p>
-
-{% for family, paths in families %}
-<div class="panel">
-  <h3>{{ family.title }}</h3>
-  {% call kv_table('family-table') %}
-    {% call kv_row('Found at') %}
-      {% for path in paths %}<code>{{ path }}</code>{{ ', ' if not loop.last }}{% endfor %}
-    {% endcall %}
-    {% call kv_row('What it is') %}{{ family.what | inline_code }}{% endcall %}
-    {% call kv_row('Why it was asked for') %}{{ family.why | inline_code }}{% endcall %}
-    {% call kv_row('Check it yourself') %}<code>{{ family.check }}</code>{% endcall %}
-    {% call kv_row('How to stop serving it') %}{{ family.fix | inline_code }}{% endcall %}
-  {% endcall %}
-</div>
-{% endfor %}
-
-{% if unexplained %}
-{#- No description, on purpose: a sentence broad enough to cover any file says
-    nothing about this one, and once it sits under every unrecognised finding it
-    gets skipped along with the real ones. The command is still worth having —
-    it is derived from the path and needs to know nothing about the file. -#}
-{% call table_block('Not described here',
-     (unexplained | length | fmtnum) ~ (' path' if unexplained | length == 1 else ' paths')) %}
-<table class="responsive-table">
+{#- What the whole published surface is, and where the finding sits inside it.
+    The table above says "1 path"; it does not say one of how many. Same result
+    set, split on the benign threshold, so the two cannot disagree — and the
+    Benign column is the only place that threshold is ever shown as a number
+    rather than implied by a parenthesis. -#}
+{% call table_block('Served',
+     (served | length | fmtnum) ~ (' path' if served | length == 1 else ' paths')
+     ~ ' this server answers 2xx for') %}
+{#- Server-sorted for the same reason as the block above, and marked so sort.js
+    leaves it alone rather than re-ordering the rendered text underneath it. -#}
+<table class="responsive-table sortable server-sort">
   <thead>
     <tr>
-      {{ th_tip('Path', ('A finding no family in the registry describes.',
-                         'Most will be. The registry covers the accidents that recur.'),
-                col_key='path', w='c-wide') }}
-      {{ th_tip('Go and look', ('The one piece of advice that needs no knowledge of the file.',
-                                'Headers only — an unknown response could be a database export.'),
-                col_key='check', w='c-wide') }}
+      {{ sortable_th('path', 'Path', ('A path this server hands out.',
+                'Query strings are ignored — a static server answers the same page
+                 for all of them — and percent-encoded spellings fold together.'),
+                vsort, vorder, served_tail, 'ASC', w='c-wide', pfx='v') }}
+      {{ sortable_th('kind', 'Kind', ('Whether anything legitimate asks for it.',
+                'Site once two humans or crawlers have fetched it, or where it is a
+                 convention path or a fragment the page loads itself. Finding
+                 otherwise. Sorting by it restores the order this block opens in:
+                 Site first, then the most benign, then the most requested.'),
+                vsort, vorder, served_tail, 'ASC', w='c-badge', pfx='v') }}
+      {{ sortable_th('addresses', 'Addresses', ('Distinct addresses that got it.',
+                'Distinct across every spelling: an address that wrote the path two ways
+                 is one address.'),
+                vsort, vorder, served_tail, w='c-num-wide', pfx='v') }}
+      {{ sortable_th('benign', 'Benign', ('Of those, how many were humans or crawlers.',
+                'The number the threshold is applied to: below two, the path is a
+                 finding. It is what the split above is made of.'),
+                vsort, vorder, served_tail, w='c-num', pfx='v') }}
+      {{ sortable_th('requests', 'Requests', ('How often it was handed out.',
+                'Every spelling together, in the selected window.'),
+                vsort, vorder, served_tail, w='c-num-wide', pfx='v') }}
+      {{ sortable_th('size', 'Size', ('Bytes of the largest response.',),
+                vsort, vorder, served_tail, w='c-num', pfx='v') }}
+      {{ sortable_th('last', 'Last seen', ('The most recent successful fetch.',),
+                vsort, vorder, served_tail, w='c-date', pfx='v') }}
     </tr>
   </thead>
   <tbody>
-    {% for path, check in unexplained %}
+    {% for s in served %}
     <tr>
-      <td data-label="Path" data-col="path"><code>{{ path }}</code></td>
-      <td data-label="Go and look" data-col="check"><code>{{ check }}</code></td>
+      <td data-label="Path" class="col-path"><code>{{ s.path }}</code></td>
+      <td data-label="Kind">
+        {%- if s.is_finding %}<span class="badge badge-red">Finding</span>
+        {%- else %}<span class="badge badge-muted">Site</span>{% endif %}
+      </td>
+      <td data-label="Addresses" class="num">{{ s.ips | fmtnum }}</td>
+      <td data-label="Benign" class="num">{{ s.benign_ips | fmtnum }}</td>
+      <td data-label="Requests" class="num">{{ s.hits | fmtnum }}</td>
+      <td data-label="Size" class="num">{{ s.bytes_sent | fmtbytes }}</td>
+      <td data-label="Last seen">{{ s.last_seen | fmtdate }}</td>
     </tr>
+    {% else %}
+    {{ empty_row(7, 'served path', ranged=date_from or date_to) }}
     {% endfor %}
   </tbody>
 </table>
 {% endcall %}
-{% endif %}
-{% endif %}
+
+{#- The family explanations and the "Not described here" list used to sit
+    below the table. They are per-path advice, and per-path advice now lives in
+    the panel a row opens — keeping both would render every explanation twice.
+    -#}
 {% endblock %}

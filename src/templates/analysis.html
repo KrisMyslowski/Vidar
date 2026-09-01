@@ -59,8 +59,13 @@
         {% for s in sig_cols %}
         {{ th_tip(s.short, s.tip) }}
         {% endfor %}
-        {{ th_tip('Total', ('Total unique IPs in this identity group.',
-                            'Sum of the row, linking to the unfiltered group.'), w='c-total') }}
+        {#- Not the sum of the row, and it never could be: an IP carries several
+    signals at once and Clean means it carries none. The tooltip used to
+    claim the sum, and every row on the page disproved it — Bots read
+    117+331+64 = 512 against a Total of 471. -#}
+        {{ th_tip('Total', ('Distinct IPs in this identity group.',
+                            'Not the sum of the row — an IP can carry several signals at
+                             once, and Clean means it carries none.'), w='c-total') }}
       </tr>
     </thead>
     <tbody>

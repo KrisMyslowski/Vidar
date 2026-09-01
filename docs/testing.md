@@ -1,6 +1,6 @@
 # Testing
 
-For anyone changing the code. 1840 Python tests across 55 files, plus 131 browser-side tests
+For anyone changing the code. 1869 Python tests across 55 files, plus 131 browser-side tests
 in 12 files. Three of the document tests are parametrised over `docs/*.md`, so the first number
 moves when a document is added.
 

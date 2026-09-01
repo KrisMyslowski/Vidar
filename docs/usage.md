@@ -19,7 +19,7 @@ Then open `http://localhost:8080`.
 
 Every page resolves one window and scopes every number under it — tiles, top-N lists, the
 identity matrix, the exposure facets, the charts. The range tabs sit in the page header:
-`24h`, `7d`, `30d`, `90d`, `all`, plus a custom range.
+`all`, `24h`, `7d`, `30d`, `90d`, plus a custom range.
 
 **`90d` is the default and the starting state.** `all` is a deliberate choice rather than an
 accident, which is why it has its own tab. The chosen window follows you across Overview,
@@ -40,13 +40,45 @@ seen today, the top CVE by host count, Tor traffic at twice its 7-day baseline, 
 most-requested probe path. Each finding links to the view that shows it in full, and the
 sidebar badge counts them.
 
-Below that: KPI tiles with sparklines (visits, unique IPs, error rate, bounce rate, HTTPS
-rate, average response time, bandwidth), the class mix, and the top panels — countries, IPs,
-pages, referrers. The visits tile compares the window against the same span immediately
-before it.
+Below that: nine KPI tiles — visits, unique IPs, threat IPs, error rate, countries, bounce
+rate, HTTPS rate, average response time, bandwidth; three of them (visits, error rate,
+bandwidth) carry a sparkline. Then the class mix, and the top panels — countries, IPs, pages,
+referrers, browsers, OS. The visits tile compares the window against the same span
+immediately before it.
 
 The activity chart and the traffic-rhythm heatmap live on `/visitors?view=timeline`, where
-they answer the page's filters instead of always answering for everything.
+they answer the page's filters instead of always answering for everything — every filter,
+including the row-level drill-downs. A pill in the rail is a narrowing the page performs;
+there is no such thing here as a filter that is displayed and ignored.
+
+There are two charts, built the same way and answering for the same selection.
+**Activity** counts requests; **Addresses** counts the distinct addresses that
+made them. One number answers neither question: six thousand requests from three
+addresses is a scanner, three thousand addresses making two each is a crawl, and
+the two shapes diverging is the finding. Under the New selection the Addresses
+chart reads directly — how many addresses arrived here for the first time, per
+bucket. Its counts do not add up across buckets: an address here on two days is
+counted in both, and the range's own distinct total is what the filter chips
+show.
+
+Each chart is a **total** across the top and **one small band per identity group** below it,
+each scaled to its own maximum with that maximum printed beside its name. One shared axis
+cannot carry five series three orders of magnitude apart — measured on a month of real
+traffic, threats peaked at 7 043 and humans at 16, so humans drew a third of a pixel. The
+magnitude moves from the axis to a number, which is where it survives. Hovering anywhere
+moves one cursor through all six.
+
+Buckets with no traffic are drawn as zeros. They used to be left out of the query entirely
+and the chart placed its points by index, so an eleven-day silence and a one-day silence got
+the same width and a continuous line was drawn across weeks nobody visited in. **On a young
+deployment a 90-day window is therefore mostly flat** — that is the window being reported
+honestly, not an error.
+
+The heatmap's shade is logarithmic between its own quietest and busiest cell, and the legend
+names both ends. Dividing linearly put five sixths of the cells into the bottom tenth of the
+ramp, which is one bright square in a uniform field rather than a rhythm. A weekday the
+window is too short to contain is drawn hollow: no hour at all, which is not the same as a
+quiet one.
 
 ---
 
@@ -66,14 +98,39 @@ path, browser, country, port, minimum visits).
 Two rows. On the first, the group chips — All, plus the five identity groups — where a group
 with subclasses opens into a menu listing them. **Every entry carries its IP count for the
 active window**, so a filter that would return nothing is visible as such before you click it.
-Signals sit behind their own disclosure: Tor, Proxy/VPN, Hosting/Cloud, DNSBL, Shodan Tags,
-Clean.
+Signals sit behind their own disclosure: Tor, Proxy / VPN, Hosting / Cloud, DNSBL listed,
+Shodan tags, Clean, Mobile.
 
-On the second row, the search box and a `Syntax` disclosure that unfolds a reference table
-directly beneath it.
+On the second row, the search box and a `Help ▾` disclosure that unfolds a reference
+directly beneath it, in three tabs: Syntax, Classes and Signals.
+
+### Addresses: All or New
+
+Above the rail, beside the view and grouping strips: **All** is every address in the window,
+**New** only those whose first request falls inside it — nothing of them exists before the
+range starts. It narrows all three views, so the table, the map's markers and the timeline's
+buckets keep describing one selection.
+
+**All + New** is the third state and a different kind of thing: a comparison rather than a
+narrowing. The two timeline charts draw both series — New nested inside All, since an address
+first seen in the window is an address in the window — and the gap between them is the
+returning traffic. On the reference month that gap swings hard: 40 % of one day's requests
+came from addresses seen before, 8 % of another's, and a single line cannot tell those days
+apart. The hover carries both figures for every group.
+
+It exists only on the timeline, because that is where there is something to draw two series
+on: a table row is in or out and a map marker is one address. It filters nothing even there —
+the count in the header and the heatmap below answer for All — and the control says so rather
+than leaving it to be discovered.
+
+Two things All / New is honest about. Over the `all` range there is nothing to be new relative
+to, every address would qualify, and both New and the comparison are disabled rather than
+answering the same as All under a different name. And it can only speak for what the database
+still holds: retention moves whole months out to a zip, and an address whose earlier visits
+left with one reads as new.
 
 **Every active filter renders as a removable pill** — drill-downs, each class and signal value
-in its taxonomy colour, the search term, and the map's viewport selection. `clear all` keeps
+in its taxonomy colour, the search term, and the map's viewport selection. `Clear filters` keeps
 the grouping, the view and the time window, because the range tabs are their own control.
 
 ### Search is field-aware
@@ -141,9 +198,37 @@ crown a winner, and now it does not have to. It belongs to the session rather th
 address, because one address can read two pages in the morning and walk a scanner list at
 night — an address-level label would have to pick one and be wrong about the rest.
 
-**One request is not a behaviour** and is left blank. There is no pace, no sequence and no
-second path to read anything out of, and on a quiet site most sessions are exactly this;
-labelling them would make the majority label an artefact of the threshold.
+Each session row is one run: **Requests** is every line in the log, **Paths** how many
+different ones those were for, and **Read** + **Unserved** split that number into what the
+server handed over and what it did not. Ten requests for one page is ten requests and one
+path.
+
+**Click a row for the requests it is made of.** The row is a claim — *enumeration* — and the
+panel is the evidence for it: every request of that session, in arrival order. Order is not
+sortable there on purpose; in a session it *is* the information, and it is what makes a
+scanner's signature legible.
+
+A session needs no stored id for this. It is a contiguous run bounded by silence, so its own
+start and end select exactly its requests and nothing else.
+
+The full request log stays below, under its own heading. It answers a different question —
+which response was the largest, the slowest, over which cipher — and sorts on every column,
+which is meaningless inside one session and useful across an address's whole history.
+
+**Behaviour is read from what the client asked for, not from what the server answered.** The
+figure the rules use is `unserved_paths` — distinct paths the client did not get. A redirect, a
+404, a 503 and a 403 all mean the same thing to the client, and keying on 404s alone went quiet
+in exactly the two places where the probing was heaviest: one address made 117 036 requests that
+only ever met the port-80 redirect and so produced no 404 at all, and another probed hard enough
+that the server answered 503 to more than half of it, which pushed its 404 share under the
+threshold and made probing *harder* look like probing less.
+
+Where the session got something served, a redirect is part of getting there and not a failure —
+otherwise a person whose `/about` answers 301 to `/about/` reads as reconnaissance.
+
+**One thing is not a behaviour** and is left blank: one request, or one page fetched with
+nothing following from it. On a quiet site most sessions are exactly this, and labelling them
+would make the majority label an artefact of the threshold rather than of the traffic.
 
 **The thirty minutes are a model decision with no correct answer**, so they are written down
 rather than tuned quietly. It is the web-analytics convention, which matters less for being
@@ -165,9 +250,11 @@ exists to go stale. The newest 25 are shown and the true count is stated beside 
 A verdict needs history, and a first request has none. Its **neighbours** have one: the panel
 shows what Vidar has already judged in the same **/24** (a **/64** for IPv6) and at the same
 **ASN**, as the same class-mix bar the aggregation tables use. Where one identity group holds a
-majority of the peers it is named in words — *"4 of 4 are Bots"*. A plurality is not named: with
-the largest group at 40 % across four others, nothing about the range characterises it, and a
-sentence claiming otherwise would be the false confidence this page exists to avoid.
+majority of the peers it is named in words — *"7 of 9 are Bots"*. Two things stop that sentence
+from being said: a plurality rather than a majority, and fewer than **five** peers. With the
+largest group at 40 % across four others nothing characterises the range; and *"1 of 1 are
+Bots"* is one data point wearing the grammar of a finding. In both cases the bar and the count
+stand on their own.
 
 Nothing is fetched for this. It is `ip_intel` read by range and by operator, so it costs no
 request and no provider. The address itself is never counted among its own peers, and a scope
@@ -202,14 +289,66 @@ actually has when they open a dashboard at three in the morning. Nine thousand r
 it; ten events can.
 
 A scanner is a program, and a program starts the same way every time it runs. When **3 or more
-addresses** request **the same first 5 missing paths, in the same order, within 60 minutes** of
-each other, that is one event rather than three visitors. Those five paths are the incident's
+addresses** request **the same first 5 missing paths, in the same order, within a day** of each
+other, that is one event rather than three visitors. Those five paths are the incident's
 **signature**.
+
+**A day, and that number came from the traffic.** An hour was the first guess, and against a
+week of the reference deployment it produced no incidents at all — on a site where eighteen
+addresses ran the same five-path probe, one or two at a time, over six days. Widening the window
+past a day finds nothing more; narrowing it splits one campaign into fragments that each fall
+under the reporting threshold and disappear.
 
 One row per run: when it started, how long it lasted, how many addresses and networks took
 part, how much it probed, how that compares with an ordinary hour, the signature, and the
-addresses themselves — each linking to its own history. `Listed` and `Score` are off by default
-and available from **Columns**.
+addresses themselves — each linking to its own history. `DNSBL` is off by default and available
+from **Columns**.
+
+Every column sorts except two. **Score** is the default, and it is on screen: it is what the
+list is ordered by, and a default ordering on a hidden column is an ordering the reader can
+neither name nor restore. Sorting by anything else replaces it; clicking Score returns to it.
+
+**Signature and From do not sort.** A signature is an *ordered* path list and that order is its
+identity — sorting by its first element would destroy exactly what the column exists to show,
+the same reason the requests inside a session are not sortable. From is a truncated eight of N,
+so its first address is an accident of the query rather than a fact about the run.
+
+**Click a row for what the incident is made of.** Two tables, because an incident is two things
+at once: **Asked for** — every path it requested, in the order they first arrived, with how many
+of its addresses tried each — and **From**, the addresses themselves, when each joined and how
+long each stayed. Without the paths the panel is a list of addresses that says nothing about
+what happened; without the addresses the paths are a wordlist nobody ran.
+
+The first five paths carry a `*`: they are the signature. They lead because the list is in
+arrival order, which is the order the program walks them.
+
+**Both panel tables sort, and the paths page.** Forty at a time — the largest campaign on the
+reference deployment asks for 266 distinct paths, and a list that stopped at forty with a note
+saying so put the rest out of reach. The two tables carry separate parameters, so ordering the
+addresses does not throw you back to page one of the paths, and the panel re-fetches itself
+rather than navigating the page behind it.
+
+This is not the exception to the rule above it. The paths table has a `#` column holding the
+position each path arrived at, so sorting by Requests moves the rows and the arrival order goes
+with them; the page's Signature cell has no such column, and there the order is the only place
+the information lives. Addresses sort on five of their six columns — Signals is several
+independent flags, and there is no one order over "Tor, hosting and listed" that is not
+invented.
+
+Only the requests the incident is built from are counted — paths that do not exist, convention
+files excluded — so the panel's totals equal the row's. Two numbers describing one event is how
+a page stops being believed.
+
+The shape of the campaign is in the **From** table and the row can only give its size: eighteen
+addresses over six days is a different thing from eighteen inside a minute. Each address links to its own history, where that
+session expands into the requests it is made of: an event, down to a single logged line.
+
+An incident needs no stored id either. Its signature and its stretch of time name it, and the
+signature travels as a short digest because five paths do not fit in a URL — one of them on the
+reference deployment is a 120-character PHP payload. The window is padded backwards by one
+session gap before the sessions are rebuilt: boundaries are found by looking for silence before
+a request, and cutting the visits at the incident's first moment would make an address that was
+already busy look as though it had just started.
 
 **The score is a sort key and nothing else.** It is not a measurement and no decision should
 hang on its value; it exists so the page can put the interesting rows first. It has no evidence
@@ -258,15 +397,53 @@ here was a headless browser under one classifier version and a referred human un
 and a veto of one would have taken a real finding away. Where a benign address is counted, the
 table shows it.
 
-An empty table is the expected result and says so in words.
+An empty table is the expected result and says so in words. Every column sorts, defaulting to
+the addresses that got it.
+
+### Served — what the findings are a subset of
+
+The findings table says "1 path". It does not say one *of how many*. Below it, **Served** lists
+every path this server answers 2xx for, marked `Site` or `Finding`, with the benign count each
+one clears or fails: 90, 48, 26 … and 0. That is the same result set split on the same
+threshold, so the two blocks cannot disagree about a number they share — and it is the only
+place the threshold appears as a figure rather than as a parenthesis.
+
+Convention paths and the fragments the site's own JavaScript loads are in it. They are never
+findings, but they are things this server hands out, and a list of what it hands out that
+omitted `robots.txt` and four content pages would answer a stranger question than either.
+
+**Every column here sorts**, on its own parameters — ordering this block does not reorder the
+findings above it, and it opens in the order it always did: `Site` before `Finding`, then the
+most benign, then the most requested. Clicking **Kind** returns to exactly that.
+
+**Addresses is distinct across spellings.** One path is often several spellings — `/.DS_Store`,
+`/%2eDS_Store`, `//%2eDS_Store` are one file reached three ways, and `//`, `/./`, `/%2f` all get
+the homepage back — and they fold into one row here. An address that wrote the path two ways is
+one address in this column. That is why a row here can show more *requests* than the same path
+shows under Visitors → Paths with a `200` filter, and never more addresses: Served counts the
+whole 2xx family across every spelling, where the Paths table lists each spelling separately and
+`200` is only one of the statuses a path answers with.
 
 ### What each finding is
 
-A path and a byte count are a fright, not information. Under the table each finding that Vidar
-recognises is explained: **what the file is**, **why somebody asked for it**, **a command to
-check it yourself**, and **how to stop serving it**. The check is addressed to `SITE_BASE_URL`,
-so it is a command to paste rather than a template to adapt; with that setting blank it prints
-an obvious placeholder instead of a plausible hostname.
+A path and a byte count are a fright, not information. **Clicking a finding opens it**, the way
+clicking an incident does. The panel answers, in that order: whether it is *still* being served
+— a 404 after the last successful fetch means the file is gone, and that one question is asked
+over the whole database rather than the selected range — what the server answered and on which
+port, the size and whether it varied, when, how often and from how many addresses, who they
+were by identity class, where they came from, every spelling, which clients asked, and what
+else those same addresses requested here.
+
+That last line is usually the one that settles it: nine addresses fetching one file also asked
+for 2 358 other paths. A finding is normally one entry in a list being walked, not a thing
+somebody came for.
+
+Under that, the same four answers as before — **what the file is**, **why somebody asked for
+it**, **a command to check it yourself**, and **how to stop serving it**. They used to sit
+beneath the table, one panel per family. Per-path advice belongs beside the path it is about,
+and rendering it in both places would print every explanation twice. The check is addressed to
+`SITE_BASE_URL`, so it is a command to paste rather than a template to adapt; with that setting
+blank it prints an obvious placeholder instead of a plausible hostname.
 
 The explanation belongs to the *family*, not to the path. There are 26 609 distinct probed
 paths on the reference deployment and the 500 most-requested cover 30 % of them, so a catalogue
@@ -276,8 +453,7 @@ directories, environment files, backups and editor leftovers, configuration file
 credentials, developer tooling leftovers, log files and diagnostic pages. Three findings under
 `.git/` are one thing to fix, so they get one explanation naming all three.
 
-A finding outside those nine is listed under **Not described here**, with the `curl` and nothing
-else. That is deliberate: the command is derived from the path and needs to know nothing about
+A finding outside those nine gets the `curl` in its panel and nothing else. That is deliberate: the command is derived from the path and needs to know nothing about
 the file, while a description broad enough to cover everything would apply to any file and help
 with none of them — and once it appears under every unrecognised finding, it gets skipped along
 with the real ones. `src/families.py` holds the registry.

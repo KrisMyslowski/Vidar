@@ -92,7 +92,7 @@
 .card-spark { margin-top: 0.4rem; }
 .card-spark svg { display: block; width: 100%; height: 28px; }
 
-/* ── Hour × weekday heatmap (sequential one-hue ramp on --hm-color) ──────────
+/* ── Weekday × hour heatmap (sequential one-hue ramp on --hm-color) ─────────
    HTML grid, no chart lib: 7 day rows × 24 hour cells; cell intensity comes
    from the 0..1 --hm custom property (mixed into the panel surface so the
    ramp adapts to both themes). One hue, --hm-color: the grid answers for the
@@ -106,10 +106,17 @@
   gap: 2px;
   align-items: center;
 }
+/* Scroll box, so the grid keeps its square cells at any width instead of being
+   clipped at the viewport edge. */
+.heatmap-scroll { overflow-x: auto; }
+.heatmap-scroll > .heatmap { min-width: 34rem; }
 .heatmap-hour {
   font-size: var(--font-xxs);
   color: var(--text-muted);
-  text-align: left;
+  /* Centred over its own column. Pinned to the left edge a label sat on the
+     boundary between two squares, and which of the two it named was a guess —
+     one that misread 08:00 as 09:00 on the reference month. */
+  text-align: center;
 }
 .heatmap-day {
   font-size: var(--font-xxs);
@@ -118,12 +125,45 @@
   text-align: right;
 }
 .heatmap-cell {
-  aspect-ratio: 1 / 1;
-  min-height: 12px;
+  /* A fixed row height, not a square. Square cells and a full-width grid cannot
+     both hold: on a wide panel 24 squares grew to 43px and made this block 1.6x
+     taller than the chart it supports, and capping the grid instead left it
+     filling half the panel with a void beside it. The height is the thing worth
+     fixing — the width follows the panel, and a slightly wide cell reads the
+     rhythm exactly as well as a square one. */
+  height: 22px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--hm-color) calc(10% + 85% * var(--hm, 0)), var(--bg-panel));
+  /* The floor is 18%, not 10%: the ramp has to start at a shade that is
+     visibly a value rather than almost the panel behind it. */
+  background: color-mix(in srgb, var(--hm-color) calc(18% + 77% * var(--hm, 0)), var(--bg-panel));
 }
 .heatmap-cell.label-help { display: block; border-bottom: none; }
 .heatmap-cell--zero { background: color-mix(in srgb, var(--text) 4%, transparent); }
+/* Outside the window: not a quiet hour, no hour at all. Hollow rather than
+   filled, so it reads as absent rather than as the faintest value on the ramp. */
+.heatmap-cell--outside {
+  background: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.heatmap-day--outside { opacity: 0.4; }
+/* The legend, in the grid's own swatches so the ramp it shows is the ramp the
+   cells use — a second set of colours here could drift from the first. */
+.heatmap-legend {
+  --hm-color: var(--blue);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  font-size: var(--font-xxs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.heatmap-legend .heat-step { width: 22px; height: 10px; }
+.heatmap-legend-zero {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--space-md);
+}
 
 

@@ -17,6 +17,7 @@ from ._shared import (
     _apply_class_filter,
     _apply_date_filter,
     _apply_drilldown_filters,
+    _apply_seen_filter,
     _apply_signal_filter,
     _apply_visitor_search,
     _shodan_agg_select,
@@ -45,6 +46,7 @@ def _exec_visitor_rows(
     path_filter: str | None = None,
     browser_filter: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Build and execute a grouped-visitor SELECT query."""
     sort_col = VISITOR_SORT_MAP.get(sort, "last_seen")
@@ -70,6 +72,7 @@ def _exec_visitor_rows(
         query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_date_filter(query, params, date_from, date_to)
+    query, params = _apply_seen_filter(query, params, seen, date_from)
     having = f" HAVING COUNT(v.id) >= {int(min_visits)}" if min_visits and min_visits > 0 else ""
     query += f" GROUP BY v.ip{having} ORDER BY {sort_col} {order_dir} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
@@ -94,6 +97,7 @@ def _exec_visitor_count(
     path_filter: str | None = None,
     browser_filter: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Build and execute a grouped-visitor COUNT query for pagination."""
     having = f" HAVING COUNT(v.id) >= {int(min_visits)}" if min_visits and min_visits > 0 else ""
@@ -116,6 +120,7 @@ def _exec_visitor_count(
         query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_date_filter(query, params, date_from, date_to)
+    query, params = _apply_seen_filter(query, params, seen, date_from)
     query += f" GROUP BY v.ip{having})"
     row = conn.execute(query, params).fetchone()
     return row[0] if row else 0
@@ -142,6 +147,7 @@ def get_visitors_grouped(
     path_filter: str | None = None,
     browser_filter: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> list[dict]:
     """Fetch visitors grouped by IP: one row per unique IP with aggregated stats.
 
@@ -167,6 +173,7 @@ def get_visitors_grouped(
         path_filter=path_filter,
         browser_filter=browser_filter,
         q=q,
+        seen=seen,
     )
 
 
@@ -184,6 +191,7 @@ def count_visitors_grouped(
     path_filter: str | None = None,
     browser_filter: str | None = None,
     q: str | None = None,
+    seen: str | None = None,
 ) -> int:
     """Count distinct visitor IPs. Used for pagination in grouped view."""
     return _exec_visitor_count(
@@ -202,6 +210,7 @@ def count_visitors_grouped(
         path_filter=path_filter,
         browser_filter=browser_filter,
         q=q,
+        seen=seen,
     )
 
 
@@ -258,6 +267,41 @@ def get_visitor_detail(conn: sqlite3.Connection, ip: str) -> dict | None:
     return dict(row) if row else None
 
 
+# A session's bounds are moments, not dates, so this cannot go through
+# _date_conditions(): that one rounds `until` up to the end of its day on
+# purpose, because a date window should include everything that happened on the
+# closing date. Reusing it here counted 1 043 requests for a session of 514 —
+# every later session that day came with it.
+def _moment_window(since: str | None, until: str | None) -> tuple[str, list]:
+    """An inclusive `timestamp` range at full precision, as SQL plus params."""
+    conds, params = [], []
+    if since:
+        conds.append("timestamp >= ?")
+        params.append(since)
+    if until:
+        conds.append("timestamp <= ?")
+        params.append(until)
+    return "".join(f" AND {c}" for c in conds), params
+
+
+def count_visitor_requests(
+    conn: sqlite3.Connection,
+    ip: str,
+    since: str | None = None,
+    until: str | None = None,
+) -> int:
+    """How many requests an address made, optionally inside one session's window.
+
+    Asked rather than passed in from the caller's session row: a count that
+    travels through a URL is a count the page cannot stand behind, and this one
+    decides whether the drawer says it is showing everything or a prefix.
+    """
+    where, params = _moment_window(since, until)
+    return conn.execute(
+        f"SELECT COUNT(*) FROM visits WHERE ip = ?{where}", (ip, *params)
+    ).fetchone()[0]
+
+
 def get_visitor_requests(
     conn: sqlite3.Connection,
     ip: str,
@@ -265,12 +309,21 @@ def get_visitor_requests(
     limit: int = 100,
     sort: str = "timestamp",
     order: str = "DESC",
+    since: str | None = None,
+    until: str | None = None,
 ) -> list[dict]:
     """Get paginated requests for a single IP with optional server-side sorting.
 
     `sort` must be one of the safe keys defined in `VISITOR_REQUEST_SORT_MAP`.
+
+    The window is how one session's requests are asked for. A session has no
+    stored id — it is computed on read — but it does not need one: it is a
+    contiguous run of an address's requests bounded by silence, so its own
+    [started, ended] selects exactly its rows and nothing else. Checked against
+    all 1 568 sessions in a week of production traffic.
     """
     offset = (page - 1) * limit
+    where, window_params = _moment_window(since, until)
     sort_col = VISITOR_REQUEST_SORT_MAP.get(sort, "timestamp")
     order_dir = valid_order(order)
 
@@ -283,8 +336,8 @@ def get_visitor_requests(
                   http_version, sec_fetch_dest, sec_fetch_mode, sec_fetch_site,
                   accept_encoding, ssl_session_reused
            FROM visits
-           WHERE ip = ?
+           WHERE ip = ?{where}
            ORDER BY {sort_col} {order_dir}
            LIMIT ? OFFSET ?"""
-    rows = conn.execute(sql, (ip, limit, offset)).fetchall()
+    rows = conn.execute(sql, (ip, *window_params, limit, offset)).fetchall()
     return [dict(r) for r in rows]

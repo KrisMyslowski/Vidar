@@ -107,20 +107,36 @@ _PATH_TIPS: dict[str, tuple[str, str]] = {
 
 
 def fmtdate(value: str) -> str:
-    """Convert ISO timestamp to dd.mm.yy HH:MM."""
+    """Convert ISO timestamp to YYYY-MM-DD HH:MM.
+
+    ISO order, not dd.mm.yy. The dashboard is English-only, and day-first with a
+    two-digit year is both the wrong convention for it and genuinely ambiguous
+    against M/D for the first twelve days of any month. It also disagreed with
+    everything it sits beside: the custom-range date inputs, the `2026-08` month
+    keys on Storage, and the log's own $time_iso8601.
+    """
     if not value:
         return ""
     if value == "—":
         return "—"
     try:
         dt = datetime.fromisoformat(value)
-        return dt.strftime("%d.%m.%y %H:%M")
+        return dt.strftime("%Y-%m-%d %H:%M")
     except (ValueError, AttributeError):
         return value
 
 
 def fmtbytes(value) -> str:
-    """Convert bytes to human-readable format."""
+    """Convert bytes to human-readable format.
+
+    None is an em dash, not 0 B. A missing measurement rendered as a measured
+    zero is the mistake the Incidents header and the Storage columns each state
+    for themselves — and it reached the page: Exposure's "Largest" tile is a
+    MAX() over no rows, and reported 0 B as if it had weighed something. A real
+    zero-byte response is still 0 B.
+    """
+    if value is None:
+        return "—"
     if not value:
         return "0 B"
     size = float(value)

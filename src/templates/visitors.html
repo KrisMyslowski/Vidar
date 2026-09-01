@@ -21,12 +21,11 @@
 
 {% block content %}
 {% set unit = group_spec.unit if group != 'ip' else 'IPs' %}
-{% if view == 'map' %}{% set count_label = '' %}
+{% if view == 'map' %}{% set count_label = ((total | fmtnum) ~ ' IPs in viewport') if markers else '' %}
 {% elif view == 'timeline' %}{% set count_label = (total | fmtnum) ~ ' visits in range' %}
 {% else %}{% set count_label = (total | fmtnum) ~ ' ' ~ unit %}{% endif %}
 
-{% call page_header('Visitors', count_label) %}
-  {%- if view == 'map' %}<span class="page-header-count" id="map-count">{{ total | fmtnum }} IPs in viewport</span>{% endif %}
+{% call page_header('Visitors', count_label, count_id='map-count' if view == 'map' else '') %}
   {{ range_tabs(active_range, '/visitors', extra_params=range_params,
      date_from=date_from, date_to=date_to,
      hidden_params=range_fields) }}
@@ -38,6 +37,10 @@
       ?group= — showing the strip there would claim a grouping that does not. -#}
   {{ tab_row('View', view_tabs) }}
   {% if view == 'table' %}{{ tab_row('Group by', group_tabs) }}{% endif %}
+  {#- Addresses last, because it narrows whatever the two strips before it
+      selected, and it applies to all three views rather than only to the
+      table. -#}
+  {{ tab_row('Addresses', seen_tabs) }}
 </div>
 
 {{ filter_rail(active_classes, active_signals, available_categories,
@@ -59,7 +62,10 @@
     {#- No panel header: the map is the block. Its two controls sit on the map
         itself, as overlays, so nothing competes with the picture. -#}
     <div class="map-frame">
-      <div id="map"></div>
+      {#- data-total is the size of the whole selection. The header reports what
+          is in the viewport, and once you zoom there is nothing left saying how
+          much of the selection that is. -#}
+      <div id="map" data-total="{{ geo_stats.total_ips }}"></div>
       <div class="map-overlay map-overlay--tr">
         <div class="tab-group">
           <button type="button" class="tab active" data-map-mode="cluster">Cluster</button>
@@ -77,7 +83,7 @@
         <div class="selection-stats">
           <div><span class="card-label">IPs</span><span class="card-value card-value-md" id="sel-ips">0</span></div>
           <div><span class="card-label">Countries</span><span class="card-value card-value-md" id="sel-countries">0</span></div>
-          <div><span class="card-label">Threats</span><span class="card-value card-value-md text-red" id="sel-threats">0</span></div>
+          <div><span class="card-label">Threat IPs</span><span class="card-value card-value-md text-red" id="sel-threats">0</span></div>
         </div>
         <span class="mix-bar" id="sel-mix" tabindex="0"></span>
         <div class="mix-legend" id="sel-legend"></div>
@@ -96,13 +102,28 @@
   <script id="markers-data" type="application/json">{{ markers | tojson }}</script>
   {% if server_location %}<script id="server-location-data" type="application/json">{{ server_location | tojson }}</script>{% endif %}
   {% else %}
-  {{ empty_state('mapped IP', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters') }}
+  {#- "No mapped IPs recorded yet" was the same sentence for two different
+      states: an empty window, and a window full of IPs none of which has been
+      geolocated. The second is the common one on a young deployment, and it is
+      not an absence of traffic — it is an absence of coordinates. -#}
+  {% if not active_filter_chips and unmapped %}
+  <div class="empty-state">
+    <div class="empty-state-text">
+      {{ unmapped | fmtnum }} IP{{ '' if unmapped == 1 else 's' }} in the selected range,
+      none of them with coordinates yet. Positions come from enrichment, which
+      runs in the background and is not instant.
+    </div>
+    <a class="empty-state-action" href="/settings/status">Enrichment status</a>
+  </div>
+  {% else %}
+  {{ empty_state('mapped IP', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters', ranged=date_from or date_to) }}
+  {% endif %}
   {% endif %}
 
 {% elif view == 'timeline' %}
   {#- Timeline view: the same selection over time. Two shapes of the one
       question — when did this traffic happen. Activity puts it on a date axis
-      and carries the selection into its own zoom requests; Traffic Rhythm folds
+      and carries the selection into its own zoom requests; Traffic rhythm folds
       the same rows onto weekday × hour, which is where a daily cron or an
       office-hours pattern shows up and a date axis cannot.
 
@@ -111,22 +132,39 @@
       signal and search filters like everything else on the page, so the two
       blocks below can never disagree about what is being counted. -#}
   {% if activity_days %}
+  {#- No series legend. The group chips at the top of the page carry the same
+      five colours and actually filter; a legend under them repeated the key and
+      did nothing when clicked — and each small multiple now names its own
+      series anyway. -#}
   <div class="panel">
-    <div class="table-block-head">
-      <span class="table-block-title">Activity</span>
-      <span class="table-block-count">visits per {{ activity_bucket }}, split by identity group</span>
-      {#- No series legend. The group chips at the top of the page carry the same
-          five colours and actually filter; a legend under them repeated the
-          key and did nothing when clicked. -#}
-    </div>
     {{ activity_chart(activity_days, activity_series, chart_params,
-                      bucket=activity_bucket, hour_switch=hour_switch_days) }}
+                      bucket=activity_bucket, hour_switch=hour_switch_days,
+                      title='Activity', unit='visits',
+                      note='requests per ' ~ activity_bucket ~ ', then one band per group') }}
+  </div>
+
+  {#- The same shape over addresses rather than requests, because they are two
+      questions and one number cannot answer both: six thousand requests from
+      three addresses is a scanner, three thousand addresses making two each is
+      a crawl. Read against the chart above, the two shapes diverging *is* the
+      finding. Under the New selection this one counts arrivals directly.
+
+      Called Addresses, not Visitors: the page is already called Visitors and
+      so is its header count, and a panel repeating that name in the middle of
+      it names nothing. It also matches the All/New control, which is what
+      narrows it. -#}
+  <div class="panel">
+    {{ activity_chart(visitor_days, activity_series, chart_params ~ '&metric=addresses',
+                      bucket=activity_bucket, hour_switch=hour_switch_days,
+                      title='Addresses', unit='addresses',
+                      note='distinct addresses per ' ~ activity_bucket
+                           ~ ', then one band per group') }}
   </div>
 
   <div class="panel">
     <div class="table-block-head">
-      <span class="table-block-title">Traffic Rhythm</span>
-      <span class="table-block-count">hour × weekday, UTC — same selection</span>
+      <span class="table-block-title">Traffic rhythm</span>
+      <span class="table-block-count">weekday × hour, UTC — same selection</span>
     </div>
     {#- No group toggle above the grid. It was this block's own way of slicing by
         identity group, from when the heatmap sat on the Overview and could not
@@ -134,24 +172,58 @@
         at once — two controls for one thing, and the one up top is the one that
         also narrows the chart and the tables. -#}
     {% if heatmap_max.total %}
+    {#- The grid scrolls inside its own box below ~34rem. Left to shrink it hit
+        the floor its square cells establish and was simply cut off at the
+        viewport edge — hours 10 to 23 were unreachable, with no scrollbar to
+        say so. The page body must never scroll sideways, so the scroll lives
+        here. -#}
+    <div class="heatmap-scroll">
     <div class="heatmap">
       <div></div>
       {% for h in range(24) %}<div class="heatmap-hour">{% if h % 3 == 0 %}{{ '%02d' % h }}{% endif %}</div>{% endfor %}
       {% for row in heatmap_grid %}
-      <div class="heatmap-day">{{ row.label }}</div>
+      {#- A weekday the window does not reach renders as seven rows of
+          near-invisible zeros, identical to a weekday nobody visited on. It is
+          the second sentence that is false. -#}
+      <div class="heatmap-day{% if not row.in_range %} heatmap-day--outside{% endif %}"
+           {% if not row.in_range %}{{ tip_attrs('Not in the selected range.',
+              'The window is shorter than a week, so this weekday has no day in it.') }}{% endif %}>{{ row.label }}</div>
       {% for c in row.cells %}
-      {% if c.total %}<div class="heatmap-cell label-help" style="--hm: {{ (c.total / heatmap_max.total) | round(3) }}"
+      {#- --hm is the ramp position, computed in build_heatmap_grid. It used to
+          be c.total / max, straight division, which put 134 of 168 cells below
+          0.10 and made the grid one bright square in a uniform field. -#}
+      {% if c.total %}<div class="heatmap-cell label-help" style="--hm: {{ c.ramp }}"
            {{ tip_attrs(row.label ~ ' ' ~ ('%02d' % loop.index0) ~ ':00 — ' ~ (c.total | fmtnum) ~ ' visits') }}></div>
-      {% else %}<div class="heatmap-cell heatmap-cell--zero"></div>{% endif %}
+      {%- elif row.in_range %}<div class="heatmap-cell heatmap-cell--zero"></div>
+      {%- else %}<div class="heatmap-cell heatmap-cell--outside"></div>{% endif %}
       {% endfor %}
       {% endfor %}
     </div>
+    </div>
+    {#- The cells carry a count, not a category, so the ramp needs its two ends
+        named — the same treatment the map's heat mode gets, in the same
+        markup. Without it the grid says darker and brighter and never says
+        what either is worth. -#}
+    <div class="heatmap-legend">
+      <span>{{ heatmap_max.low | fmtnum }}</span>
+      <span class="heat-scale">
+        {% for step in [0, 0.25, 0.5, 0.75, 1] %}
+        <span class="heat-step heatmap-cell" style="--hm: {{ step }}"></span>
+        {% endfor %}
+      </span>
+      <span>{{ heatmap_max.total | fmtnum }} visits</span>
+      {#- Zero is its own swatch and not the bottom of the ramp: an hour nobody
+          asked for anything in is a different fact from the quietest hour. -#}
+      <span class="heatmap-legend-zero">
+        <span class="heat-step heatmap-cell heatmap-cell--zero"></span>none
+      </span>
+    </div>
     {% else %}
-    <p class="text-muted">No visits in this selection.</p>
+    <p class="text-muted">No visits in the selected range.</p>
     {% endif %}
   </div>
   {% else %}
-  {{ empty_state('visit', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters') }}
+  {{ empty_state('visit', active_filter_chips, clear_href if active_filter_chips else '', 'Clear filters', ranged=date_from or date_to) }}
   {% endif %}
 
 {% elif group == 'ip' %}
@@ -181,21 +253,22 @@
         {{ sortable_th('visitor_class', 'Class mix', ('Which identity group this IP belongs to.',
            'One full band: an IP has exactly one class. Network origin is a signal, shown separately.'), sort, order, sort_suffix, default_order='ASC', col_key='class_mix', w='c-mix') }}
         {{ sortable_th('visit_count',   'Visits',    ('Requests from this IP in the range.',
-           'Rows in the visits table. Many requests across few paths is the scanner shape.'), sort, order, sort_suffix, w='c-num') }}
+           'One per logged request. Many requests across few paths is the scanner shape.'), sort, order, sort_suffix, w='c-num') }}
         {{ sortable_th('unique_pages',  'Pages',     ('Distinct paths this IP requested.',
            'Content paths only — protocol errors and the port-80 redirect are excluded.'), sort, order, sort_suffix, col_key='pages', w='c-num') }}
         {{ sortable_th('ports',         'Port',      ('Which of our ports the IP connected to.',
            'server_port from the log: 80 is plain HTTP, 443 is TLS. Not a port on the visitor.'), sort, order, sort_suffix, col_key='port', w='c-port') }}
         {{ sortable_th('browsers',      'Browser',   ('Browser named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, sort_suffix, col_key='browser', w='c-client') }}
         {{ sortable_th('oses',          'OS',        ('Operating system named by the User-Agent.', 'Parsed from the UA string, which any client can set freely.'), sort, order, sort_suffix, col_key='os', w='c-client') }}
-        {{ sortable_th('last_seen',     'Last seen', ('The IP\'s most recent request.', 'MAX(timestamp) over its visits inside the range.'), sort, order, sort_suffix, w='c-date') }}
+        {{ sortable_th('last_seen',     'Last seen', ('The IP\'s most recent request.', 'Its newest request inside the range.'), sort, order, sort_suffix, w='c-date') }}
       </tr>
     </thead>
     <tbody>
       {% for v in rows %}
       {{ visitor_row(v) }}
       {% else %}
-      {{ empty_row(12, 'visitor', active_filter_chips, clear_href, 'Clear filters') }}
+      {{ empty_row(12, 'visitor', active_filter_chips,
+         clear_href if active_filter_chips else '', 'Clear filters') }}
       {% endfor %}
     </tbody>
   </table>
@@ -233,9 +306,9 @@
             'Share of distinct IPs per group; the counts are in the bar\'s own tooltip.'), col_key='class_mix', w='c-mix') }}
         {{ th_tip('Signals', ('What is known about the IPs in this row.',
             'Share of distinct IPs carrying each signal. An IP can carry several.'), col_key='signal_mix', w='c-mix') }}
-        {{ sortable_th('unique_ips', 'IPs', ('How many distinct IPs this row stands for.', 'COUNT(DISTINCT ip) inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
-        {{ sortable_th('visits', 'Visits', ('Requests from all IPs in this row.', 'Rows in the visits table inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
-        {{ sortable_th('last_seen', 'Last seen', ('The row\'s most recent request.', 'MAX(timestamp) across the IPs behind it.'), sort, order, sort_suffix, col_key='last_seen', w='c-date') }}
+        {{ sortable_th('unique_ips', 'IPs', ('How many distinct IPs this row stands for.', 'Distinct addresses inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
+        {{ sortable_th('visits', 'Visits', ('Requests from all IPs in this row.', 'One per logged request inside the selected range.'), sort, order, sort_suffix, w='c-num') }}
+        {{ sortable_th('last_seen', 'Last seen', ('The row\'s most recent request.', 'The newest request from any address behind it.'), sort, order, sort_suffix, col_key='last_seen', w='c-date') }}
       </tr>
     </thead>
     <tbody>
@@ -270,10 +343,14 @@
         {{ signal_mix_cell(r) }}
         <td data-label="IPs">{{ r.unique_ips | fmtnum }}</td>
         <td data-label="Visits">{{ r.visits | fmtnum }}</td>
-        <td data-label="Last Seen" class="nowrap" data-col="last_seen">{{ r.last_seen | fmtdate }}</td>
+        <td data-label="Last seen" class="nowrap" data-col="last_seen">{{ r.last_seen | fmtdate }}</td>
       </tr>
       {% else %}
-      {{ empty_row(span, group_spec.noun, active_filter_chips, clear_href, 'Clear filters') }}
+      {#- group_spec.unit is the correct plural and was sitting one key away while
+    the macro appended an 's' — "No countrys recorded yet." -#}
+      {{ empty_row(span, group_spec.noun, active_filter_chips,
+         clear_href if active_filter_chips else '', 'Clear filters',
+         plural=group_spec.unit) }}
       {% endfor %}
     </tbody>
   </table>
