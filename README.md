@@ -6,7 +6,7 @@
 
 [![tests](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f4a54?style=flat-square)](LICENSE)
-[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-3f4a54?style=flat-square)](docs/changelog.md)
+[![Version 1.2.0](https://img.shields.io/badge/version-1.3.0-3f4a54?style=flat-square)](docs/changelog.md)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3f4a54?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-3f4a54?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -128,6 +128,13 @@ What Shodan knows about the hosts that visited — open ports, tags and CVEs as 
 same host set, so a facet always describes the table beneath it.
 
 ![Shodan](docs/img/shodan.png)
+
+### Report
+
+One month, stated rather than displayed, and downloadable as Markdown so it reaches somebody
+who will never open the dashboard. Who came, what happened, what the server handed out — and
+the lead sentence that is the point of the whole tool: *91,838 requests from 3,669 addresses.
+3 of them were people.*
 
 ---
 

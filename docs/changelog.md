@@ -18,6 +18,57 @@ Versions follow [semantic versioning](https://semver.org).
 
 ---
 
+## 1.3.0 — 2026-09-01
+
+The last ticket on the plan, and the one that changes what Vidar is for: a dashboard has to be
+visited, a report arrives.
+
+### Added in 1.3.0
+
+- **A monthly report.** `/report` states one month — read start to finish in about three
+  minutes, and downloadable as Markdown so it reaches somebody who will never open the
+  dashboard. It answers four questions and stops: who came, what happened, what this server
+  handed out, and where each figure came from.
+
+  The lead sentence is the reason it exists. On the reference deployment it reads *91,838
+  requests from 3,669 addresses in 83 countries. 3 of them were people — 0.1 % of the addresses
+  that reached this server.* An operator who believes they have visitors mostly has traffic, and
+  a percentage in a table does not say that the way a sentence does.
+
+  Three decisions that make it a report rather than an export. Every section prints the rule it
+  applied, so **none** is informative — "no incidents" beside the definition of one is a
+  measurement; on its own it could equally be a broken feature. A month with nothing in it says
+  the log is worth checking rather than that the site was quiet, because zero requests is almost
+  always a moved log path or an archived month. And where several incidents share a signature
+  the report says so in words: the table cannot, because every row reads the same.
+
+  **New** is asked of the whole database rather than of the month. A path served since March is
+  not news in its fourth month; one that answered for the first time on the 12th is the line
+  somebody wants. Windowing that test would have marked every finding new in every month it
+  appeared in.
+
+  Nothing here is computed a second way — it is the figures `/visitors`, `/incidents` and
+  `/exposure` already show for the same window. A report that disagreed with the dashboard it
+  came from would discredit the dashboard, not the report, so the page and the Markdown are two
+  renderings of one `build_report()` rather than two documents that happen to agree today.
+
+  No mail. That is an SMTP host, a credential and a delivery failure mode for a file that can
+  already be forwarded; a cron entry and `curl -o report.md '<tunnel>/report?format=md'` is the
+  whole of the missing half.
+
+### Fixed in 1.3.0
+
+- **The version in the sidebar linked to a release that usually does not exist.** It pointed at
+  `/releases/tag/v<version>`, and a running build is normally ahead of the last tag — it was for
+  every 1.1.x and for 1.2.0 — so the link 404'd from every page. It goes to the tag list, which
+  is never missing and answers the question the number raises anyway.
+
+- **`.mix-legend-dot` had a width and a height and no `display`.** An inline span ignores both.
+  It went unnoticed while its only user was a flex container, which blockifies its children;
+  the report puts one in a table cell, where it rendered as nothing at all.
+
+---
+
 ## 1.2.0 — 2026-09-01
 
 1.1.0 built the surfaces. This one makes them usable: every table on them sorts, the long ones

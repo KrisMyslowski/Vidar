@@ -45,6 +45,7 @@ from . import (
     incidents,
     overview,
     redirects,
+    report,
     settings,
     visitor_detail,
     visitors,
@@ -64,6 +65,7 @@ _MODULES = (
     analysis,  # /analysis, /shodan
     exposure,  # /exposure
     incidents,  # /incidents
+    report,  # /report
     settings,  # /settings/*
     docs,  # /docs, /docs/{slug}
     visitor_detail,  # /visitors/{ip} — catch-all, so last

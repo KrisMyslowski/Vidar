@@ -468,19 +468,50 @@ The Shodan side: facets for ports, tags and CVEs above the host table, sharing o
 state. Narrowing by `port`, `vuln` or `tag` moves both, so a facet always describes the host
 set below it.
 
+## 10. Report (`/report`)
+
+Every other surface answers a question you came with. This one answers the one nobody thinks
+to ask: **what was last month.** One month per report, read start to finish in about three
+minutes, and downloadable as Markdown so it can be forwarded to somebody who will never open
+the dashboard.
+
+It opens on the most recent month that holds traffic, and the tabs offer only the months the
+database still has — retention moves older ones out to a zip, and a report for an archived
+month would render as a month in which nothing happened.
+
+Four sections, in the order somebody asks them:
+
+| | |
+|---|---|
+| **Who came** | The identity mix by address, with each group's share and how it moved against the month before. The lead sentence above it is the point of the page: on the reference deployment 0.1 % of the addresses that reached the server were people |
+| **What happened** | Incidents, with the rule that defines one printed underneath — so "none" is informative rather than ambiguous. Where several incidents share a signature the report says so, because the table cannot: every row reads the same |
+| **What this server handed out** | Findings, and which of them were served for the **first time** this month. That is asked of the whole database rather than of the window, or every finding is new in every month it appears in |
+| **How to check any of this** | Which page each figure came from |
+
+Nothing on this page is computed a second way. Every number is the one `/visitors`, `/incidents`
+and `/exposure` already show for the same window, so the report and the dashboard cannot
+disagree — and the Markdown copy is rendered from the same data as the page, for the same
+reason.
+
+**No mail.** The plan said "file or mail"; mail is an SMTP host, a credential and a delivery
+failure mode for a file you can already forward. If you want it monthly, a cron entry and
+`curl -o report.md '<tunnel>/report?format=md'` is the whole of it.
+
 ---
 
-The version beside the name at the top of the sidebar is the build that is answering. It is
-also in `GET /api/stats`, so a script can check it without loading a page.
+The version beside the name at the top of the sidebar is the build that is answering. It links
+to the repository's tag list rather than to its own release, because a running build is often
+ahead of the last tag. It is also in `GET /api/stats`, so a script can check it without loading
+a page.
 
-## 10. Documentation
+## 11. Documentation
 
 The book in the middle of the sidebar footer opens these documents inside the
 dashboard, so the deployment steps and the field reference are at hand through
 the tunnel rather than only on GitHub. `docs/.order` sets the order of the list;
 a document missing from that file is appended rather than hidden.
 
-## 11. Settings
+## 12. Settings
 
 Behind the gear in the sidebar footer, three pages:
 
@@ -551,7 +582,7 @@ The daily pass runs inside the app; the page shows when it last ran.
 
 ---
 
-## 12. Decisions (`/api/decisions`)
+## 13. Decisions (`/api/decisions`)
 
 The third question — *how do I deal with it* — in a form another tool can read. CrowdSec,
 nftables or a shell script can help themselves from here. The endpoint is documented on
@@ -586,7 +617,7 @@ The answer is capped, and says when the cap was hit rather than quietly handing 
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Symptom | Cause | Check |
 |---|---|---|

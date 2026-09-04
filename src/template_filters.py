@@ -170,6 +170,37 @@ def primarylang(value: str) -> str:
 # ── List / Badge ─────────────────────────────────────────────────────────────
 
 
+def fmtpct(value) -> str:
+    """A share as a percentage: `0.1` becomes `0.1 %`, None an em dash.
+
+    `%g` rather than a fixed width, so a whole number does not carry a `.0` it
+    did not measure. None is not 0: a month with no addresses has no
+    composition, and `0 %` would state something the data does not.
+    """
+    if value is None:
+        return "—"
+    try:
+        return f"{float(value):g} %"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def fmtpoints(value) -> str:
+    """A share's movement in percentage points, signed: `-0.1 pt`, `±0`.
+
+    Points, not percent. A share falling from 0.2 to 0.1 is 0.1 points and also
+    a halving; only one of those two readings belongs beside a column of shares,
+    and the unit is what says which.
+    """
+    if value is None:
+        return "—"
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{value:+g} pt" if value else "±0"
+
+
 def fmtnum(value) -> str:
     """Thousands-separated integer (1,234) for count columns and stat cards.
 
@@ -341,6 +372,8 @@ def register_filters(env: jinja2.Environment) -> None:
     env.filters["fmtbytes"] = fmtbytes
     env.filters["fmtresptime"] = fmtresptime
     env.filters["fmtnum"] = fmtnum
+    env.filters["fmtpct"] = fmtpct
+    env.filters["fmtpoints"] = fmtpoints
     env.filters["primarylang"] = primarylang
     env.filters["badge_list"] = badge_list
     env.filters["csv_items"] = csv_items

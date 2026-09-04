@@ -101,7 +101,10 @@
 
 .mix-legend { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); margin-top: var(--space-xs); font-size: var(--font-xs); }
 .mix-legend-item { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); }
-.mix-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+/* inline-block, or the width and height do nothing: an inline span ignores
+   both. It went unnoticed while the only user was a flex container, which
+   blockifies its children anyway — the report puts one in a table cell. */
+.mix-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .mix-legend-item strong { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Empty state — names the filter that caused it, offers that step back. */
@@ -508,3 +511,15 @@
   padding: 0;
   color: var(--text);
 }
+
+/* ── Report ───────────────────────────────────────────────────────────────
+   The lead sentence: the one line somebody reads if they read nothing else,
+   so it is set larger than the prose under it and narrower than the page, at
+   a measure that stays readable. */
+.report-lead {
+  font-size: var(--font-md);
+  line-height: 1.6;
+  max-width: 62ch;
+  margin: 0 0 var(--space-md);
+}
+.text-teal { color: var(--grp-humans); }

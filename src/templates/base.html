@@ -25,11 +25,16 @@
 <body>
   <nav class="sidebar">
     <div class="sidebar-header">
-      <h1>Vidar <a class="version" href="{{ REPO_URL }}/releases/tag/v{{ VERSION }}"
+      {#- The tag list, not this version's own tag. A running build is often
+          ahead of the last tag — it was for every 1.1.x — and a link straight
+          to /releases/tag/vX.Y.Z is then a 404 on every page of the dashboard.
+          The list is never missing, and it answers the question the number
+          raises anyway: what else is there. -#}
+      <h1>Vidar <a class="version" href="{{ REPO_URL }}/tags"
              target="_blank" rel="noopener noreferrer">v{{ VERSION }}</a></h1>
     </div>
-    {#- Four entries. Networks/Countries/Clients/Paths are groupings of
-        /visitors, the map is a view of it — none of them is a route. -#}
+    {#- Networks/Countries/Clients/Paths are groupings of /visitors and the map is
+        a view of it — none of them is a route, so none of them is an entry. -#}
     <ul class="sidebar-nav">
       {#- Named for the nav only: a bare `attention` would shadow the Overview's
           findings list, which is passed into the content block below. -#}
@@ -40,6 +45,9 @@
       <li><a href="/incidents" class="{% if request.url.path == '/incidents' %}active{% endif %}">Incidents</a></li>
       <li><a href="/exposure" class="{% if request.url.path == '/exposure' %}active{% endif %}">Exposure</a></li>
       <li><a href="/shodan" class="{% if request.url.path == '/shodan' %}active{% endif %}">Shodan</a></li>
+      {#- Last, and after the surfaces it summarises: it is the only entry you
+          read rather than interrogate. -#}
+      <li><a href="/report" class="{% if request.url.path == '/report' %}active{% endif %}">Report</a></li>
     </ul>
     {#- API and the two export links moved to Settings. The exports pulled the
         whole database from a footer that gave no hint of it, and API was a bare

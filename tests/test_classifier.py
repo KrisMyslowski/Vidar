@@ -566,6 +566,45 @@ def test_human_on_proxy_stays_human(tmp_db):
         assert classify_ip(conn, "11.2.2.1") == "humans/browser-direct"
 
 
+def test_human_on_tor_stays_human(tmp_db):
+    """The gate used to be asymmetric, and this is the half that was wrong.
+
+    `is_tor` was read *before* the human test and disqualified outright, while
+    proxy, hosting and DNSBL were only consulted after — so the same person was
+    a human behind a VPN and not one behind Tor. Nothing about a Tor exit says
+    what the client on the other side of it is; the exit is where the traffic
+    surfaced, which is a fact about the network and belongs in the signal bar.
+    """
+    with get_conn(tmp_db) as conn:
+        _human_visit(conn, "11.2.2.4")
+        _intel(conn, "11.2.2.4", is_tor=1)
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "11.2.2.4") == "humans/browser-direct"
+
+
+def test_human_on_a_blocklist_stays_human(tmp_db):
+    """The other half. A blocklist entry is somebody else's judgement about an
+    address, usually about mail, and it says nothing about who is browsing from
+    it now — a residential address inherits one from whoever held it last.
+    It stays a signal beside the identity, never instead of it."""
+    with get_conn(tmp_db) as conn:
+        _human_visit(conn, "11.2.2.5")
+        _intel(conn, "11.2.2.5", dnsbl_listed=1)
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "11.2.2.5") == "humans/browser-direct"
+
+
+def test_every_reputation_signal_at_once_still_leaves_a_human(tmp_db):
+    """Tor, proxy and a blocklist together. Reputation does not accumulate into
+    an identity — only behaviour and hosting move the class, and the reason each
+    of those does is written beside its own rule."""
+    with get_conn(tmp_db) as conn:
+        _human_visit(conn, "11.2.2.6")
+        _intel(conn, "11.2.2.6", is_tor=1, is_proxy=1, dnsbl_listed=1)
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "11.2.2.6") == "humans/browser-direct"
+
+
 def test_browser_on_cloud_ip_is_a_headless_browser(tmp_db):
     """A browser engine driven from a datacenter is automation, not a person.
     Measured: 127 of 252 IPs the old gate called human sat on Alibaba/DigitalOcean/

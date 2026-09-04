@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{#
+  report.html — one month, stated.
+
+  The page half of VID-18. It renders src/report.py's data; src/report_text.py
+  renders the same data as Markdown. Two renderings of one report, so the copy
+  somebody forwards cannot say something the page does not.
+
+  Prose above every table. The rest of the dashboard is a tool you interrogate
+  and its tables answer for themselves; this is read start to finish by somebody
+  who did not come looking, so each section says what it found before it shows
+  the rows it found it in — and says what it would have found when the answer is
+  none.
+#}
+{% from '_macros.html' import page_header, table_block, th_tip, stat_card, tip_attrs %}
+{% block title %}Report — Vidar{% endblock %}
+{% block content %}
+
+{% if not report %}
+{{ page_header('Report') }}
+<div class="empty-state">
+  <p>No month holds any traffic yet.</p>
+  <p class="text-muted">A report describes a month of log. Once Vidar has read one, this page
+     has something to say — check <a href="/settings/status">Status</a> if that is unexpected.</p>
+</div>
+{% else %}
+
+{% call page_header('Report', report.label) %}
+  {#- The whole navigation this page has: a report is one month, and the months
+      offered are the months still in the database — retention takes the older
+      ones out to a zip, and one of those would render as a month in which
+      nothing happened. Tabs rather than a dropdown, which is what every other
+      choice on this dashboard is, and what the default two-month retention
+      window makes sensible. -#}
+  <div class="tab-group">
+    {%- for m in months %}
+    <a class="tab{% if m == report.month %} active{% endif %}" href="/report?month={{ m }}"
+       {{ tip_attrs('The report for ' ~ m ~ '.',
+          'Only months the database still holds. Older ones live in the archives under
+           Settings → Storage.') }}>{{ m }}</a>
+    {%- endfor %}
+  </div>
+  <a class="btn-refresh" href="/report?month={{ report.month }}&format=md"
+     {{ tip_attrs(('Download this report as Markdown.',
+        'Plain text that survives a mail client and a ticket system. The same figures as
+         this page — both are rendered from one report.')) }}>↓ Markdown</a>
+{% endcall %}
+
+{% if report.empty %}
+<div class="empty-state">
+  <p>No requests were logged in {{ report.label }}.</p>
+  <p class="text-muted">That is a statement about the log, not about the site: check that nginx
+     is still writing to the path Vidar reads, and that the month has not been moved to an
+     archive.</p>
+</div>
+{% else %}
+
+{#- The headline. One sentence, and it is the reason this page exists: an
+    operator who believes they have visitors mostly has traffic. -#}
+<p class="report-lead">
+  {{ report.visits | fmtnum }} request{{ '' if report.visits == 1 else 's' }} from
+  {{ report.addresses | fmtnum }} address{{ '' if report.addresses == 1 else 'es' }} in
+  {{ report.countries | fmtnum }} countr{{ 'y' if report.countries == 1 else 'ies' }}.
+  {% if report.humans %}{{ report.humans | fmtnum }} of them
+  {{ 'was a person' if report.humans == 1 else 'were people' }}{% else %}Not one of them was a
+  person{% endif %} — <strong>{{ report.human_share | fmtpct }}</strong> of the addresses that
+  reached this server.
+</p>
+
+<div class="cards">
+  {{ stat_card('Requests', report.visits | fmtnum,
+     ('Everything nginx logged this month.',
+      'Including the requests that never got past the HTTP→HTTPS redirect.'),
+     delta=(('↗ +' ~ report.visits_delta ~ '% vs ' ~ report.previous.label)
+            if report.visits_delta and report.visits_delta > 0 else
+            (('↘ ' ~ report.visits_delta ~ '% vs ' ~ report.previous.label)
+             if report.visits_delta else ''))) }}
+  {{ stat_card('Addresses', report.addresses | fmtnum,
+     ('Distinct addresses that reached the server.',
+      'The denominator under every share in the table below.')) }}
+  {{ stat_card('Humans', report.humans | fmtnum,
+     ('Addresses that read like a person browsing.',
+      'Decided by what the address did — Sec-Fetch navigation, pages read, nothing probed.
+       The network it arrived over does not enter into it.'),
+     color_class='text-teal') }}
+  {{ stat_card('Incidents', report.incident_total | fmtnum,
+     ('Runs of one program across several addresses.',
+      'The definition is under "What happened" below, with the thresholds.'),
+     color_class=('text-orange' if report.incident_total else '')) }}
+</div>
+
+<h3 class="section-label">Who came</h3>
+{% call table_block('Identity mix', report.addresses | fmtnum ~ ' addresses') %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Group', ('What the address is.',
+                'Identity only. Tor, VPN, hosting and blocklist entries are recorded beside an
+                 address as signals and never change which row it lands in here.'), w='c-text') }}
+      {{ th_tip('Addresses', ('How many distinct addresses.',), w='c-num-wide') }}
+      {{ th_tip('Share', ('Of every address that reached the server this month.',), w='c-num') }}
+      {% if report.previous.comparable %}
+      {{ th_tip('vs ' ~ report.previous.label, ('Movement in percentage points.',
+                'Points, not percent: a share falling from 0.2 to 0.1 is 0.1 points and also a
+                 halving, and only one of those belongs beside a column of shares.'),
+                w='c-num') }}
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in report.composition %}
+    <tr>
+      <td data-label="Group">
+        <span class="mix-legend-dot" style="background:{{ GROUP_COLOR_VARS[row.group] }}"></span>
+        {{ row.group | capitalize }}
+      </td>
+      <td data-label="Addresses" class="num">{{ row.addresses | fmtnum }}</td>
+      <td data-label="Share" class="num">{{ row.share | fmtpct }}</td>
+      {% if report.previous.comparable %}
+      <td data-label="vs {{ report.previous.label }}" class="num">{{ row.delta | fmtpoints }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% if not report.previous.comparable %}
+<p class="text-muted">{{ report.previous.label }} holds no traffic, so none of these is a rise
+   or a fall yet.</p>
+{% endif %}
+
+<h3 class="section-label">What happened</h3>
+{% if report.incident_total %}
+<p>
+  <strong>{{ report.incident_total | fmtnum }} incident{{ '' if report.incident_total == 1 else 's' }}</strong>,
+  {{ report.incident_addresses | fmtnum }} address{{ '' if report.incident_addresses == 1 else 'es' }}
+  between them.
+  {%- if report.incident_programs < report.incident_total %}
+  They are {{ report.incident_programs | fmtnum }} distinct
+  program{{ '' if report.incident_programs == 1 else 's' }}: the same signature came back.
+  {%- endif %}
+</p>
+{% call table_block('Incidents', 'top ' ~ (report.incidents | length) ~ ' by score') %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Started', ('When the first address in the run arrived.',), w='c-date') }}
+      {{ th_tip('For', ('How long the whole run lasted.',), w='c-num') }}
+      {{ th_tip('Addresses', ('How many ran the same program.',), w='c-num') }}
+      {{ th_tip('Probes', ('Requests for paths that do not exist.',
+                'Convention files excluded, as everywhere else.'), w='c-num') }}
+      {{ th_tip('Asked for', ('The first path of the signature.',
+                'What the program requested before anything else — it names the tool to
+                 anyone who recognizes it, and is a searchable string to anyone who does
+                 not.'), w='c-wide') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for i in report.incidents %}
+    <tr>
+      <td data-label="Started" class="nowrap">{{ i.started | fmtdate }}</td>
+      <td data-label="For" class="num">{{ i.duration | fmtduration }}</td>
+      <td data-label="Addresses" class="num">{{ i.addresses | fmtnum }}</td>
+      <td data-label="Probes" class="num">{{ i.probe_404 | fmtnum }}</td>
+      <td data-label="Asked for" class="col-path"><code>{{ i.paths[0] if i.paths else '—' }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% if report.incident_total > report.incidents | length %}
+<p class="text-muted">The remaining
+   {{ (report.incident_total - report.incidents | length) | fmtnum }} are on
+   <a href="/incidents">Incidents</a>.</p>
+{% endif %}
+{% else %}
+<p>None.</p>
+{% endif %}
+<p class="text-muted">An incident is {{ report.incident_rule.addresses }} or more addresses
+   asking for the same first {{ report.incident_rule.paths }} missing paths, in the same order,
+   inside an hour — one program, run from several places.</p>
+
+<h3 class="section-label">What this server handed out</h3>
+{% if report.finding_total %}
+<p>
+  <strong>{{ report.finding_total | fmtnum }} path{{ '' if report.finding_total == 1 else 's' }}</strong>
+  answered 2xx that nothing legitimate asked for.
+  {% if report.new_findings %}<strong class="text-orange">{{ report.new_findings | length | fmtnum }}
+  of them appeared for the first time this month.</strong>{% else %}None of them appeared for the
+  first time this month.{% endif %}
+</p>
+{% call table_block('Findings', report.finding_total | fmtnum ~ ' this month') %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      {{ th_tip('Path', ('What the server handed out.',), w='c-wide') }}
+      {{ th_tip('New', ('Whether it was first served this month.',
+                'Asked of the whole database, not of this month — otherwise every finding is
+                 new in every month it appears in.'), w='c-badge') }}
+      {{ th_tip('Addresses', ('How many fetched it this month.',), w='c-num') }}
+      {{ th_tip('Requests', ('How often, this month.',), w='c-num') }}
+      {{ th_tip('First served', ('The first successful fetch on record.',), w='c-date') }}
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in report.findings %}
+    <tr>
+      <td data-label="Path" class="col-path"><code>{{ f.path }}</code></td>
+      <td data-label="New">{% if f.is_new %}<span class="badge badge-red">New</span>
+        {%- else %}<span class="text-muted">—</span>{% endif %}</td>
+      <td data-label="Addresses" class="num">{{ f.ips | fmtnum }}</td>
+      <td data-label="Requests" class="num">{{ f.hits | fmtnum }}</td>
+      <td data-label="First served" class="nowrap">{{ (f.first_ever or '')[:10] or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endcall %}
+{% if report.finding_total > report.findings | length %}
+<p class="text-muted">The remaining
+   {{ (report.finding_total - report.findings | length) | fmtnum }} are on
+   <a href="/exposure">Exposure</a>.</p>
+{% endif %}
+{% else %}
+<p>Nothing.</p>
+{% endif %}
+<p class="text-muted">A finding is a path this server answered 2xx for that fewer than two
+   humans or crawlers have ever fetched — something handed out that nothing legitimate asked
+   for.</p>
+
+<h3 class="section-label">How to check any of this</h3>
+<p class="text-muted">Every figure above is the one the dashboard shows for
+   {{ report.start }} to {{ report.end }}: the mix on <a href="/visitors">Visitors</a>, the
+   events on <a href="/incidents">Incidents</a>, the paths on <a href="/exposure">Exposure</a>.
+   Nothing here is computed a second way, so nothing here can disagree with the page it came
+   from.</p>
+
+{% endif %}
+{% endif %}
+{% endblock %}
