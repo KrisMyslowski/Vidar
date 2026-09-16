@@ -131,3 +131,62 @@ class TestTheMonthIsStreamed:
         with zipfile.ZipFile(path) as zf:
             assert zf.testzip() is None
             assert set(zf.namelist()) == {"visits.jsonl", "ip_intel.jsonl", "meta.json"}
+
+
+def _peak_restoring(month: str) -> int:
+    from src.archive import restore_month
+
+    tracemalloc.start()
+    try:
+        with get_conn() as conn:
+            restore_month(conn, month)
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+class TestTheMonthIsStreamedBackIn:
+    """The read half threw the write half's care away: zf.read() inflated the
+    whole member, splitlines() copied it and a list of dicts held it a third
+    time, in a container that is tailing a log at the same moment."""
+
+    @pytest.fixture
+    def archived(self, two_months):
+        from src.archive import archive_month
+
+        with get_conn() as conn:
+            for month in two_months:
+                archive_month(conn, month)
+        return two_months
+
+    def test_peak_memory_does_not_grow_with_the_month(self, archived):
+        small, large = archived
+        _peak_restoring(small)  # first call pays one-off costs
+        from src.archive import release_month
+
+        with get_conn() as conn:
+            release_month(conn, small)
+
+        peak_small = _peak_restoring(small)
+        peak_large = _peak_restoring(large)
+
+        assert peak_large < peak_small * 1.5, (
+            f"{SMALL_ROWS} rows peaked at {peak_small / 1e6:.2f} MB and "
+            f"{ROWS} rows at {peak_large / 1e6:.2f} MB — that tracks the month"
+        )
+
+    def test_every_row_comes_back(self, archived):
+        _, large = archived
+        with get_conn() as conn:
+            before = conn.execute("SELECT COUNT(*) FROM visits").fetchone()[0]
+            result = _restore(conn, large)
+            after = conn.execute("SELECT COUNT(*) FROM visits").fetchone()[0]
+            paths = {r[0] for r in conn.execute("SELECT path FROM visits")}
+        assert result["visits"] == ROWS == after - before
+        assert {"/page/0", f"/page/{ROWS - 1}"} <= paths
+
+
+def _restore(conn, month):
+    from src.archive import restore_month
+
+    return restore_month(conn, month)

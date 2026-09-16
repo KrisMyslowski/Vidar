@@ -1,6 +1,6 @@
 """The version is written once, in src/__init__.py, and echoed in pyproject.toml.
 
-deploy/Dockerfile copies requirements/runtime.txt and src/ and nothing else, so
+deploy/Dockerfile copies requirements/runtime.lock and src/ and nothing else, so
 pyproject.toml is not in the image and cannot be the runtime source. That leaves
 two files carrying the same number, which is exactly how a number goes stale:
 the packaging metadata says one thing and the dashboard reports another. This

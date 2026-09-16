@@ -152,6 +152,24 @@ def test_repeat_runs_of_one_program_are_named_as_such(tmp_db):
     assert "1 distinct program" in render_markdown(r)
 
 
+def test_an_address_in_two_incidents_is_one_address(tmp_db):
+    """ "N incidents, M addresses between them" summed each incident's own distinct
+    count, so the same three machines running the same tool on two days read as
+    six addresses — one campaign reported at twice its size."""
+    from tests.test_incidents import TOOL, _probe
+
+    with get_conn(tmp_db) as conn:
+        for run in range(2):
+            for n in range(3):
+                _probe(conn, f"203.0.113.{n}", TOOL, offset_s=run * 90000 + n * 60)
+    with get_conn(tmp_db) as conn:
+        r = build_report(conn, "2026-08")
+
+    assert r["incident_total"] == 2
+    assert r["incident_addresses"] == 3
+    assert "2 incidents, 3 addresses between them" in render_markdown(r)
+
+
 # ── Page and Markdown are one report ─────────────────────────────────────────
 
 
@@ -233,3 +251,25 @@ def test_the_report_is_in_the_navigation(client, tmp_db):
     with get_conn(tmp_db) as conn:
         _hit(conn, "203.0.113.1")
     assert re.search(r'href="/report"[^>]*>Report<', client.get("/").text)
+
+
+def test_the_incident_rule_states_the_window_the_code_applies(client, tmp_db, monkeypatch):
+    """Both renderings once said "inside an hour" while incidents.py clustered at a
+    day — the value an hour was replaced with because it found nothing on a real
+    week. "None" beside a rule the code does not apply cannot tell a quiet month
+    from a broken feature, which is the one job that sentence has.
+
+    Moved to seven days here so the test cannot pass on a lucky hardcoded string.
+    """
+    import src.report
+
+    monkeypatch.setattr(src.report, "INCIDENT_GAP_SECONDS", 7 * 86400)
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1")
+
+    page = client.get("/report?month=2026-08").text
+    md = client.get("/report?month=2026-08&format=md").text
+
+    for text in (page, md):
+        assert "within 7 d of each other" in text
+        assert "inside an hour" not in text

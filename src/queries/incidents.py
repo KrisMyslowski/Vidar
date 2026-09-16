@@ -32,7 +32,7 @@ from datetime import datetime, timedelta
 from ..classifier.patterns import _CONVENTION_404_MATCH
 from ..incidents import INCIDENT_GAP_SECONDS, MIN_ADDRESSES, SIGNATURE_PATHS, score
 from ..sessions import SESSION_GAP_SECONDS
-from ._shared import _date_conditions
+from ._shared import _date_conditions, _seconds_between
 
 # The signature columns, one per position. Built here rather than written out
 # so SIGNATURE_PATHS stays the single place the length is decided.
@@ -159,6 +159,10 @@ def get_incidents(
                c.incident_no,
                MIN(c.started) AS started,
                MAX(c.ended)   AS ended,
+               -- The latest member *start*, which is what membership is judged
+               -- by. `ended` is the longest member's end, and a member can
+               -- outlast the start of the next run of the same tool.
+               MAX(c.started) AS last_started,
                COUNT(DISTINCT c.ip)   AS addresses,
                COUNT(DISTINCT NULLIF(i.asn, '')) AS asns,
                SUM(c.probe_404)       AS probe_404,
@@ -209,22 +213,6 @@ def _decorate(rows) -> list[dict]:
     return out
 
 
-def _seconds_between(started: str, ended: str) -> int:
-    """Wall-clock length of a run, in whole seconds.
-
-    Zero means "inside one second", not "instant": the log resolves to the
-    second and cannot say more. Unparseable is zero rather than an exception —
-    LogEntry.time is an unvalidated string and one bad row must not take the
-    page down.
-    """
-    try:
-        return int(
-            (datetime.fromisoformat(ended) - datetime.fromisoformat(started)).total_seconds()
-        )
-    except (ValueError, TypeError):
-        return 0
-
-
 def _signature_digest(signature: str) -> str:
     """A short, stable name for one signature."""
     return hashlib.sha256(signature.encode()).hexdigest()[:16]
@@ -247,7 +235,11 @@ def _padded(since: str) -> str:
 
 
 def get_incident_sessions(
-    conn: sqlite3.Connection, since: str, until: str, digest: str
+    conn: sqlite3.Connection,
+    since: str,
+    until: str,
+    digest: str,
+    last_started: str | None = None,
 ) -> tuple[str, list[dict]]:
     """The signature an incident carries, and the sessions it is made of.
 
@@ -268,6 +260,13 @@ def get_incident_sessions(
     gap means the emptiness that defines a start is inside the window and can
     be seen. Sessions that then begin before the incident are dropped: they are
     not part of it.
+
+    **Membership ends at `last_started`, the data at `until`.** A session belongs
+    here if it started inside the incident; `until` is the incident's latest
+    *end*, and one member probing for longer than the incident gap outlives the
+    start of the next run of the same tool. Bounded by `until`, that run's
+    sessions joined this panel. Without `last_started` it falls back to `until`,
+    which is right for every incident whose members all stopped in time.
     """
     padded = _padded(since)
     conds, window = _date_conditions(padded, until, column="v.timestamp", named=True)
@@ -294,7 +293,12 @@ def get_incident_sessions(
         WHERE s.started >= :from_ts AND s.started <= :to_ts
         ORDER BY s.started, s.ip
     """,
-        {**window, "session_gap": SESSION_GAP_SECONDS, "from_ts": since, "to_ts": until},
+        {
+            **window,
+            "session_gap": SESSION_GAP_SECONDS,
+            "from_ts": since,
+            "to_ts": last_started or until,
+        },
     ).fetchall()
     # Matched in Python rather than in SQL: the digest is ours, not SQLite's,
     # and hashing in the query would mean registering a second scalar function
@@ -312,7 +316,11 @@ def get_incident_sessions(
 
 
 def get_incident_paths(
-    conn: sqlite3.Connection, since: str, until: str, signature: str
+    conn: sqlite3.Connection,
+    since: str,
+    until: str,
+    signature: str,
+    last_started: str | None = None,
 ) -> list[dict]:
     """What an incident asked for, in the order the paths first arrived.
 
@@ -349,7 +357,8 @@ def get_incident_paths(
             "session_gap": SESSION_GAP_SECONDS,
             "signature": signature,
             "from_ts": since,
-            "to_ts": until,
+            # Members only — see get_incident_sessions.
+            "to_ts": last_started or until,
         },
     ).fetchall()
     marks = set(signature.split("\n"))

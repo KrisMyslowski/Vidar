@@ -120,7 +120,8 @@ ssh -L 8080:localhost:8080 <user>@<host>     # then http://localhost:8080
 ```
 
 The tunnel is the authentication. An authenticating reverse proxy works too, as long as the port
-stays on loopback and it forwards `Host` and `Sec-Fetch-Site` unmodified.
+stays on loopback, it forwards `Host` and `Sec-Fetch-Site` unmodified, and the name it serves is
+added to `ALLOWED_HOSTS` — anything else gets a 400.
 
 An empty dashboard immediately after installing is expected. A first start reads from the *end*
 of the log the way `tail` does, so nothing that was already written appears — only requests made

@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from .config import settings
 from .db import get_conn, run_db
-from .models import LogEntry, Visit
+from .models import BINARY_PAYLOAD_PATH, EMPTY_REQUEST_PATH, HANDSHAKE_PATH, LogEntry, Visit
 from .queries import get_state, insert_visit, set_state
 from .ua_parser import parse_user_agent
 
@@ -325,18 +325,18 @@ def _derive_request_fields(entry: LogEntry) -> tuple[str, str]:
 
     raw_request = (entry.request or "").strip()
     if not raw_request:
-        return method or "UNKNOWN", path or "[empty request]"
+        return method or "UNKNOWN", path or EMPTY_REQUEST_PATH
 
     match = _REQUEST_LINE_RE.match(raw_request)
     if match:
         return match.group(1), match.group(2)
 
     if raw_request.startswith("\x16\x03") or any(not ch.isprintable() for ch in raw_request[:12]):
-        return "TLS", "[handshake on HTTP port]"
+        return "TLS", HANDSHAKE_PATH
 
     sanitized = "".join(ch if ch.isprintable() else "?" for ch in raw_request[:80]).strip()
     if not sanitized:
-        return "NON-HTTP", "[binary payload]"
+        return "NON-HTTP", BINARY_PAYLOAD_PATH
     return "NON-HTTP", sanitized
 
 
@@ -351,6 +351,21 @@ def _derive_server_port(entry: LogEntry) -> int:
     if (entry.ssl_protocol or "").strip():
         return 443
     return 80
+
+
+# The longest a client-controlled string is kept. nginx lets a header through up
+# to its buffer size — 8 KB by default — and parse_user_agent runs a regex
+# battery per distinct agent, so a stream of distinct 8 KB agents made every
+# batch pay that in full on the worker thread, and stored it. Well above anything
+# real: browser agents run to a few hundred characters, and a path worth reading
+# is shorter than a screen.
+_FIELD_CAPS = {
+    "path": 2048,
+    "user_agent": 1024,
+    "referer": 2048,
+    "accept_language": 256,
+    "http_x_forwarded_for": 256,
+}
 
 
 def process_entry(entry: LogEntry) -> Visit:
@@ -368,8 +383,9 @@ def process_entry(entry: LogEntry) -> Visit:
     """
     method, path = _derive_request_fields(entry)
     server_port = _derive_server_port(entry)
-    ua_info = parse_user_agent(entry.http_user_agent)
-    return {
+    user_agent = (entry.http_user_agent or "")[: _FIELD_CAPS["user_agent"]]
+    ua_info = parse_user_agent(user_agent)
+    visit: Visit = {
         "ip": entry.remote_addr,
         "timestamp": entry.time,
         "method": method,
@@ -377,7 +393,7 @@ def process_entry(entry: LogEntry) -> Visit:
         "server_port": server_port,
         "status": entry.status,
         "bytes_sent": entry.body_bytes_sent,
-        "user_agent": entry.http_user_agent,
+        "user_agent": user_agent,
         "referer": entry.http_referer,
         "request_time": entry.request_time,
         "ssl_protocol": entry.ssl_protocol,
@@ -398,6 +414,10 @@ def process_entry(entry: LogEntry) -> Visit:
         "accept_encoding": entry.accept_encoding,
         "ssl_session_reused": entry.ssl_session_reused,
     }
+    for field, cap in _FIELD_CAPS.items():
+        if isinstance(visit[field], str):
+            visit[field] = visit[field][:cap]
+    return visit
 
 
 # ── Tail ─────────────────────────────────────────────────────────────────────
@@ -512,11 +532,16 @@ def _write_batch(
                 continue
             if want_keys and first_keys is None:
                 first_keys = _line_keys(line)
+            # Before skip_reason(), for the reason first_keys is: a filtered
+            # request's timestamp says as much about the host's clock as a kept
+            # one's. Counted after it, the share was kept lines over *all* lines,
+            # and static assets — most of a real site's traffic — pushed a host
+            # in local time under the threshold, so it was never reported.
+            non_utc += not _is_utc(entry.time)
             reason = skip_reason(entry)
             if reason:
                 invalid_ips += reason == "invalid-ip"
                 continue
-            non_utc += not _is_utc(entry.time)
 
             try:
                 insert_visit(conn, **process_entry(entry))

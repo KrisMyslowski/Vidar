@@ -20,8 +20,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .archive import sweep_abandoned_temps as sweep_archive_temps
 from .backup import LAST_RUN_KEY as BACKUP_LAST_RUN_KEY
 from .backup import run_backup
+from .backup import sweep_abandoned_temps as sweep_backup_temps
 from .config import settings, unset_site_settings
 from .db import get_conn, init_db
 from .enricher import _init_async_globals, enrichment_worker, reverse_dns_backfill
@@ -30,6 +32,7 @@ from .queries import (
     CLASSIFIER_VERSION,
     backfill_visitor_classes,
     count_export_hits,
+    count_visits,
     force_reclassify_all,
     get_state,
     purge_old_rate_limits,
@@ -38,7 +41,7 @@ from .queries import (
     set_state,
 )
 from .retention import LAST_RUN_KEY, run_retention
-from .routes._cache import fetch, warm_caches
+from .routes._cache import fetch, refresh_after_write, warm_caches
 from .routes.api import router as api_router
 from .routes.dashboard import router as dashboard_router
 
@@ -92,7 +95,7 @@ def _seed_demo() -> None:
     from .demo import SEED, seed
 
     with get_conn() as conn:
-        existing = conn.execute("SELECT COUNT(*) FROM visits").fetchone()[0]
+        existing = count_visits(conn)
     if existing:
         logger.info("DEMO_MODE: %d visits already here, seeding nothing", existing)
         return
@@ -153,6 +156,10 @@ async def _retention_task() -> None:
     """
     while True:
         try:
+            # Every tick, not only on the daily pass: it is a directory listing,
+            # and the first tick is startup, which is when a kill left something.
+            await asyncio.to_thread(sweep_archive_temps)
+            await asyncio.to_thread(sweep_backup_temps)
             with get_conn() as conn:
                 last = get_state(conn, LAST_RUN_KEY)
             due = True
@@ -161,6 +168,7 @@ async def _retention_task() -> None:
                 due = elapsed >= timedelta(days=1)
             if due:
                 await asyncio.to_thread(run_retention)
+                await refresh_after_write()
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -429,6 +437,40 @@ async def block_cross_origin_writes(request: Request, call_next: Callable):
     """
     if request.method in _UNSAFE_METHODS and not _is_same_origin(request):
         return Response("Cross-origin request refused", status_code=403)
+    return await call_next(request)
+
+
+# ── Host names ───────────────────────────────────────────────────────────────
+# The write guard above trusts Sec-Fetch-Site, and DNS rebinding is the one case
+# where the browser tells the truth and it is still the wrong answer. A page on
+# attacker.example re-points its own name at 127.0.0.1; to the operator's
+# browser http://attacker.example:8080 is then that page's own origin. Its
+# writes arrive same-origin and its reads are readable — /api/export, a whole
+# snapshot of the database. What it cannot change is the name the browser puts
+# in Host, so the name is the check, and it runs before anything else does.
+
+
+def _host_name(header: str) -> str:
+    """The name in a Host header, without its port, lowercased."""
+    header = header.strip().lower()
+    if header.startswith("["):
+        return header.split("]", 1)[0] + "]"
+    return header.rsplit(":", 1)[0] if ":" in header else header
+
+
+@app.middleware("http")
+async def refuse_unknown_hosts(request: Request, call_next: Callable):
+    """Answer only to the names in ALLOWED_HOSTS.
+
+    Registered after the write guard, so it runs before it: a rebound request
+    passes that guard by construction. The refusal names nothing back — a
+    response that echoed the Host would be one more thing to escape.
+    """
+    allowed = settings.allowed_hosts
+    if "*" not in allowed:
+        name = _host_name(request.headers.get("host", ""))
+        if not name or name not in {h.lower() for h in allowed}:
+            return Response("Unknown host", status_code=400)
     return await call_next(request)
 
 

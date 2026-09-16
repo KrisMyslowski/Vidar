@@ -18,7 +18,7 @@ import pytest
 
 from src.db import get_conn
 from src.queries import insert_visit, set_visitor_class, upsert_ip_intel
-from src.queries.analysis import get_exposures, get_probe_echo
+from src.queries.analysis import get_exposure_detail, get_exposures, get_probe_echo
 
 HUMAN = "humans/browser-direct"
 PROBER = "bots/vulnerability-probers"
@@ -34,9 +34,10 @@ def _paths(html):
     return re.findall(r'data-col="path"[^>]*>\s*<code>([^<]+)</code>', html)
 
 
-def _hit(conn, ip, path, status=200, cls=PROBER, bytes_sent=100, ts=None):
-    upsert_ip_intel(conn, {"ip": ip})
-    set_visitor_class(conn, ip, cls)
+def _hit(conn, ip, path, status=200, cls=PROBER, bytes_sent=100, ts=None, enriched=True):
+    if enriched:
+        upsert_ip_intel(conn, {"ip": ip})
+        set_visitor_class(conn, ip, cls)
     insert_visit(
         conn,
         ip=ip,
@@ -628,3 +629,27 @@ def test_the_recounted_addresses_obey_the_window(tmp_db):
     assert every["/.DS_Store"]["ips"] == 3, "three addresses over all time"
     assert windowed["/.DS_Store"]["ips"] == 1, "one of them inside the window"
     assert windowed["/.DS_Store"]["benign_ips"] == 1, "the benign test ignores the window"
+
+
+def test_an_address_not_yet_enriched_still_counts(tmp_db):
+    """Intel arrives later than the visit — the enrichment worker is rate-limited.
+
+    Every figure here used to inner-join ip_intel although only the benign test
+    reads it, so a fresh burst of probers was invisible until enrichment caught
+    up, and the row disagreed with its own side panel, which left-joins. An
+    address with no verdict yet is not a benign one; it counts.
+    """
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.DS_Store")
+        _hit(conn, "203.0.113.2", "/.DS_Store", enriched=False)
+        _hit(conn, "203.0.113.2", "/%2eDS_Store", enriched=False)
+        _hit(conn, "203.0.113.3", "/?phpinfo=-1", enriched=False)
+    with get_conn(tmp_db) as conn:
+        (finding,) = get_exposures(conn)
+        detail = get_exposure_detail(conn, finding["spellings"])
+        echo = get_probe_echo(conn)
+
+    assert finding["ips"] == 2, "the unenriched address is one of the two"
+    assert finding["hits"] == 3
+    assert (detail["ips"], detail["hits"]) == (finding["ips"], finding["hits"])
+    assert echo == {"urls": 1, "ips": 1}

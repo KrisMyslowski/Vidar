@@ -18,3 +18,6 @@ black==24.10.0
 isort==5.13.2
 ruff==0.16.2
 pre-commit>=3.7
+# Writes requirements/runtime.lock (scripts/lock_requirements.sh). A development
+# tool only: the image installs the lock with pip and never needs uv.
+uv==0.8.*

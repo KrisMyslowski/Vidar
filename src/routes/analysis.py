@@ -11,6 +11,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Query, Request
 
 from ..queries import (
+    count_intel_in_window,
     count_shodan_hosts,
     get_analysis_data,
     get_identity_signal_matrix,
@@ -19,15 +20,15 @@ from ..queries import (
     get_top_ports,
     get_top_tags,
     get_top_vulns,
-    seen_in_window,
 )
 from ..taxonomy import GROUP_COLOR_VARS
 from ..validators import valid_date
 from ._app import templates
 from ._cache import fetch
 from ._charts import bar_rows, day_rows
-from ._helpers import total_pages
+from ._helpers import past_the_last_page, total_pages
 from ._range import _RANGE_KEYS, _remember_range, _remembered_range, _resolve_range
+from ._urls import window_params
 
 router = APIRouter()
 
@@ -173,7 +174,6 @@ async def exposure(
     }
 
     def _load(conn):
-        seen, seen_params = seen_in_window("ip_intel.ip", date_from, date_to)
         return (
             get_shodan_hosts(
                 conn,
@@ -191,15 +191,15 @@ async def exposure(
             count_shodan_hosts(conn, since=date_from, until=date_to),
             # "X of Y IPs enriched" — Y has to be scoped as well, or the ratio
             # compares a windowed numerator against an all-time denominator.
-            conn.execute(
-                f"SELECT COUNT(*) FROM ip_intel{f' WHERE {seen}' if seen else ''}", seen_params
-            ).fetchone()[0],
+            count_intel_in_window(conn, since=date_from, until=date_to),
             get_top_ports(conn, **facet_args),
             get_top_vulns(conn, **facet_args),
             get_top_tags(conn, **facet_args),
         )
 
     hosts, total, total_all, enriched_ips, top_ports, top_vulns, top_tags = await fetch(_load)
+    if redirect := past_the_last_page(request, page, total, limit):
+        return redirect
 
     active = {"port": port, "vuln": vuln, "tag": tag}
     # The window rides in every link this page builds. Same trap as params["range"]
@@ -211,10 +211,15 @@ async def exposure(
         "date_to": date_to if active_range == "custom" else "",
     }
 
-    def _exposure_url(**overrides) -> str:
+    def _shodan_url(**overrides) -> str:
         merged = {**active, **range_link, **overrides}
         parts = [f"{k}={quote(str(v))}" for k, v in merged.items() if v]
         return "/shodan" + ("?" + "&".join(parts) if parts else "")
+
+    filter_tail = "".join(f"&{k}={quote(str(v))}" for k, v in active.items() if v)
+    # window_params() exists so that no page builds this tail by hand again;
+    # /shodan was the third copy.
+    window = window_params(active_range, date_from, date_to)
 
     _pill_colors = {
         "port": GROUP_COLOR_VARS["bots"],
@@ -222,7 +227,7 @@ async def exposure(
         "vuln": GROUP_COLOR_VARS["threats"],
     }
     pills = [
-        {"kind": label, "value": str(active[key]), "href": _exposure_url(**{key: None})}
+        {"kind": label, "value": str(active[key]), "href": _shodan_url(**{key: None})}
         for key, label in (("port", "Port"), ("tag", "Tag"), ("vuln", "CVE"))
         if active[key]
     ]
@@ -250,16 +255,14 @@ async def exposure(
                 "date_to": date_to or "",
                 # Clearing the value filters keeps the window: the range tabs are
                 # their own control, exactly as on /visitors.
-                "clear_href": _exposure_url(port=None, vuln=None, tag=None),
-                "range_params": "".join(f"&{k}={quote(str(v))}" for k, v in active.items() if v),
+                "clear_href": _shodan_url(port=None, vuln=None, tag=None),
+                # What a range tab carries besides the window — the filters here,
+                # the sort on /exposure and /incidents. Same name, same job.
+                "range_params": filter_tail,
                 # The window alone, for links built inside macros that cannot
                 # see the route's params (the tag badges in the host table).
-                "range_suffix": "".join(
-                    f"&{k}={quote(str(v))}" for k, v in range_link.items() if v
-                ),
-                "pager_params": "".join(
-                    f"&{k}={quote(str(v))}" for k, v in {**active, **range_link}.items() if v
-                ),
+                "range_suffix": window,
+                "pager_params": filter_tail + window,
                 "facets": [
                     {
                         "title": "Open ports",
@@ -287,16 +290,14 @@ async def exposure(
                     },
                 ],
                 "facet_urls": {
-                    p: {str(i["value"]): _exposure_url(**{p: i["value"]}) for i in items}
+                    p: {str(i["value"]): _shodan_url(**{p: i["value"]}) for i in items}
                     for p, items in (
                         ("port", top_ports),
                         ("tag", top_tags),
                         ("vuln", top_vulns),
                     )
                 },
-                "facet_clear_urls": {
-                    p: _exposure_url(**{p: None}) for p in ("port", "tag", "vuln")
-                },
+                "facet_clear_urls": {p: _shodan_url(**{p: None}) for p in ("port", "tag", "vuln")},
             },
         ),
         active_range,

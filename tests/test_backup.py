@@ -62,6 +62,33 @@ class TestTheSnapshot:
         backup.create_snapshot()
         assert [p.name for p in tmp_backup_dir.iterdir() if ".tmp" in p.name] == []
 
+    def test_the_rename_is_made_durable(self, db_with_rows, tmp_backup_dir, monkeypatch):
+        """Same gap as the archive's: an fsynced file under a name that was never
+        synced is a snapshot a power cut can take back."""
+        synced = []
+        monkeypatch.setattr(backup, "fsync_dir", synced.append)
+        target = backup.create_snapshot()
+        assert synced == [target.parent]
+
+    def test_a_killed_pass_leaves_nothing_behind_for_long(self, db_with_rows, tmp_backup_dir):
+        """The except clause cleans up after an error, not after a kill. VACUUM INTO
+        writes a whole uncompressed copy of the database first, and a restart in
+        the middle of it left that copy on the data volume for good."""
+        import os
+        import time
+
+        snap = backup.create_snapshot()
+        raw = tmp_backup_dir / f"{snap.name}.abcd1234.raw.tmp"
+        raw.write_bytes(b"a database")
+        young = tmp_backup_dir / f"{snap.name}.ef567890.tmp"
+        young.write_bytes(b"in progress")
+        then = time.time() - 2 * 3600
+        os.utime(raw, (then, then))
+        os.utime(snap, (then, then))
+
+        assert backup.sweep_abandoned_temps() == [raw.name]
+        assert snap.exists() and young.exists() and not raw.exists()
+
     def test_two_passes_at_once_both_finish(self, db_with_rows, tmp_backup_dir):
         """The daily task is due the moment the service starts, and "Back up
         now" is one click away — so they overlap. Sharing one temp name, the

@@ -93,14 +93,47 @@ def get_ips_without_rdns(conn: sqlite3.Connection, limit: int = 500) -> list[str
 
 def set_reverse_dns(conn: sqlite3.Connection, ip: str, hostname: str) -> None:
     """Record a PTR result. Stamps the attempt even when there is no record, so an IP
-    without reverse DNS is not retried forever."""
+    without reverse DNS is not retried forever.
+
+    Also clears classified_at, which sends the address back through
+    reclassify_stale_ips(). Requalification is otherwise driven by new visits,
+    and the crawler rules read reverse_dns: a crawler judged before its lookup,
+    that does not come back, kept a verdict made without the evidence."""
     conn.execute(
         """UPDATE ip_intel
               SET reverse_dns = CASE WHEN ? != '' THEN ? ELSE reverse_dns END,
-                  rdns_checked_at = CURRENT_TIMESTAMP
+                  rdns_checked_at = CURRENT_TIMESTAMP,
+                  classified_at = NULL
             WHERE ip = ?""",
         (hostname, hostname, ip),
     )
+
+
+_RDNS_PURGE_STATE = "rdns_unconfirmed_purged"
+
+
+def purge_unconfirmed_reverse_dns(conn: sqlite3.Connection) -> int:
+    """Send every reverse_dns name Shodan could have supplied back for checking.
+
+    Enrichment once copied Shodan's hostnames into reverse_dns, and the forward
+    confirmed lookup overwrote them only when it succeeded — so a stored name
+    may be unconfirmed, and nothing records which. Any address Shodan reported
+    a hostname for has its name cleared and its PTR check reopened; a name that
+    was genuine is confirmed again by the backfill that follows.
+
+    Once per database, by processor_state flag: a name that survives the re-check
+    must not be thrown out on every start. Returns how many were reopened.
+    """
+    if get_state(conn, _RDNS_PURGE_STATE):
+        return 0
+    n = conn.execute(
+        """UPDATE ip_intel
+              SET reverse_dns = '', rdns_checked_at = NULL
+            WHERE reverse_dns != ''
+              AND EXISTS (SELECT 1 FROM ip_intel_hostnames h WHERE h.ip = ip_intel.ip)"""
+    ).rowcount
+    set_state(conn, _RDNS_PURGE_STATE, "1")
+    return n
 
 
 def force_reclassify_all(conn: sqlite3.Connection) -> int:

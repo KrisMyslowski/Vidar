@@ -169,6 +169,42 @@ async def test_enrich_batch_returns_failed_ips(mock_shodan, mock_tor, mock_dnsbl
     assert mock_shodan.call_count == 1
 
 
+@patch("src.enricher._check_dnsbl", new_callable=AsyncMock)
+@patch("src.enricher._load_tor_exits", new_callable=AsyncMock)
+@patch("src.enricher._bounded_reverse_dns", new_callable=AsyncMock)
+@patch("src.enricher._fetch_shodan", new_callable=AsyncMock)
+async def test_an_answer_about_an_address_nobody_asked_for_is_dropped(
+    mock_shodan, mock_rdns, mock_tor, mock_dnsbl
+):
+    """ip-api is plain HTTP, and each item names the row it writes by its own
+    `query`. Believed as-is, anything on the path — or a misbehaving provider —
+    could write or overwrite intel for any address: mark a crawler's network as
+    hosting, or its own address as clean."""
+    _init_async_globals()
+    mock_shodan.return_value = None
+    mock_rdns.return_value = ""
+    mock_tor.return_value = set()
+    mock_dnsbl.return_value = (False, "")
+    client = MagicMock()
+    client.post = AsyncMock(
+        return_value=_mock_batch_response(
+            [
+                _api_item("93.184.216.34"),
+                _api_item("66.249.66.1"),  # not in the batch
+                {"status": "fail", "message": "private range", "query": "192.0.2.77"},  # nor this
+                _api_item("93.184.216.34") | {"hosting": True},  # a second answer for one ask
+                "not an item",
+            ]
+        )
+    )
+
+    enriched, failed = await enrich_batch(["93.184.216.34", "100.64.0.1"], client)
+
+    assert [e["ip"] for e in enriched] == ["93.184.216.34"]
+    assert enriched[0]["is_hosting"] is False, "the first answer stands"
+    assert failed == []
+
+
 async def test_enrich_batch_transient_error_marks_nothing_failed():
     """A whole-batch failure (network error) must not report IPs as permanently
     failed — and must not read as "nothing to do" either, or the worker's
@@ -330,3 +366,105 @@ async def test_reverse_dns_backfill_stamps_ips_without_a_ptr_record(tmp_db):
         rows = dict(conn.execute("SELECT ip, reverse_dns FROM ip_intel").fetchall())
     assert rows["9.9.9.9"] == "dns.example.net"
     assert rows["8.8.4.4"] == ""
+
+
+@patch("src.enricher._check_dnsbl", new_callable=AsyncMock)
+@patch("src.enricher._load_tor_exits", new_callable=AsyncMock)
+@patch("src.enricher._bounded_reverse_dns", new_callable=AsyncMock)
+@patch("src.enricher._fetch_shodan", new_callable=AsyncMock)
+async def test_a_failed_forward_confirmation_leaves_no_name_behind(
+    mock_shodan, mock_rdns, mock_tor, mock_dnsbl
+):
+    _init_async_globals()
+    mock_shodan.return_value = {
+        "open_ports": "80",
+        "tags": "",
+        "hostnames": "crawl-203-0-113-9.googlebot.com",
+        "cpes": "",
+        "vulns": "",
+    }
+    mock_rdns.return_value = ""
+    mock_tor.return_value = set()
+    mock_dnsbl.return_value = (False, "")
+    client = MagicMock()
+    client.post = AsyncMock(return_value=_mock_batch_response([_api_item("203.0.113.9")]))
+
+    enriched, _ = await enrich_batch(["203.0.113.9"], client)
+
+    assert "reverse_dns" not in enriched[0]
+
+
+def test_unconfirmed_names_already_stored_are_sent_back_for_checking(tmp_db):
+    """Databases enriched before the fix hold Shodan names in reverse_dns, and
+    nothing tells them apart from confirmed ones. Every name Shodan could have
+    supplied goes back through forward confirmation, once."""
+    from src.db import get_conn
+    from src.queries import get_ips_without_rdns, set_reverse_dns, upsert_ip_intel
+    from src.queries.intel import purge_unconfirmed_reverse_dns
+
+    with get_conn(tmp_db) as conn:
+        upsert_ip_intel(conn, {"ip": "203.0.113.9", "hostnames": "crawl.googlebot.com"})
+        set_reverse_dns(conn, "203.0.113.9", "crawl.googlebot.com")
+        upsert_ip_intel(conn, {"ip": "198.51.100.4"})
+        set_reverse_dns(conn, "198.51.100.4", "dns.example.net")
+
+    with get_conn(tmp_db) as conn:
+        assert purge_unconfirmed_reverse_dns(conn) == 1
+        assert get_ips_without_rdns(conn) == ["203.0.113.9"]
+        rows = dict(conn.execute("SELECT ip, reverse_dns FROM ip_intel").fetchall())
+    assert rows == {"203.0.113.9": "", "198.51.100.4": "dns.example.net"}
+
+    # Once. A name that survives the re-check must not be thrown out on every start.
+    with get_conn(tmp_db) as conn:
+        set_reverse_dns(conn, "203.0.113.9", "crawl.googlebot.com")
+        assert purge_unconfirmed_reverse_dns(conn) == 0
+        assert get_ips_without_rdns(conn) == []
+
+
+def test_a_reverse_dns_result_sends_the_address_back_to_the_classifier(tmp_db):
+    """The crawler rules read reverse_dns, so a class judged before the lookup is a
+    class judged without the evidence. Requalification is otherwise driven by new
+    visits only, and a crawler that does not return would keep the old verdict."""
+    from src.db import get_conn
+    from src.queries import (
+        reclassify_stale_ips,
+        set_reverse_dns,
+        set_visitor_class,
+        upsert_ip_intel,
+    )
+
+    with get_conn(tmp_db) as conn:
+        upsert_ip_intel(conn, {"ip": "203.0.113.9"})
+        set_visitor_class(conn, "203.0.113.9", "bots/impersonators")
+        reclassify_stale_ips(conn)
+        assert conn.execute("SELECT classified_at FROM ip_intel").fetchone()[0] is not None
+
+        set_reverse_dns(conn, "203.0.113.9", "crawl.googlebot.com")
+        assert conn.execute("SELECT classified_at FROM ip_intel").fetchone()[0] is None
+
+
+@pytest.mark.parametrize(
+    "answers, expected",
+    [
+        ((None, True), (True, "b.example")),
+        ((None, False), (False, "")),
+        ((RuntimeError("refused"), True), (True, "b.example")),
+    ],
+    ids=["one-errors-one-lists", "one-errors-one-clean", "one-raises-one-lists"],
+)
+async def test_one_provider_answering_is_enough_to_record_it(answers, expected, monkeypatch):
+    """The branch where `answered` and `sources` part ways: a zone that refused
+    must neither erase the listing another zone reported nor turn a clean answer
+    into no answer."""
+    import src.enricher as enricher
+
+    monkeypatch.setattr(enricher.settings, "dnsbl_providers", ["a.example", "b.example"])
+
+    async def lookup(reversed_ip, provider):
+        answer = answers[0 if provider == "a.example" else 1]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(enricher, "_bounded_dnsbl_lookup", lookup)
+    assert await enricher._check_dnsbl("203.0.113.9") == expected

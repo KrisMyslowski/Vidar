@@ -7,7 +7,7 @@ Base URL `http://localhost:8080` through the SSH tunnel. There is **no authentic
 service binds loopback and access is whatever the tunnel grants. All responses are JSON unless
 stated otherwise.
 
-Four endpoints live under `/api`, plus `/health`.
+Five endpoints live under `/api`, plus `/health`.
 
 ---
 
@@ -157,14 +157,33 @@ CSV cells are sanitized against spreadsheet formula injection before being writt
 
 ---
 
-## 5. `GET /health`
+## 5. `GET /api/decisions`
+
+The addresses matching a stated selection, with the evidence for each, for a tool that acts on
+them — CrowdSec, nftables, a shell script. **Vidar does not decide what is blocked**; what the
+output means and why it is shaped this way is [usage.md §13](usage.md#13-decisions-apidecisions).
+
+| Parameter | Description |
+|---|---|
+| `format` | `txt` (default) — one address per line, its reason after a `#` — or `json` |
+| `class` | An identity class, repeatable |
+| `group` | A group prefix (`threats`, `bots`, …), repeatable |
+| `from` | `YYYY-MM-DD`, inclusive |
+| `to` | `YYYY-MM-DD`, inclusive |
+
+**With no `class` and no `group`, the selection is `threats/*` over the last seven days**, and
+the response states that selection rather than leaving it implicit.
+
+---
+
+## 6. `GET /health`
 
 `{"status": "ok"}`. Performs no database query, so it stays honest as a container health
 check even when SQLite is busy.
 
 ---
 
-## 6. Dashboard routes
+## 7. Dashboard routes
 
 HTML, not JSON. Listed so the URL surface is documented in one place.
 
@@ -174,14 +193,18 @@ HTML, not JSON. Listed so the URL surface is documented in one place.
 | `GET /visitors` | The single visitor surface. `?group=ip\|asn\|country\|client\|path` picks the grouping, `?view=table\|map\|timeline` the presentation |
 | `GET /visitors/{ip}` | One IP in full — verdict, classifier evidence, network and exposure, request log |
 | `GET /visitors/rows` | HTML **fragment**, not a page: the IPs behind one aggregation row, loaded into the slide-over |
+| `GET /visitors/{ip}/session` | HTML fragment: one session of that address, for its panel |
 | `GET /analysis` | Identity × signals matrix, status and HTTP-version distributions, rate limiting |
-| `GET /api/decisions` | The addresses matching a stated selection, with the evidence for each. `format=txt\|json`, `class`, `group`, `from`/`to`. Vidar does not decide what is blocked |
 | `GET /incidents` | What happened: addresses that ran the same program at the same time |
+| `GET /incidents/case` | HTML fragment: the sessions and paths of one incident, for its panel. `from`, `to`, `last`, `sig` name the incident |
 | `GET /exposure` | What the site gave away: paths that answered 2xx and that fewer than two benign addresses ever fetched, each with what it is and how to stop serving it |
+| `GET /exposure/finding` | HTML fragment: one finding's requests and explanation, for its panel |
+| `GET /report` | One month as a report; `month=YYYY-MM`, and `format=md` for the Markdown copy |
 | `GET /shodan` | Shodan facets (ports, tags, CVEs) over the host set below them; `port`, `vuln`, `tag` narrow both |
 | `GET /settings/status` | What the service is doing, and the configuration it loaded |
 | `GET /settings/storage` | Retention mode, archives, snapshots |
 | `GET /settings/api` | This endpoint list, in the UI |
+| `GET /docs`, `GET /docs/{slug}` | These documents, rendered |
 
 The Storage page posts its actions back to these. They are form targets rather than an API —
 no JSON, and each redirects to `/settings/storage` — but four of them destroy data, so they
@@ -191,8 +214,9 @@ are listed rather than left to the page that calls them.
 |---|---|
 | `POST /settings/storage/mode` | Switch the retention mode (`mode` form field) |
 | `POST /settings/storage/window` | Set how many months stay in the database (`months`) |
+| `POST /settings/storage/archive-keep` | Set how many months an archive outlives its own month (`months`; `0` keeps them all) |
 | `POST /settings/storage/restore/{month}` | Read an archived month back into the database |
-| `POST /settings/storage/release/{month}` | Archive a month and drop it from the database |
+| `POST /settings/storage/release/{month}` | End a restore early: the month leaves the database, its archive stays |
 | `POST /settings/storage/delete-archive/{month}` | **Destructive** — delete the archive zip |
 | `POST /settings/storage/delete-month/{month}` | **Destructive** — delete a month's rows |
 | `POST /settings/storage/backup` | Write a snapshot of the database |
@@ -201,7 +225,7 @@ are listed rather than left to the page that calls them.
 
 Common query parameters on `/visitors`: `page`, `limit`, `sort`, `order`, `class`, `signal`,
 `q`, `range`, `date_from`, `date_to`. `class` accepts the 18 identity classes and their 5
-group prefixes; `signal` accepts the six signal keys; unrecognised values are dropped rather
+group prefixes; `signal` accepts the seven signal keys; unrecognised values are dropped rather
 than erroring. `group=ip` additionally takes the exact-match drill-downs (`asn`, `path`,
 `browser`, `country`, `ip`, `port`, `min_visits`), and `group=path` takes `status` (`2xx`–`5xx`).
 

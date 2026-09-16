@@ -14,7 +14,9 @@ fields would have to be re-parsed. Zip rather than one gzip stream because the
 settings page lists archives by reading `meta.json` alone, without inflating the
 visits of every month it shows.
 
-No SQL lives here — queries.py owns that, as everywhere else in this codebase.
+No queries live here — src/queries/archive_sql.py owns those, as everywhere else in
+this codebase. The one statement is transaction control: archive_month takes the
+write lock with BEGIN IMMEDIATE before it reads, and says why.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -242,6 +245,60 @@ def resolve_archive(month: str) -> Path | None:
 # ── Writing ──────────────────────────────────────────────────────────────────
 
 
+# Old enough that nothing can still be writing it. Deleting a file that is still
+# being served is harmless anyway — an open descriptor outlives its name — so
+# the hour only protects a zip that is still being built.
+_ABANDONED_AFTER_S = 3600
+
+
+def sweep_abandoned(
+    directory: Path, patterns: tuple[str, ...], now: float | None = None
+) -> list[str]:
+    """Delete temporaries matching `patterns` that nothing finished. Returns their names.
+
+    Every temporary here is removed by the code that made it — on success by a
+    rename or a background unlink, on an exception by its handler. None of that
+    runs when the process is killed or a client drops a download, and each
+    directory's listing hides dotfiles and temp suffixes, so what is left is
+    invisible and permanent: whole months of visits, whole copies of the database.
+    """
+    cutoff = (time.time() if now is None else now) - _ABANDONED_AFTER_S
+    swept: list[str] = []
+    for pattern in patterns:
+        for path in directory.glob(pattern):
+            try:
+                if path.is_file() and path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    swept.append(path.name)
+            except FileNotFoundError:
+                continue  # finished, or swept by a concurrent pass
+    if swept:
+        logger.warning(
+            "Removed %d abandoned temporary file(s) from %s: %s", len(swept), directory, swept
+        )
+    return swept
+
+
+def sweep_abandoned_temps() -> list[str]:
+    """The archive directory's temporaries: export zips and unrenamed archives."""
+    return sweep_abandoned(archive_dir(), (".export-*.zip", ".*.tmp"))
+
+
+def fsync_dir(directory: Path) -> None:
+    """Make a rename inside `directory` durable.
+
+    fsync on a file covers its contents, not its name — the name lives in the
+    directory, which has to be synced on its own. Without it, a rename followed
+    by a committed DELETE can be undone by a power cut: the rows gone, and the
+    archive that replaced them never having reached the disk.
+    """
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _write_jsonl(zf: zipfile.ZipFile, name: str, rows) -> int:
     """Stream `rows` into a zip member, one JSON object per line. Returns the count.
 
@@ -340,7 +397,9 @@ def archive_month(conn: sqlite3.Connection, month: str) -> dict:
     Order matters more than anything else here. The zip is written to a temp
     name, closed, fsynced and only then renamed into place — a crash before the
     rename leaves no archive *and* no deletion, which is recoverable. Deleting
-    first, or renaming a half-written file, loses the month.
+    first, or renaming a half-written file, loses the month — and so does a
+    rename that has not reached the disk, which is why the directory is synced
+    too before any row goes.
 
     The write lock is taken before the month is read. sqlite3's legacy isolation
     opens a transaction on the first DML and not before, so the SELECTs building
@@ -362,6 +421,7 @@ def archive_month(conn: sqlite3.Connection, month: str) -> dict:
     with open(tmp, "rb") as fh:
         os.fsync(fh.fileno())
     os.replace(tmp, final)
+    fsync_dir(final.parent)
 
     deleted = delete_visits_for_month(conn, month)
     logger.info("Archived %s: %d visits, %d IPs -> %s", month, deleted, meta["ips"], final.name)
@@ -416,6 +476,22 @@ def list_archives(conn: sqlite3.Connection | None = None) -> list[dict]:
 
 # ── Restoring ────────────────────────────────────────────────────────────────
 
+# The same chunk stream_visits_for_month() reads in, for the same reason.
+_RESTORE_CHUNK = 1000
+
+
+def _read_jsonl(zf: zipfile.ZipFile, name: str):
+    """Yield a member's JSON lines one at a time — the mirror of _write_jsonl.
+
+    zf.read() inflated the whole member, splitlines() copied it, and the list of
+    dicts built from that held the month a third time. The write path streams so
+    that a six-figure month never sits in memory; the restore now does too.
+    """
+    with zf.open(name) as member:
+        for line in member:
+            if line.strip():
+                yield json.loads(line)
+
 
 def restore_month(conn: sqlite3.Connection, month: str, days: int | None = None) -> dict:
     """Load a month back into the active DB and pin it against re-archiving.
@@ -428,11 +504,15 @@ def restore_month(conn: sqlite3.Connection, month: str, days: int | None = None)
         raise FileNotFoundError(f"no archive for {month}")
 
     with zipfile.ZipFile(path) as zf:
-        visits = [json.loads(line) for line in zf.read(VISITS).splitlines() if line]
-        intel = [json.loads(line) for line in zf.read(INTEL).splitlines() if line]
-
-    added_intel = insert_missing_intel(conn, intel)
-    added_visits = insert_archived_visits(conn, visits)
+        added_intel = insert_missing_intel(conn, _read_jsonl(zf, INTEL))
+        added_visits = 0
+        chunk: list[dict] = []
+        for row in _read_jsonl(zf, VISITS):
+            chunk.append(row)
+            if len(chunk) >= _RESTORE_CHUNK:
+                added_visits += insert_archived_visits(conn, chunk)
+                chunk = []
+        added_visits += insert_archived_visits(conn, chunk)
 
     days = settings.archive_restore_days if days is None else days
     until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()

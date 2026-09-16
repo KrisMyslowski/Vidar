@@ -54,7 +54,10 @@ from .pack import load
 # automation. And a crawler claim is verified against the network owner as well
 # as reverse DNS (_CRAWLER_ORIGINS), because the operators that publish no PTR
 # record are the large ones: 88 of 91 impersonators were the real crawler.
-_RULES_VERSION = "6"
+# v7 (2026-09): unique_paths counts pages, not spellings — the path up to its query
+# string. Three ?utm_source= variants of the homepage were three pages, enough to
+# clear _MIN_PAGES_FOR_DATACENTER_HUMAN, whose measurement was taken in pages.
+_RULES_VERSION = "7"
 
 # The needle lists, from the shipped pack plus whatever PATTERNS_PATH adds.
 # A broken pack raises PackError here, at import, which stops the service with

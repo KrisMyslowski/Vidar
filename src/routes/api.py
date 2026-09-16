@@ -24,6 +24,8 @@ from ..queries import (
     DEFAULT_DAYS,
     DEFAULT_GROUPS,
     MAX_ADDRESSES,
+    SEEN_BOTH,
+    SEEN_NEW,
     SEEN_TOTAL,
     SEEN_VALUES,
     VISIT_SORT_MAP,
@@ -39,6 +41,7 @@ from ..queries import (
 from ..taxonomy import VALID_CLASSES, VALID_GROUPS, VALID_SIGNALS
 from ..validators import valid_country, valid_date, valid_ip, valid_order, valid_search
 from ._cache import fetch
+from ._charts import overlay_new
 from ._helpers import total_pages
 
 router = APIRouter()
@@ -131,6 +134,11 @@ async def activity(
     hours. Same filters as /visitors?view=timeline, so both show one selection —
     `seen` included, or zooming past three days would answer for every address
     while the page still said New.
+
+    SEEN_BOTH needs the same two passes the page makes. It filters nothing, so
+    handing it straight to the query returns the All series alone: the chart
+    shipped with two series and lost one the moment a zoom crossed into hours,
+    silently, under a control still reading All + New.
     """
     if bucket not in ("day", "hour"):
         bucket = "day"
@@ -140,19 +148,25 @@ async def activity(
     # over a column of request counts.
     metric = "addresses" if metric == "addresses" else "visits"
     timeline = get_visitor_timeline if metric == "addresses" else get_activity_timeline
-    rows = await fetch(
-        lambda conn: timeline(
-            conn,
-            since=valid_date(date_from),
-            until=valid_date(date_to),
-            class_filter=[c for c in cls if c in VALID_CLASSES or c in VALID_GROUPS],
-            signal_filter=[s for s in signal if s in VALID_SIGNALS],
-            bucket=bucket,
-            q=valid_search(q),
-            seen=seen,
-        )
-    )
-    return {"bucket": bucket, "metric": metric, "rows": rows}
+    args = {
+        "since": valid_date(date_from),
+        "until": valid_date(date_to),
+        "class_filter": [c for c in cls if c in VALID_CLASSES or c in VALID_GROUPS],
+        "signal_filter": [s for s in signal if s in VALID_SIGNALS],
+        "bucket": bucket,
+        "q": valid_search(q),
+    }
+
+    def _load(conn):
+        rows = timeline(conn, seen=seen, **args)
+        if seen != SEEN_BOTH:
+            return rows
+        # Both passes on one connection and one thread hop, the way the page
+        # route does it — and with one `args`, so the two series cannot end up
+        # describing different selections.
+        return overlay_new(rows, timeline(conn, seen=SEEN_NEW, **args))
+
+    return {"bucket": bucket, "metric": metric, "rows": await fetch(_load)}
 
 
 @router.get("/visits")

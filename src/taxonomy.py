@@ -44,9 +44,10 @@ VISITOR_CATEGORIES: list[tuple[str, list[str]]] = [
 # (e.g. humans/browser-direct) while carrying any number of signals on top.
 #
 # The one exception is deliberate and documented: automated/headless-browser reads
-# is_hosting to separate "a browser, in a datacenter" from a person. See the human
-# gate in _apply_priority_chain() — reputation still never downgrades a human on a
-# consumer VPN (is_proxy), only cloud compute (is_hosting without is_proxy).
+# hosting (is_hosting, or a cloud ISP name) to separate "a browser, in a datacenter"
+# from a person, in _rule_browser in classifier/rules.py. is_proxy earns no exemption
+# — commercial VPN exits are datacenters too — so since v6 a datacenter address is
+# a person by behaviour instead: internal navigation, three pages, nothing probed.
 
 VALID_CLASSES: frozenset[str] = frozenset(c for _, cats in VISITOR_CATEGORIES for c in cats)
 

@@ -15,6 +15,9 @@ import pytest
 
 from src.classifier import pack
 
+# A crawler added the complete way: its user-agent and the networks it runs from.
+_HOUSEBOT = '[ai_uas]\nentries = ["housebot"]\n[crawler_origins]\nhousebot = ["housecloud"]\n'
+
 
 def _write(tmp_path, body, name="extra.toml"):
     path = tmp_path / name
@@ -63,16 +66,16 @@ def test_the_fingerprint_is_stable():
 def test_a_changed_needle_changes_the_fingerprint(tmp_path):
     """This is what makes the pack safe to edit: the stored labels go stale."""
     before = pack.load()[1]
-    after = pack.load(_write(tmp_path, '[ai_uas]\nentries = ["newcrawlerbot"]\n'))[1]
+    after = pack.load(_write(tmp_path, '[seo_uas]\nentries = ["newseobot"]\n'))[1]
     assert before != after
 
 
 def test_comments_and_formatting_do_not_change_it(tmp_path):
     """Otherwise reflowing a comment would reclassify a million visits."""
-    plain = _write(tmp_path, '[ai_uas]\nentries = ["newbot"]\n', "a.toml")
+    plain = _write(tmp_path, '[seo_uas]\nentries = ["newbot"]\n', "a.toml")
     noisy = _write(
         tmp_path,
-        '# a note\n[ai_uas]\n# another note\nentries = [\n  "newbot",\n]\n',
+        '# a note\n[seo_uas]\n# another note\nentries = [\n  "newbot",\n]\n',
         "b.toml",
     )
     assert pack.load(plain)[1] == pack.load(noisy)[1]
@@ -89,7 +92,7 @@ def test_the_classifier_version_carries_both_halves():
 
 def test_an_operator_pack_adds_to_a_table(tmp_path):
     shipped, _ = pack.load()
-    merged, _ = pack.load(_write(tmp_path, '[ai_uas]\nentries = ["housebot"]\n'))
+    merged, _ = pack.load(_write(tmp_path, _HOUSEBOT))
     assert merged["ai_uas"]["entries"] == shipped["ai_uas"]["entries"] + ["housebot"]
 
 
@@ -108,7 +111,7 @@ def test_a_repeated_needle_is_not_added_twice(tmp_path):
 
 def test_an_overlay_touches_only_what_it_declares(tmp_path):
     shipped, _ = pack.load()
-    merged, _ = pack.load(_write(tmp_path, '[ai_uas]\nentries = ["housebot"]\n'))
+    merged, _ = pack.load(_write(tmp_path, _HOUSEBOT))
     assert merged["search_uas"] == shipped["search_uas"]
 
 
@@ -174,6 +177,24 @@ def test_an_entry_that_is_not_a_needle_is_refused(tmp_path, value):
 def test_a_crawler_origin_that_is_not_a_list_is_refused(tmp_path):
     with pytest.raises(pack.PackError, match="list of non-empty strings"):
         pack.load(_write(tmp_path, '[crawler_origins]\ngptbot = "openai"\n'))
+
+
+def test_a_crawler_without_origins_is_refused_and_named(tmp_path):
+    """The pack invites adding a new crawler as an edit rather than a code change.
+    Added to [ai_uas] and not to [crawler_origins], the real crawler — on cloud
+    hosting, publishing no PTR — was filed as an impersonator of itself, with no
+    error anywhere. That is the mistake v6 was built to stop making."""
+    with pytest.raises(pack.PackError, match=r"housebot.*\[crawler_origins\]"):
+        pack.load(_write(tmp_path, '[ai_uas]\nentries = ["housebot"]\n'))
+
+
+def test_a_crawler_declared_with_no_networks_is_allowed(tmp_path):
+    """An empty list is a decision — verify by reverse DNS alone — and says so;
+    a missing key is an omission."""
+    merged, _ = pack.load(
+        _write(tmp_path, '[search_uas]\nentries = ["ptrbot"]\n[crawler_origins]\nptrbot = []\n')
+    )
+    assert merged["crawler_origins"]["ptrbot"] == []
 
 
 def test_the_shipped_pack_must_carry_every_table():

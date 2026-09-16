@@ -1,6 +1,6 @@
 """The documentation pages — docs/*.md rendered into the dashboard.
 
-The seven documents under docs/ were readable on GitHub and nowhere else, which
+The documents under docs/ were readable on GitHub and nowhere else, which
 is the wrong place: Deployment and Data Reference are wanted while operating the
 service, through the tunnel, not while browsing a repository.
 

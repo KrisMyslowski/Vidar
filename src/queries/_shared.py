@@ -13,8 +13,10 @@ a bound parameter, never as text. See the note above _term_sql.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from .. import search
+from ..sqltext import like_escape as _like_escape  # noqa: F401 — re-exported
 from ..taxonomy import (
     CLEAN_SIGNAL_COLUMNS,
     GROUPS,
@@ -290,9 +292,22 @@ def _no_signals_sql(prefix: str = "i.", ip_ref: str = "i.ip", intel_ref: str | N
     )
 
 
-def _like_escape(term: str) -> str:
-    r"""Escape LIKE wildcards so the term matches literally (use with ESCAPE '\')."""
-    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+def _seconds_between(started: str, ended: str) -> int:
+    """Wall-clock length of a session or an incident, in whole seconds.
+
+    Zero is a real answer and means "inside one second", not "instant" — the log
+    resolves to the second and cannot say more, and every surface showing this
+    has to carry that caveat. Unparseable is zero rather than an exception:
+    LogEntry.time is an unvalidated string, and one bad row must not take the
+    page down. sessions.py and incidents.py each had this under its own name,
+    and only one of them caught a TypeError.
+    """
+    try:
+        return int(
+            (datetime.fromisoformat(ended) - datetime.fromisoformat(started)).total_seconds()
+        )
+    except (ValueError, TypeError):
+        return 0
 
 
 # One definition of "inside the window", in four shapes for the four ways a

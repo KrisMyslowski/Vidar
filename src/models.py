@@ -24,6 +24,15 @@ from typing import TypedDict
 
 from pydantic import BaseModel
 
+# What the log processor stores as `path` when a request line was not a request:
+# nginx logged a TLS handshake on the plain-HTTP port, raw bytes, or nothing.
+# None is a page, and everything that counts pages has to leave them out — the
+# classifier's evidence query and the session query both read this one tuple.
+EMPTY_REQUEST_PATH = "[empty request]"
+HANDSHAKE_PATH = "[handshake on HTTP port]"
+BINARY_PAYLOAD_PATH = "[binary payload]"
+PSEUDO_PATHS = (BINARY_PAYLOAD_PATH, HANDSHAKE_PATH, EMPTY_REQUEST_PATH)
+
 # ── The canonical event ──────────────────────────────────────────────────────
 
 

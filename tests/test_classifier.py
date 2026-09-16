@@ -514,7 +514,10 @@ def test_human_single_page_weak_signals_not_qualified(tmp_db):
 
 
 def test_human_scanner_path_disqualifies(tmp_db):
-    """An IP with browser signals but scanner paths is NOT classified as human."""
+    """An IP with browser signals but scanner paths is NOT classified as human.
+
+    Decided by _rule_scanner_paths, which runs before the browser gate — the gate
+    once checked scanner_paths too, a clause no address could ever reach."""
     with get_conn(tmp_db) as conn:
         _human_visit(conn, "10.0.0.6")
         _visit(conn, "10.0.0.6", path="/.env", status=404)
@@ -663,6 +666,21 @@ def test_vpn_user_who_reads_the_site_is_human(tmp_db):
         assert classify_ip(conn, "11.2.4.1") == "humans/browser-internal-nav"
 
 
+def test_exactly_the_probe_rate_is_neither_a_prober_nor_a_person(tmp_db):
+    """_PROBE_404_RATE is read twice with different operators, on purpose: the
+    prober rule needs to exceed it, the browser gate is disqualified on reaching
+    it. One miss in five is exactly 20% — no browser claim left, and nothing
+    calling it a prober. The two operators are one keystroke apart."""
+    with get_conn(tmp_db) as conn:
+        _reading_visitor(conn, "11.2.4.9", pages=("/", "/about", "/contact", "/cv"))
+        _visit(conn, "11.2.4.9", path="/no-such-page", status=404)
+        _intel(conn, "11.2.4.9")
+    with get_conn(tmp_db) as conn:
+        label = classify_ip(conn, "11.2.4.9")
+    assert label != "bots/vulnerability-probers"
+    assert not label.startswith("humans/"), label
+
+
 def test_datacenter_browser_that_probes_stays_automation(tmp_db):
     """Internal navigation alone is not enough. Eight production addresses navigate
     internally *and* request missing paths — every one a scanner on Google Cloud.
@@ -687,6 +705,26 @@ def test_datacenter_browser_below_the_page_floor_stays_automation(tmp_db):
         _intel(conn, "11.2.4.3", is_hosting=1)
     with get_conn(tmp_db) as conn:
         assert classify_ip(conn, "11.2.4.3") == "automated/headless-browser"
+
+
+def test_query_string_variants_of_one_page_are_one_page(tmp_db):
+    """The page floor was measured in pages, and `path` is nginx's $request_uri,
+    query string included. A static server answers /?utm_source=a and
+    /?utm_source=b with the same document, so three tagged homepage requests
+    cleared a floor of three while reading one page."""
+    with get_conn(tmp_db) as conn:
+        _reading_visitor(conn, "11.2.4.6", pages=("/?utm_source=a", "/?utm_source=b", "/?ref=c"))
+        _intel(conn, "11.2.4.6", is_hosting=1)
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "11.2.4.6") == "automated/headless-browser"
+
+
+def test_distinct_pages_with_query_strings_still_count(tmp_db):
+    with get_conn(tmp_db) as conn:
+        _reading_visitor(conn, "11.2.4.7", pages=("/?a=1", "/about?a=1", "/contact?a=1"))
+        _intel(conn, "11.2.4.7", is_hosting=1)
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "11.2.4.7") == "humans/browser-internal-nav"
 
 
 def test_datacenter_browser_without_internal_nav_stays_automation(tmp_db):
@@ -930,6 +968,18 @@ def test_convention_files_do_not_mask_real_probing(tmp_db):
         assert classify_ip(conn, "32.0.0.4") == "bots/vulnerability-probers"
 
 
+def test_a_convention_name_is_a_whole_file_name_not_a_suffix(tmp_db):
+    """The patterns were unanchored: `%ads.txt` matched /downloads.txt and
+    /uploads.txt, `%security.txt` /insecurity.txt. Each of those 404s was set
+    aside as protocol, so three probes for backup-style files read as none."""
+    with get_conn(tmp_db) as conn:
+        for p in ("/downloads.txt", "/uploads.txt", "/insecurity.txt"):
+            _visit(conn, "32.0.0.5", path=p, status=404)
+        _intel(conn, "32.0.0.5")
+    with get_conn(tmp_db) as conn:
+        assert classify_ip(conn, "32.0.0.5") == "bots/vulnerability-probers"
+
+
 def test_low_volume_404_scanner_is_a_prober(tmp_db):
     """Three distinct missing paths is probing, even below any ratio floor."""
     with get_conn(tmp_db) as conn:
@@ -1143,15 +1193,22 @@ def _signal_dicts():
 
 
 @pytest.mark.parametrize("d", _signal_dicts())
-def test_evidence_mirrors_the_priority_chain(d):
-    """_decisive_rule must derive the same label as _apply_priority_chain.
+def test_every_verdict_is_a_class_with_its_reason(d):
+    """What the detail page prints at the top: a label the taxonomy knows, what
+    the rule saw, and where that came from.
 
-    explain_classification() re-walks the chain to say *why*; if the two ever
-    disagree, the detail page would justify a class the IP does not have.
+    This used to assert that _decisive_rule and _apply_priority_chain agree. They
+    were two walks of the chain once, and could drift; both are _decide() now, so
+    that assertion compared a function with itself. The property worth pinning
+    over the same branches is that no rule hands the page a label it cannot
+    render or a verdict with nothing to show for it.
     """
-    from src.queries import _apply_priority_chain, _decisive_rule
+    from src.classifier.rules import _decide
+    from src.taxonomy import VALID_CLASSES
 
-    assert _decisive_rule(d)[0] == _apply_priority_chain(d)
+    label, saw, source = _decide(d)
+    assert label in VALID_CLASSES or label == "unknown", label
+    assert saw.strip() and source.strip()
 
 
 def test_explain_classification_reports_decision_and_context(tmp_db):

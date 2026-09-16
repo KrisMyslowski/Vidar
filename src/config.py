@@ -198,6 +198,14 @@ class Settings(BaseSettings):
     db_connection_timeout: int = 10
 
     # /api/export rate limiting
+    # Host names the dashboard answers to. Anything else gets a 400, which is
+    # the defence against DNS rebinding: a page that re-points its own name at
+    # 127.0.0.1 is same-origin to the dashboard in the operator's browser, but
+    # its requests still carry its own name. Loopback only by default — the
+    # tunnel. An authenticating proxy in front adds its public name; "*" turns
+    # the check off. NoDecode for the same reason as the other CSV lists.
+    allowed_hosts: Annotated[list[str], NoDecode] = ["localhost", "127.0.0.1", "[::1]"]
+
     export_rate_limit: int = 5  # max exports per window per IP
     export_rate_limit_window_s: int = 3600  # window size (1 hour)
 
@@ -214,7 +222,11 @@ class Settings(BaseSettings):
         return None if isinstance(v, str) and not v.strip() else v
 
     @field_validator(
-        "dnsbl_providers", "js_only_path_prefixes", "static_asset_prefixes", mode="before"
+        "dnsbl_providers",
+        "js_only_path_prefixes",
+        "static_asset_prefixes",
+        "allowed_hosts",
+        mode="before",
     )
     @classmethod
     def _split_csv_providers(cls, v):

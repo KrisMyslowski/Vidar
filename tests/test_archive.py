@@ -296,6 +296,33 @@ def test_a_failed_write_deletes_nothing(tmp_db, tmp_archive_dir, monkeypatch):
         assert not (tmp_archive_dir / "2026-04.zip").exists()
 
 
+def test_the_rename_is_made_durable_before_the_rows_go(tmp_db, tmp_archive_dir, monkeypatch):
+    """fsyncing the file makes its contents durable, not its name. The rename
+    lives in the directory, so a power cut after the DELETE committed and before
+    the directory reached disk lost the month — the outcome the whole write order
+    exists to prevent."""
+    calls = []
+    real_replace, real_delete = archive.os.replace, archive.delete_visits_for_month
+    monkeypatch.setattr(
+        archive.os, "replace", lambda *a: (calls.append("replace"), real_replace(*a))[1]
+    )
+    monkeypatch.setattr(archive, "fsync_dir", lambda d: calls.append(("fsync_dir", d)))
+    monkeypatch.setattr(
+        archive,
+        "delete_visits_for_month",
+        lambda *a: (calls.append("delete"), real_delete(*a))[1],
+    )
+    with get_conn(tmp_db) as conn:
+        _seed(conn, "1.1.1.1", "2026-04")
+        archive.archive_month(conn, "2026-04")
+
+    assert calls == ["replace", ("fsync_dir", tmp_archive_dir), "delete"]
+
+
+def test_fsync_dir_syncs_a_real_directory(tmp_path):
+    archive.fsync_dir(tmp_path)  # must not raise on the platforms we run on
+
+
 def test_an_unreadable_archive_is_listed_not_fatal(tmp_db, tmp_archive_dir):
     tmp_archive_dir.mkdir(parents=True, exist_ok=True)
     (tmp_archive_dir / "2026-04.zip").write_bytes(b"not a zip")
@@ -460,3 +487,70 @@ def test_lifetime_does_not_expire_archives(tmp_db, tmp_archive_dir):
     result = run_retention(datetime(2026, 8, 29, tzinfo=timezone.utc))
     assert result["dropped"] == []
     assert (tmp_archive_dir / "2020-01.zip").exists()
+
+
+def test_the_storage_page_totals_the_archives_it_lists(tmp_db, tmp_archive_dir):
+    """The summary summed a key list_archives never set ("size", not "bytes"), so
+    every deployment read "0 B" of archives beside a real disk-usage bar — on the
+    page where somebody decides whether to delete them."""
+    from fastapi.testclient import TestClient
+
+    from src.main import app
+    from src.template_filters import fmtbytes
+
+    with get_conn(tmp_db) as conn:
+        _seed(conn, "1.1.1.1", "2026-04")
+        _seed(conn, "2.2.2.2", "2026-05")
+        archive.archive_month(conn, "2026-04")
+        archive.archive_month(conn, "2026-05")
+    total = sum(p.stat().st_size for p in tmp_archive_dir.glob("*.zip"))
+
+    body = TestClient(app).get("/settings/storage").text
+
+    assert f"2 archives on disk,\n      {fmtbytes(total)}, oldest 2026-04" in body
+
+
+# ── Abandoned temporaries ────────────────────────────────────────────────────
+
+
+def _age(path, seconds):
+    import os
+    import time
+
+    then = time.time() - seconds
+    os.utime(path, (then, then))
+
+
+def test_an_abandoned_export_is_swept_and_a_live_one_is_not(tmp_db, tmp_archive_dir):
+    """An export is unlinked by a background task that only runs once the
+    response completes. A dropped download, a restart or a crash left the zip —
+    a whole month of visits and intel — in a directory the page filters it out
+    of, where nothing ever removed it."""
+    with get_conn(tmp_db) as conn:
+        _seed(conn, "1.1.1.1", "2026-04")
+        _seed(conn, "2.2.2.2", "2026-08")
+        archive.archive_month(conn, "2026-04")
+        old = archive.export_month(conn, "2026-08")
+    # One still being served, and a rename that never happened — archive_month's
+    # own temporary. Written by hand: two exports in one second share a name.
+    fresh = tmp_archive_dir / ".export-2026-08-1-2.zip"
+    fresh.write_bytes(old.read_bytes())
+    torn = tmp_archive_dir / ".2026-05.zip.123-456.tmp"
+    torn.write_bytes(b"half a month")
+    _age(old, 2 * 3600)
+    _age(torn, 2 * 3600)
+
+    swept = archive.sweep_abandoned_temps()
+
+    assert sorted(swept) == sorted([old.name, torn.name])
+    assert not old.exists() and not torn.exists()
+    assert fresh.exists(), "younger than an hour: it may still be downloading"
+    assert (tmp_archive_dir / "2026-04.zip").exists(), "an archive is never a temporary"
+
+
+def test_the_sweep_leaves_an_old_archive_alone(tmp_db, tmp_archive_dir):
+    with get_conn(tmp_db) as conn:
+        _seed(conn, "1.1.1.1", "2026-04")
+        archive.archive_month(conn, "2026-04")
+    _age(tmp_archive_dir / "2026-04.zip", 365 * 86400)
+    assert archive.sweep_abandoned_temps() == []

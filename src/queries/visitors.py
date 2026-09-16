@@ -74,7 +74,11 @@ def _exec_visitor_rows(
     query, params = _apply_date_filter(query, params, date_from, date_to)
     query, params = _apply_seen_filter(query, params, seen, date_from)
     having = f" HAVING COUNT(v.id) >= {int(min_visits)}" if min_visits and min_visits > 0 else ""
-    query += f" GROUP BY v.ip{having} ORDER BY {sort_col} {order_dir} LIMIT ? OFFSET ?"
+    # v.ip breaks ties. Without it, rows equal on the sort key — thousands of
+    # single-visit addresses under sort=visit_count — come back in whatever order
+    # the plan yields, and between two page requests on a live log that order
+    # can move: an address shows on page 1 and 2, another on neither.
+    query += f" GROUP BY v.ip{having} ORDER BY {sort_col} {order_dir}, v.ip LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     return [dict(r) for r in conn.execute(query, params).fetchall()]
 

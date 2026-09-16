@@ -663,6 +663,18 @@ def get_shodan_hosts(
     ]
 
 
+def count_intel_in_window(
+    conn: sqlite3.Connection, since: str | None = None, until: str | None = None
+) -> int:
+    """Addresses with intel that were seen inside the window — the denominator of
+    "X of Y IPs enriched", scoped like its numerator."""
+    seen, params = seen_in_window("ip_intel.ip", since, until)
+    row = conn.execute(
+        f"SELECT COUNT(*) FROM ip_intel{f' WHERE {seen}' if seen else ''}", params
+    ).fetchone()
+    return row[0]
+
+
 def count_shodan_hosts(
     conn: sqlite3.Connection,
     port: int | None = None,
@@ -860,6 +872,12 @@ def get_exposures(
     inside one window it read `/` as a finding on the 24 h range: 42 addresses,
     one of them benign, one short of the threshold. The site's own homepage,
     reported as something the server gave away.
+
+    **Only the benign test reads ip_intel.** The counts inner-joined it once,
+    long after the benign test had moved into the CTE, so the join did nothing
+    but drop every address the rate-limited enricher had not reached yet: a
+    fresh burst of probers stayed invisible, and the row disagreed with its own
+    side panel. No verdict yet is not a benign verdict.
     """
     conds, params = _date_conditions(since, until, column="v.timestamp")
     where = "".join(f" AND {c}" for c in conds)
@@ -884,7 +902,6 @@ def get_exposures(
                MAX(v.bytes_sent)    AS bytes_sent,
                COALESCE(b.benign_ips, 0) AS benign_ips
         FROM visits v
-        JOIN ip_intel i ON i.ip = v.ip
         LEFT JOIN benign_ever b ON b.path = v.path
         WHERE v.status BETWEEN 200 AND 299
           AND v.path NOT LIKE '%?%'
@@ -950,7 +967,6 @@ def _recount_folded(
     benign = ",".join("?" for _ in _BENIGN_CLASSES)
     ips = conn.execute(
         f"""SELECT COUNT(DISTINCT v.ip) FROM visits v
-            JOIN ip_intel i ON i.ip = v.ip
             WHERE v.status BETWEEN 200 AND 299 AND v.path IN ({marks}){where}""",
         [*spellings, *params],
     ).fetchone()[0]
@@ -1208,7 +1224,7 @@ def get_probe_echo(
         SELECT COUNT(*) AS urls, SUM(ips) AS ips FROM (
             SELECT v.path, COUNT(DISTINCT v.ip) AS ips
             FROM visits v
-            JOIN ip_intel i ON i.ip = v.ip
+            LEFT JOIN ip_intel i ON i.ip = v.ip
             WHERE v.status BETWEEN 200 AND 299
               AND v.path LIKE '%?%'
               {where}

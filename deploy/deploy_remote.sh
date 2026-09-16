@@ -238,18 +238,23 @@ PYEOF
         # The rsync excludes .env* below, and an exclude also protects the
         # receiver's copy from --delete, so these backups survive later deploys.
         STAMP=$(date +%Y%m%d-%H%M%S)
-        REMOTE_TMP="/tmp/vidar-env.${STAMP}.$$"
         if [ "$REMOTE_ENV_EXISTS" = 1 ]; then
+            # Newest five kept. Each upload used to add one forever, so a key
+            # rotated out stayed on disk in every backup made before it.
             ssh -n ${SSH_OPTS} "${USER}@${HOST}" \
-                "sudo cp -p '${DIR}/.env' '${DIR}/.env.bak.${STAMP}'"
+                "sudo cp -p '${DIR}/.env' '${DIR}/.env.bak.${STAMP}' && \
+                 cd '${DIR}' && ls -1t .env.bak.* | tail -n +6 | xargs -r sudo rm -f --"
             echo "[OK] Backed up to ${DIR}/.env.bak.${STAMP}"
         fi
-        scp ${SSH_OPTS} -q "$LOCAL_ENV" "${USER}@${HOST}:${REMOTE_TMP}"
-        ssh -n ${SSH_OPTS} "${USER}@${HOST}" \
-            "sudo mkdir -p '${DIR}' && \
-             sudo mv '${REMOTE_TMP}' '${DIR}/.env' && \
-             sudo chown root:root '${DIR}/.env' && \
-             sudo chmod 600 '${DIR}/.env'"
+        # Straight into the deploy root over stdin, written under umask 077. It
+        # used to be scp'd to /tmp first, where it sat at the remote umask —
+        # typically world-readable — until the chmod after the move, holding
+        # the DQS and CARTO keys under a name another user could poll for.
+        ssh ${SSH_OPTS} "${USER}@${HOST}" \
+            "sudo sh -c \"umask 077 && mkdir -p '${DIR}' && \
+             cat > '${DIR}/.env.incoming' && chown root:root '${DIR}/.env.incoming' && \
+             mv '${DIR}/.env.incoming' '${DIR}/.env'\"" < "$LOCAL_ENV" \
+            || { echo "[FAIL] .env upload failed"; exit 1; }
         echo "[OK] .env uploaded"
         REMOTE_ENV_EXISTS=1
         REMOTE_KEYS="$LOCAL_KEYS"
@@ -335,11 +340,19 @@ STALE+=(tests scripts .github docs/img)
 # a pattern rather than one by one: it needs no maintaining when another is
 # added, and the publish gate refuses any file that spells out the agent
 # instruction file's name.
-STALE+=($(cd "${ROOT_DIR}" && ls *.md 2>/dev/null | grep -v '^README\.md$' | tr '\n' ' '))
+for md in "${ROOT_DIR}"/*.md; do
+    [ -e "$md" ] || continue
+    md=$(basename "$md")
+    [ "$md" = README.md ] || STALE+=("$md")
+done
 STALE+=(package.json package-lock.json vitest.config.js pyproject.toml)
 STALE+=(.pre-commit-config.yaml .gitignore .gitattributes .deploy.conf)
+# Each name quoted for the remote shell. The list was interpolated bare, and it
+# includes names globbed from the repository — a file called `a; rm -rf / b.md`
+# would have been shell code, run as a user with passwordless sudo.
+STALE_ARGS=$(printf '%q ' "${STALE[@]}")
 ssh -n ${SSH_OPTS} "${USER}@${HOST}" \
-    "cd '${DIR}' && rm -rf ${STALE[*]} && find . -name __pycache__ -type d -prune -exec rm -rf {} +" \
+    "cd '${DIR}' && rm -rf -- ${STALE_ARGS} && find . -name __pycache__ -type d -prune -exec rm -rf {} +" \
     || { echo "[FAIL] could not clean ${DIR}"; exit 1; }
 echo "[OK] Build artefacts removed"
 

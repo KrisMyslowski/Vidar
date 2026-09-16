@@ -19,12 +19,12 @@ from ..queries import (
     get_visitor_detail,
     get_visitor_requests,
 )
-from ..queries.sessions import _duration_seconds
+from ..queries._shared import _seconds_between
 from ..sessions import BEHAVIOUR_BADGES
 from ..validators import valid_order, valid_timestamp
 from ._app import templates
 from ._cache import fetch
-from ._helpers import total_pages
+from ._helpers import past_the_last_page, total_pages
 
 router = APIRouter()
 
@@ -66,6 +66,8 @@ async def visitor_detail(
     if not detail:
         raise HTTPException(status_code=404, detail="IP not found")
     total = detail["visit_count"]
+    if redirect := past_the_last_page(request, page, total, 100):
+        return redirect
     err_share = round((detail.get("err_4xx") or 0) / total * 100) if total else 0
     return templates.TemplateResponse(
         request,
@@ -147,7 +149,7 @@ async def visitor_session(
             "total": total,
             "limit": _SESSION_ROWS,
             "started": from_,
-            "duration": _duration_seconds(from_, to),
+            "duration": _seconds_between(from_, to),
             "behaviour": behaviour,
         },
     )

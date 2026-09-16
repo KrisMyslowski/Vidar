@@ -227,6 +227,22 @@ class TestShodanSilenceIsCounted:
         finally:
             enricher._shodan_rate_limited = False
 
+    def test_a_cooldown_is_announced_once_not_every_batch(self, caplog):
+        """After a 429 the gate skips every lookup for SHODAN_COOLDOWN_SECONDS, and
+        each skipped batch reported a full outage: a warning every 4.5 s, some
+        sixty in a row, for a pause the batch that hit the 429 had already named."""
+        import src.enricher as enricher
+
+        enricher._shodan_gate.back_off(300)
+        with caplog.at_level(logging.INFO, logger="vidar.enricher"):
+            enricher._shodan_rate_limited = True  # the batch that was told to stop
+            enricher._report_shodan_silence(50, 50)
+            enricher._shodan_rate_limited = False  # the batches that follow
+            for _ in range(5):
+                enricher._report_shodan_silence(50, 50)
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert len(warnings) == 1 and "rate-limited" in warnings[0].getMessage()
+
 
 class TestABackgroundTaskThatDiesIsReported:
     async def test_the_backfill_logs_its_own_failure(self, caplog):
@@ -311,6 +327,37 @@ class TestANonUtcHostIsReported:
         with caplog.at_level(logging.WARNING, logger="vidar.log_processor"):
             assert lp._report_local_time(10, 0, False) is False
         assert caplog.text == ""
+
+    def test_filtered_requests_count_toward_the_share(self, tmp_db, caplog):
+        """The count took kept lines only and the share divided it by every line.
+        Static assets are most of a real site's traffic and are filtered before
+        insert, so a host writing every timestamp in local time came out under
+        the threshold and was never reported — the exact case the check is for.
+
+        A filtered request's timestamp describes the host's clock as well as a
+        kept one's does."""
+
+        def line(path):
+            return json.dumps(
+                {
+                    "time": "2026-06-13T10:00:00+02:00",
+                    "remote_addr": "93.184.216.34",
+                    "request": f"GET {path} HTTP/1.1",
+                    "status": 200,
+                    "body_bytes_sent": 10,
+                    "http_user_agent": "Mozilla/5.0",
+                    "request_method": "GET",
+                    "request_uri": path,
+                }
+            )
+
+        lines = [line(f"/style{i}.css") for i in range(6)] + [line("/") for _ in range(4)]
+        _, _, non_utc, _, _ = lp._write_batch(lines, (0, 0, ""))
+
+        assert non_utc == 10
+        with caplog.at_level(logging.WARNING, logger="vidar.log_processor"):
+            lp._report_local_time(len(lines), non_utc, False)
+        assert "10 of 10 log lines carry a non-UTC timestamp" in caplog.text
 
     async def test_the_tailer_reports_it(self, fast_log, caplog):
         line = json.dumps(

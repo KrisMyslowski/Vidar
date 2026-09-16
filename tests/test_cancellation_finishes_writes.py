@@ -107,3 +107,42 @@ class TestTheEnricherToo:
         with pytest.raises(asyncio.CancelledError):
             await task
         assert persisted == [1]
+
+
+class TestTheStorageActionsToo:
+    """Six Settings POSTs restore, release or delete months and change the
+    retention mode, and all six went through routes._cache.fetch — unshielded,
+    the read path. Under BaseHTTPMiddleware a client that disconnects can cancel
+    the endpoint, and the delete then ran on with nothing waiting for it."""
+
+    @pytest.mark.parametrize(
+        "handler, target, args",
+        [
+            ("settings_storage_restore", "restore_month", ("2026-04",)),
+            ("settings_storage_release", "release_month", ("2026-04",)),
+            ("settings_storage_delete_archive", "delete_archive", ("2026-04",)),
+            ("settings_storage_delete_month", "delete_month", ("2026-04",)),
+            ("settings_storage_mode", "set_mode", ("lifetime",)),
+            ("settings_storage_window", "set_rolling_months", (3,)),
+            ("settings_storage_archive_keep", "set_archive_keep_months", (6,)),
+        ],
+    )
+    async def test_a_cancelled_request_finishes_its_write(
+        self, tmp_db, monkeypatch, handler, target, args
+    ):
+        from src import archive
+        from src.routes import settings as routes
+
+        done = []
+
+        def slow(conn, *a, **kw):
+            time.sleep(0.2)
+            done.append(True)
+
+        monkeypatch.setattr(archive, target, slow)
+        task = asyncio.create_task(getattr(routes, handler)(*args))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert done == [True], f"{handler} returned while its write was still running"

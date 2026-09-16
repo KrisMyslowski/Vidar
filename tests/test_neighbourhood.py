@@ -255,3 +255,40 @@ def test_no_sentence_where_there_is_no_majority(client, tmp_db):
     text = client.get("/visitors/203.0.113.1").text
     assert "203.0.113.0/24" in text
     assert " are Humans" not in text and " are Bots" not in text
+
+
+def test_an_ipv4_range_is_found_through_the_index_not_a_scan(tmp_db):
+    """net() is a Python function, so SQLite can use no index for net(ip) = ?,
+    and every visitor detail page ran it over every row of ip_intel. An IPv4 /24
+    is a text prefix, which the primary key can seek to; net() then confirms only
+    the rows the seek returned."""
+    from src.db import network_of
+
+    with get_conn(tmp_db) as conn:
+        _seen(conn, "203.0.113.1")
+        _seen(conn, "203.0.113.200")
+        for n in range(60):
+            _seen(conn, f"198.51.{n}.7", asn="AS64497")
+    calls = []
+
+    def counting(ip):
+        calls.append(ip)
+        return network_of(ip)
+
+    with get_conn(tmp_db) as conn:
+        conn.create_function("net", 1, counting, deterministic=True)
+        network = _scope(get_neighbourhood(conn, "203.0.113.1"), "network")
+
+    assert network["unique_ips"] == 1
+    assert len(calls) < 10, f"net() ran {len(calls)} times — the whole table"
+
+
+def test_an_ipv6_neighbourhood_still_matches_every_spelling(tmp_db):
+    """IPv6 text is not a prefix — 2001:db8::1 and 2001:0db8:0:0::2 share a /64 and
+    no leading characters — so that family keeps the full comparison."""
+    with get_conn(tmp_db) as conn:
+        _seen(conn, "2001:db8::1")
+        _seen(conn, "2001:0db8:0:0::2")
+    with get_conn(tmp_db) as conn:
+        network = _scope(get_neighbourhood(conn, "2001:db8::1"), "network")
+    assert network["unique_ips"] == 1

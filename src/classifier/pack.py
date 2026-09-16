@@ -126,6 +126,34 @@ def _check(path: Path, raw: dict, *, complete: bool) -> None:
                 raise PackError(f"{path}: [{name}].{key} must be a list of non-empty strings")
 
 
+# The user-agent tables whose needles are looked up in crawler_origins by name.
+_CRAWLER_UA_TABLES = ("search_uas", "ai_uas")
+
+
+def _check_crawler_origins(path: Path, pack: dict) -> None:
+    """Every declared crawler needs an entry in [crawler_origins].
+
+    The rule looks a user-agent needle up there by name and treats a missing
+    key as "no network it crawls from". So a crawler added to [ai_uas] alone —
+    the edit this file invites — is filed as an impersonator of itself whenever
+    it runs on cloud hosting and publishes no PTR, which the large ones do. An
+    empty list is allowed: it says, deliberately, to verify by reverse DNS alone.
+
+    Checked on the effective pack, because an overlay may add a crawler in one
+    table and its networks in the other, or rely on shipped origins.
+    """
+    origins = pack["crawler_origins"]
+    for table in _CRAWLER_UA_TABLES:
+        for needle in pack[table]["entries"]:
+            if needle not in origins:
+                raise PackError(
+                    f"{path}: {needle!r} is in [{table}] but has no entry in "
+                    f"[crawler_origins]. Without one, the real crawler on cloud hosting "
+                    f'is filed as an impersonator. Add `{needle} = ["<org or ASN '
+                    f'needle>"]`, or `{needle} = []` to verify it by reverse DNS alone.'
+                )
+
+
 def _merge(base: dict, extra: dict) -> dict:
     """Append `extra`'s entries to `base`'s, keeping order and dropping repeats.
 
@@ -166,10 +194,12 @@ def load(extra_path: str | Path | None = None) -> tuple[dict, str]:
     """The effective pack and its fingerprint. Raises PackError with a reason."""
     shipped = _read(SHIPPED_PACK)
     _check(SHIPPED_PACK, shipped, complete=True)
+    _check_crawler_origins(SHIPPED_PACK, shipped)
     if not extra_path:
         return shipped, digest(shipped)
     path = Path(extra_path)
     extra = _read(path)
     _check(path, extra, complete=False)
     merged = _merge(shipped, extra)
+    _check_crawler_origins(path, merged)
     return merged, digest(merged)

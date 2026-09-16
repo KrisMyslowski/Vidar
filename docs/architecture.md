@@ -53,7 +53,7 @@ the code, because a `TypedDict` is documentation at runtime and Python enforces 
 |---|---|
 | Network | Bound to `127.0.0.1:8080`; unreachable from the internet, SSH tunnel required |
 | Filesystem | `read_only: true`; logs mounted `ro`; only `/data` writable |
-| Privileges | `no-new-privileges: true`, runs as non-root `appuser` |
+| Privileges | `no-new-privileges: true`, every capability dropped, a PID ceiling, runs as non-root `appuser` |
 | Browser | Per-request CSP nonce, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` |
 | Input | Log lines parsed through Pydantic; every query parameterised |
 
@@ -197,7 +197,43 @@ network owner the second (`_CRAWLER_ORIGINS`).
 `src/taxonomy.py` (`VISITOR_CATEGORIES`) is the single source of truth; class strings always
 carry the group prefix.
 
-Two invariants worth stating because both have been broken:
+### Behaviour, the third axis
+
+Identity says what an address *is* and the signals where it *sits*; neither says what it *did*.
+Behaviour does, and it is orthogonal to both — a person can scrape and a search crawler can
+enumerate, and the priority chain should not have to crown a winner between them.
+
+Behaviour belongs to a **session**, not an address: one address can read two pages in the
+morning and walk a scanner list at night. `src/sessions.py` cuts an address's visits at
+`SESSION_GAP_SECONDS` of silence and labels each session — browsing, scraping, recon,
+enumeration, brute force, or nothing when there is too little to say. Pages are counted as the
+classifier counts them: a path up to its query string, protocol errors excluded.
+
+**Sessions are derived when they are read, never stored.** Sessionising one address is cheaper
+than the evidence query already run beside it, because `idx_visits_ip_timestamp` hands the rows
+over in order. Not storing them means no migration, no backfill, and no session left stale when
+a month is re-imported from an archive with its original visit ids.
+
+Three surfaces build on sessions without storing anything either:
+
+- **Incidents** (`src/incidents.py`, SQL in `queries/incidents.py`) — sessions across
+  addresses that ran the same program. A signature is the first `SIGNATURE_PATHS` missing paths
+  a session asked for, in order; sessions sharing one, each starting within
+  `INCIDENT_GAP_SECONDS` of the last, are one incident once `MIN_ADDRESSES` took part. The
+  thresholds err towards under-reporting, and their measurements sit beside them in the module.
+  The sort key is a sum of named weights, not a measurement, and the page prints its arithmetic.
+- **The hourly baseline** (`queries/baseline.py`) — the median hour over the last
+  `BASELINE_DAYS`, hours with no traffic counted as zero, which is what "unusual" on the
+  Overview is measured against. A median rather than a mean, so one busy day does not hide the
+  next; and no answer at all under `MIN_BASELINE_DAYS` of history.
+- **Families** (`src/families.py`) — what an Exposure finding *is* and how to stop serving it,
+  keyed by kind of file rather than by path. Explanation only: detection never consults it.
+
+The monthly report (`src/report.py`) is assembled from these and from the queries the pages
+already run. It computes nothing a second way, because a report that disagreed with the
+dashboard beside it would be the one nobody believed.
+
+Three invariants worth stating because each has been broken:
 
 - **Extending the patterns or the providers means forking, and that is the supported answer.**
   Neither is a registration point, for reasons that are not stylistic. The classifier's pattern
@@ -235,10 +271,10 @@ Two invariants worth stating because both have been broken:
   little. No progress logging was added: it runs in the background, the app serves throughout,
   and there is nothing to warn about before a pass that takes six seconds at a volume most
   deployments will not reach.
-- **`explain_classification()` mirrors the chain and must stay in step.** `_decisive_rule()`
-  reimplements `_apply_priority_chain()` over the same signal dict for the detail page;
-  `test_evidence_mirrors_the_priority_chain` asserts both derive the same label on every
-  branch. Change one, change the other.
+- **`explain_classification()` cannot disagree with the chain, and must not be made able to.**
+  `_decisive_rule()` and `_apply_priority_chain()` are both `_decide()` in
+  `classifier/rules.py`. They were once two walks of the chain and drifted; a second walk is
+  how that returns.
 
 Labels go stale, because a class summarises an IP's whole history. `reclassify_stale_ips()`
 re-judges any IP whose newest `visits.id` exceeds its `ip_intel.classified_visit_id`. The
@@ -254,21 +290,23 @@ it before touching the classifier.
 ## 5. Serving
 
 `src/routes/` holds one module per surface (`overview`, `visitors`, `visitor_detail`,
-`analysis`, `settings`, `docs`, `api`, `redirects`), assembled by `dashboard.py`, which owns the
+`analysis`, `exposure`, `incidents`, `report`, `settings`, `docs`, `api`, `redirects`),
+assembled by `dashboard.py`, which owns the
 registration order — `/visitors/{ip}` must stay last or the catch-all swallows
 `/visitors/rows`. The underscored modules beside them are shared machinery: `_range.py`
 (range presets and resolution), `_urls.py` (every link built from one param dict),
 `_filters.py` (grouping specs, drill-downs), `_charts.py`, `_cache.py`, `_app.py` (Jinja
 environment and globals), `_helpers.py`.
 
-All SQL goes through `src/queries/`, eight subject modules behind one import surface whose
+All SQL goes through `src/queries/`, twelve subject modules behind one import surface whose
 `__init__.py` re-exports every name the former single `queries.py` exported — so no caller
 had to change, and new code can import the module it actually needs. Route handlers never
 write raw SQL.
 
-Four pages carry the dashboard — `/`, `/visitors`, `/analysis`, `/shodan` — plus
-`/visitors/{ip}` and the `/visitors/rows` fragment, with `/settings/{status,storage,api}` and
-`/docs/{slug}` beside them. `/visitors` is the single visitor
+Seven pages carry the dashboard — `/`, `/visitors`, `/incidents`, `/exposure`, `/analysis`,
+`/shodan`, `/report` — plus `/visitors/{ip}` and the panel fragments behind rows
+(`/visitors/rows`, `/visitors/{ip}/session`, `/incidents/case`, `/exposure/finding`), with
+`/settings/{status,storage,api}` and `/docs/{slug}` beside them. `/visitors` is the single visitor
 surface: `?group=ip|asn|country|client|path` picks
 the grouping and `?view=table|map|timeline` the presentation, dispatching onto unchanged
 query pairs. Filter state lives entirely in the URL; there is no session state beyond one
@@ -317,8 +355,9 @@ What holds:
   offset write share **one transaction**, so a crash rolls back both and re-reads cleanly.
 - Enrichment is idempotent (`ON CONFLICT DO UPDATE`), and replays are caught by the request
   identity index.
-- Archives are written before rows are deleted: zip to a temp name, fsync, `os.replace()`,
-  *then* delete. A crash before the rename leaves no archive and no deletion.
+- Archives are written before rows are deleted, and the rename is made durable before any row
+  goes; a crash at any point leaves either no archive and no deletion, or both. The sequence is
+  in [data-reference.md §2.3.1](data-reference.md#231-monthly-archives).
 - Backups use `VACUUM INTO` plus gzip — never `cp`, which on an open WAL database can capture
   a torn page.
 

@@ -11,6 +11,8 @@ import functools
 from urllib.parse import urlparse
 
 from ..config import settings
+from ..models import PSEUDO_PATHS
+from ..sqltext import like_escape as _like_escape
 from .patterns import (
     _CONVENTION_404_MATCH,
     _DROPPER_MATCH,
@@ -18,16 +20,6 @@ from .patterns import (
     _PAYLOAD_ABUSE_MATCH,
     _SCANNER_PATH_MATCH,
 )
-
-
-def _like_escape(term: str) -> str:
-    r"""Escape LIKE wildcards so the term matches literally (use with ESCAPE '\').
-
-    Copied from queries/_shared.py rather than imported: queries/__init__.py
-    re-exports this module, so importing back the other way is a cycle.
-    """
-    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
 
 # Same-origin navigation, as one expression because there must only be one.
 # Three conditions, each load-bearing:
@@ -61,6 +53,25 @@ def _like_escape(term: str) -> str:
 _CONTENT_REQUEST_CASE = (
     "CASE WHEN NOT (v.status IN (301, 308) AND v.server_port = 80) THEN 1 ELSE 0 END"
 )
+
+# models.PSEUDO_PATHS as a SQL list. Literals the log processor itself writes,
+# never visitor input, so inlining them is safe — and one definition is what
+# keeps the classifier and the session query counting the same pages.
+PSEUDO_PATHS_SQL = "(" + ", ".join(f"'{p}'" for p in PSEUDO_PATHS) + ")"
+
+
+def page_sql(col: str) -> str:
+    """The page a request asked for: its path up to the query string.
+
+    `path` is nginx's $request_uri, which keeps the query, and a static server
+    answers /?utm_source=a and /?utm_source=b with the same document. Counted as
+    written, three tagged homepage requests cleared a three-page floor that was
+    measured in pages.
+    """
+    return (
+        f"CASE WHEN instr({col}, '?') > 0 THEN substr({col}, 1, instr({col}, '?') - 1) "
+        f"ELSE {col} END"
+    )
 
 
 _INTERNAL_NAV_CASE = """CASE
@@ -110,8 +121,7 @@ def _classify_sql(js_prefixes: tuple[str, ...]) -> str:
         SUM({_CONTENT_REQUEST_CASE}) AS content_requests,
         SUM(CASE WHEN {_NON_HTTP_METHODS} AND ({_PAYLOAD_ABUSE_MATCH})
                  THEN 1 ELSE 0 END) AS payload_abuse,
-        SUM(CASE WHEN v.path IN ('[binary payload]', '[handshake on HTTP port]',
-                                 '[empty request]')
+        SUM(CASE WHEN v.path IN {PSEUDO_PATHS_SQL}
                       OR {_NON_HTTP_METHODS}
                  THEN 1 ELSE 0 END) AS protocol_mismatch,
         SUM(CASE WHEN v.path LIKE '%../%'
@@ -145,10 +155,8 @@ def _classify_sql(js_prefixes: tuple[str, ...]) -> str:
         -- Distinct *pages*. '[handshake on HTTP port]' and friends are protocol
         -- errors nginx could not parse, not pages: counting them let a single
         -- request plus a failed handshake look like someone exploring the site.
-        COUNT(DISTINCT CASE WHEN v.path NOT IN ('[binary payload]',
-                                                '[handshake on HTTP port]',
-                                                '[empty request]')
-                            THEN v.path END)                       AS unique_paths,
+        COUNT(DISTINCT CASE WHEN v.path NOT IN {PSEUDO_PATHS_SQL}
+                            THEN {page_sql("v.path")} END)         AS unique_paths,
         SUM(CASE WHEN v.status = 400 THEN 1 ELSE 0 END)            AS bad_requests,
         GROUP_CONCAT(DISTINCT LOWER(v.user_agent))                        AS all_uas_lower
     FROM visits v

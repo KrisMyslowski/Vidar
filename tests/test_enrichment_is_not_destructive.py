@@ -173,13 +173,18 @@ class TestShodanSaysWhetherItAnswered:
         assert result["open_ports"] == "22,443"
         assert result["tags"] == "cloud"
 
-    async def test_an_answer_without_hostnames_does_not_claim_reverse_dns(self):
-        """reverse_dns holds forward-confirmed PTR data. Shodan contributes to it
-        only when it actually has a name."""
+    async def test_shodan_never_claims_reverse_dns(self):
+        """reverse_dns holds forward-confirmed PTR data and nothing else.
+
+        This once let Shodan contribute whenever it had a name. Shodan's names are
+        whatever PTR the block's owner published — the claim forward confirmation
+        exists to check — and a failed confirmation left them standing, so a PTR
+        set to a googlebot.com name read as a verified crawler."""
         assert "reverse_dns" not in await self._fetch(body={"ports": [22]})
         assert "reverse_dns" not in await self._fetch(status=404)
-        withname = await self._fetch(body={"hostnames": ["host.example.com"]})
-        assert withname["reverse_dns"] == "host.example.com"
+        withname = await self._fetch(body={"hostnames": ["crawl-1.googlebot.com"]})
+        assert withname["hostnames"] == "crawl-1.googlebot.com"
+        assert "reverse_dns" not in withname
 
 
 class TestTorAndDnsblSayWhetherTheyAnswered:

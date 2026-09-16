@@ -16,9 +16,16 @@ from __future__ import annotations
 
 import sqlite3
 
-from ..classifier.evidence_sql import _CONTENT_REQUEST_CASE, _INTERNAL_NAV_CASE, _classify_params
+from ..classifier.evidence_sql import (
+    _CONTENT_REQUEST_CASE,
+    _INTERNAL_NAV_CASE,
+    PSEUDO_PATHS_SQL,
+    _classify_params,
+    page_sql,
+)
 from ..classifier.patterns import _CONVENTION_404_MATCH
 from ..sessions import SESSION_GAP_SECONDS, behaviour_for
+from ._shared import _seconds_between
 
 # Whole seconds, because that is the resolution the log has. The obvious
 # alternative — (julianday(a) - julianday(b)) * 86400 — is a difference of two
@@ -64,18 +71,24 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
         per_path AS (
             SELECT session_no, COUNT(*) AS hits
             FROM marked GROUP BY session_no, path
-        )
+        ),
+        sessions AS (
         SELECT m.session_no,
                MIN(m.timestamp) AS started,
                MAX(m.timestamp) AS ended,
                COUNT(*)         AS requests,
-               COUNT(DISTINCT m.path) AS unique_paths,
+               -- Pages, as the classifier counts them: a protocol error is not one.
+               COUNT(DISTINCT CASE WHEN m.path NOT IN {PSEUDO_PATHS_SQL}
+                                   THEN {page_sql("m.path")} END)
+                   AS unique_paths,
                SUM(m.is_probe_404)    AS probe_404,
                COUNT(DISTINCT CASE WHEN m.is_probe_404 THEN m.path END)
                    AS distinct_404_paths,
                SUM(m.is_ok)           AS ok_requests,
                SUM(m.is_content)      AS content_requests,
-               COUNT(DISTINCT CASE WHEN m.is_ok THEN m.path END) AS distinct_2xx_paths,
+               -- Pages too, or Read + Unserved stops adding up to Paths.
+               COUNT(DISTINCT CASE WHEN m.is_ok THEN {page_sql("m.path")} END)
+                   AS distinct_2xx_paths,
                SUM(m.is_internal_nav) AS internal_nav,
                SUM(CASE WHEN m.method = 'POST' THEN 1 ELSE 0 END) AS post_requests,
                SUM(CASE WHEN m.status IN (401, 403) THEN 1 ELSE 0 END) AS refused,
@@ -86,14 +99,18 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
                -- more than the re-scan saves.
                (SELECT MAX(hits) FROM per_path p WHERE p.session_no = m.session_no)
                    AS max_path_repeats,
-               -- SQLite carries the row that produced a bare MIN() through the
-               -- other bare columns of the same aggregate. That is what makes
-               -- these the *entry* path and referer rather than an arbitrary
-               -- pair, and it is a documented guarantee, not a coincidence.
-               MIN(m.id) AS entry_id, m.path AS entry_path, m.referer AS entry_referer
+               MIN(m.id) AS entry_id
         FROM marked m
         GROUP BY m.session_no
-        ORDER BY m.session_no DESC
+        )
+        -- The entry row joined by id. It used to ride along as bare columns
+        -- beside MIN(m.id), which SQLite fills from the row that produced a
+        -- min/max only when the query has exactly one; this one has three, and
+        -- it was the entry purely because MIN(m.id) happened to be written last.
+        SELECT s.*, e.path AS entry_path, e.referer AS entry_referer
+        FROM sessions s
+        JOIN marked e ON e.id = s.entry_id
+        ORDER BY s.session_no DESC
         LIMIT :limit
     """,
         {**_classify_params(ip), "gap": SESSION_GAP_SECONDS, "limit": limit},
@@ -102,7 +119,7 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
     out = []
     for row in rows:
         session = dict(row)
-        session["duration"] = _duration_seconds(session["started"], session["ended"])
+        session["duration"] = _seconds_between(session["started"], session["ended"])
         # Paths the client asked for and did not get: everything it asked for,
         # minus what came back 2xx. Behaviour is read from this rather than
         # from 404s, because a redirect, a 404, a 503 and a 403 all mean the
@@ -138,20 +155,3 @@ def count_sessions(conn: sqlite3.Connection, ip: str) -> int:
         {"ip": ip, "gap": SESSION_GAP_SECONDS},
     ).fetchone()
     return row[0] or 0
-
-
-def _duration_seconds(started: str, ended: str) -> int:
-    """Wall-clock length of a session, in whole seconds.
-
-    Zero is a real answer and means "inside one second", not "instant" — the log
-    resolves to the second and cannot say more. Every surface showing this has
-    to carry that caveat rather than implying a precision the data lacks.
-    """
-    from datetime import datetime
-
-    try:
-        return int(
-            (datetime.fromisoformat(ended) - datetime.fromisoformat(started)).total_seconds()
-        )
-    except ValueError:
-        return 0

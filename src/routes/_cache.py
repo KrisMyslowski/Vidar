@@ -10,8 +10,8 @@ import asyncio
 import time
 from datetime import datetime, timezone
 
-from ..db import get_conn
-from ..queries import get_attention_items, get_hourly_baseline
+from ..db import get_conn, run_db
+from ..queries import get_attention_items, get_earliest_day, get_hourly_baseline
 from ._app import templates
 
 _earliest_date_cache: str | None = None
@@ -23,11 +23,11 @@ def _load_earliest_date() -> str:
     """Query and cache the first day with data. Blocking — never call on the loop."""
     global _earliest_date_cache, _earliest_date_cached_at
     with get_conn() as conn:
-        row = conn.execute("SELECT substr(MIN(timestamp),1,10) FROM visits").fetchone()
+        day = get_earliest_day(conn)
     # Only cache a real date; while the DB is empty keep re-querying so the
     # first arriving data is reflected immediately (not after the TTL).
-    if row and row[0]:
-        _earliest_date_cache = row[0]
+    if day:
+        _earliest_date_cache = day
         _earliest_date_cached_at = time.time()
     return _earliest_date_cache or ""
 
@@ -116,6 +116,40 @@ async def fetch(work):
             return work(conn)
 
     return await asyncio.to_thread(run)
+
+
+async def write(work):
+    """fetch() for work that changes the database: `work(conn)`, shielded.
+
+    fetch() is right for reads, where a cancelled request leaves nothing behind.
+    A write is different — asyncio.to_thread cannot cancel its thread, so a
+    client disconnecting mid-request stopped the waiting and not the delete, and
+    the endpoint returned while rows were still going. db.run_db() shields the
+    work and waits it out; this is that, with the connection fetch() opens.
+    """
+
+    def run():
+        with get_conn() as conn:
+            return work(conn)
+
+    try:
+        return await run_db(run)
+    finally:
+        await refresh_after_write()
+
+
+async def refresh_after_write() -> None:
+    """Drop what a write may have made stale, and reload the date floor.
+
+    The aggregate cache holds a minute and the earliest date an hour — right for
+    the tailer's steady trickle, wrong for the change somebody just made and is
+    now looking for. Called after every write() and after the retention pass,
+    whether or not the work succeeded: a failure half-way still changed rows.
+    """
+    global _earliest_date_cache
+    _agg_cache.clear()
+    _earliest_date_cache = None
+    await asyncio.to_thread(_load_earliest_date)
 
 
 def _cached(key: str, produce, ttl_s: float = _AGG_TTL_S):

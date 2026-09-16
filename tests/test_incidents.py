@@ -742,3 +742,49 @@ def test_each_panel_table_can_scroll_sideways(client, _long_campaign):
     body = client.get(_case_url(incident)).text
     assert body.count('<div class="drawer-scroll">') == 2
     assert body.count("<table") == 2
+
+
+def test_the_panel_holds_one_incident_when_a_member_outlasts_the_gap(client, tmp_db):
+    """The panel re-derives an incident's sessions from its signature and its
+    bounds, and took every session that *started* before the incident *ended*.
+    `ended` is the longest member's end. A member probing without a 30-minute
+    pause for longer than the incident gap outlived the start of the next run
+    of the same tool, so that run's addresses appeared in this incident's panel
+    — six addresses under a row that counts three."""
+    from urllib.parse import quote
+
+    from src.queries import insert_visit
+
+    with get_conn(tmp_db) as conn:
+        for n in range(3):  # the first run
+            _probe(conn, f"203.0.113.{n + 1}", TOOL, offset_s=n * 60)
+        for k in range(1, 91):  # one of its members keeps going for 30 hours
+            insert_visit(
+                conn,
+                ip="203.0.113.1",
+                timestamp=(BASE + timedelta(seconds=k * 1200)).isoformat(),
+                path=f"/more-{k}",
+                status=404,
+            )
+        for n in range(3):  # the second run, starting before that member stops
+            _probe(
+                conn, f"198.51.100.{n + 1}", TOOL, offset_s=INCIDENT_GAP_SECONDS + 3600 + n * 60
+            )
+    with get_conn(tmp_db) as conn:
+        first, second = sorted(get_incidents(conn), key=lambda i: i["started"])
+    assert first["addresses"] == second["addresses"] == 3
+    assert first["ended"] > second["started"], "the setup this test is about"
+
+    with get_conn(tmp_db) as conn:
+        _, sessions = get_incident_sessions(
+            conn, first["started"], first["ended"], first["digest"], first["last_started"]
+        )
+    assert {s["ip"] for s in sessions} == {"203.0.113.1", "203.0.113.2", "203.0.113.3"}
+
+    body = client.get(
+        f"/incidents/case?from={quote(first['started'])}&to={quote(first['ended'])}"
+        f"&last={quote(first['last_started'])}&sig={first['digest']}"
+    ).text
+    assert "198.51.100" not in body
+    assert "3 addresses" in body
+    assert "&amp;last=" in body or "&last=" in body, "a re-sort inside the panel keeps it"

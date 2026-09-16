@@ -45,7 +45,7 @@ terms:
 | --- | --- | --- |
 | ip-api.com | The visitor's IP, in batches | **Plain HTTP.** The free endpoint offers no TLS, so these lookups are readable in transit |
 | Shodan InternetDB | The visitor's IP | HTTPS |
-| Spamhaus / DNSBL zones | The visitor's IP, reversed, as a DNS query | Plain DNS via the container's resolver |
+| Spamhaus / DNSBL zones | The visitor's IP, reversed, as a DNS query — with `DNSBL_DQS_KEY` set, the key is part of the same query name | Plain DNS via the container's resolver, which sees both |
 | The configured DNS resolver | The visitor's IP, as a PTR query | Plain DNS |
 | Tor Project | Nothing — the exit list is downloaded | HTTPS |
 
@@ -77,20 +77,17 @@ A deployment inside the EU/EEA usually needs, at minimum:
 
 ## 4. Retention, archives and backups
 
-Retention is configured in the dashboard under Settings → Storage, in one of two modes:
+Retention is set under Settings → Storage — a rolling calendar window, or lifetime. How the
+modes, the archive keep window, re-imports and snapshots work is described once, in
+[usage.md](usage.md#storage-and-retention). What matters here is how much longer personal data
+lives than the window suggests, for two reasons:
 
-- **Rolling** — the current calendar month plus the last *N*. A month falling out of the window
-  is written to a zip under `ARCHIVE_DIR`, and only then are its rows deleted.
-- **Lifetime** — nothing is archived and nothing is deleted.
-
-Two consequences worth stating plainly, because both defeat a naive reading of "retention":
-
-1. **Archiving is not deletion.** The zip holds the same visits and intel rows, on the same
-   disk, until something removes it. Settings → Storage has a second control for that, and it
-   defaults to keeping every archive — so unless an operator sets a number, a rolling window of
-   two months with three years of archives beside it is three years of retention. The default is
-   deliberate: an update must not delete data nobody asked it to delete. It is also the setting
-   most likely to be wrong for a deployment that has a retention policy on paper.
+1. **Archiving is not deletion.** A month leaving the window is written to a zip holding the
+   same visits and intel rows, on the same disk, and the archive keep window **defaults to
+   keeping every archive** — so a rolling window of two months with three years of archives
+   beside it is three years of retention. The default is deliberate: an update must not delete
+   data nobody asked it to delete. It is also the setting most likely to be wrong for a
+   deployment that has a retention policy on paper.
 2. **Backups outlive both.** `BACKUP_KEEP` daily snapshots of the whole database sit under
    `BACKUP_DIR`, and a row deleted today remains in yesterday's snapshot until it rotates out.
 

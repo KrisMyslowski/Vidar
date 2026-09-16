@@ -77,3 +77,39 @@ def test_process_entry_marks_tls_handshake_on_http_port():
     visit = process_entry(entry)
     assert visit["method"] == "TLS"
     assert visit["path"] == "[handshake on HTTP port]"
+
+
+def test_log_derived_strings_are_capped_at_the_boundary():
+    """nginx hands over whatever the client sent, up to its header buffers, and
+    every distinct user agent pays the whole regex battery in parse_user_agent on
+    the worker thread. Many distinct 8 KB agents made every batch pay that in
+    full, and stored it."""
+    import json
+    from unittest.mock import patch
+
+    from src import log_processor as lp
+
+    line = json.dumps(
+        {
+            "time": "2026-06-13T10:00:00+00:00",
+            "remote_addr": "93.184.216.34",
+            "request": "GET / HTTP/1.1",
+            "request_method": "GET",
+            "request_uri": "/" + "p" * 10_000,
+            "status": 200,
+            "body_bytes_sent": 10,
+            "http_user_agent": "Mozilla/5.0 " + "x" * 10_000,
+            "http_referer": "https://example.org/" + "r" * 10_000,
+            "http_accept_language": "de" * 5_000,
+            "http_x_forwarded_for": "1" * 5_000,
+        }
+    )
+    seen = []
+    real = lp.parse_user_agent
+    with patch.object(lp, "parse_user_agent", lambda ua: (seen.append(ua), real(ua))[1]):
+        visit = process_entry(parse_log_line(line))
+
+    for field, cap in lp._FIELD_CAPS.items():
+        assert len(visit[field]) == cap, field
+    assert seen == [visit["user_agent"]], "the parser sees the capped agent"
+    assert visit["path"].startswith("/ppp") and visit["user_agent"].startswith("Mozilla/5.0 ")

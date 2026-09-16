@@ -8,6 +8,7 @@ the configuration is exactly the page that leaks a key.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -231,11 +232,14 @@ class TestTheKeyReachesTheBrowserOnlyWhenSet:
         """The map view needs a marker to render at all — `view == 'map' and
         markers` — so an empty database proves nothing here."""
         monkeypatch.setattr(settings, "carto_api_key", "abc123")
+        # Yesterday, not a fixed day, which aged out of the default 90-day window
+        # and left the map with no marker to render.
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         with get_conn() as conn:
             insert_visit(
                 conn,
                 ip="198.51.100.4",
-                timestamp="2026-06-10T10:00:00+00:00",
+                timestamp=yesterday,
                 method="GET",
                 path="/",
                 status=200,

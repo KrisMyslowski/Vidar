@@ -6,7 +6,7 @@
 
 [![tests](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f4a54?style=flat-square)](LICENSE)
-[![Version 1.2.0](https://img.shields.io/badge/version-1.3.0-3f4a54?style=flat-square)](docs/changelog.md)
+[![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-3f4a54?style=flat-square)](docs/changelog.md)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3f4a54?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-3f4a54?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -109,7 +109,7 @@ their networks carry. Every cell links to the IPs behind it.
 ### Incidents
 
 A scanner is a program, and a program starts the same way every run. When three or more
-addresses ask for the same first five missing paths, in the same order, within an hour, that is
+addresses ask for the same first five missing paths, in the same order, within a day, that is
 one **event** rather than three visitors — with the paths it asked for, the addresses it came
 from, and how that compares with an ordinary hour here. The score beside it is a sort key and
 says so: every figure in it is a column of the same row.
@@ -117,7 +117,7 @@ says so: every figure in it is a column of the same row.
 ### Exposure
 
 The log read the other way round. Not *who came* but *what did this server hand out* — paths
-that answered 2xx and that no human and no crawler ever requested. On the reference deployment
+that answered 2xx and that fewer than two humans or crawlers ever requested. On the reference deployment
 it found a `.DS_Store` that had been served for months and that nobody had noticed. Each finding
 that Vidar recognises carries what the file is, why somebody asked for it, a `curl` to check it
 yourself, and how to stop serving it.

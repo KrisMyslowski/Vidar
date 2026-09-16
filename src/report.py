@@ -24,7 +24,7 @@ from __future__ import annotations
 import calendar
 import sqlite3
 
-from .incidents import MIN_ADDRESSES, SIGNATURE_PATHS
+from .incidents import INCIDENT_GAP_SECONDS, MIN_ADDRESSES, SIGNATURE_PATHS
 from .queries import (
     get_exposures,
     get_incidents,
@@ -205,7 +205,9 @@ def build_report(conn: sqlite3.Connection, month: str, cache=_uncached) -> dict:
         ),
         "incidents": incidents[:INCIDENTS_SHOWN],
         "incident_total": len(incidents),
-        "incident_addresses": sum(i["addresses"] for i in incidents),
+        # Distinct across incidents. Summing each incident's own count reported
+        # the same machines running the same tool on two days twice over.
+        "incident_addresses": len({ip for i in incidents for ip in i["members"]}),
         # Distinct signatures, not distinct events. Eleven incidents from one
         # digest is one program that kept coming back, and eleven from eleven is
         # eleven different tools — the same count, and not the same month. The
@@ -218,6 +220,10 @@ def build_report(conn: sqlite3.Connection, month: str, cache=_uncached) -> dict:
         # The two thresholds the "what happened" section is built on. Printed
         # with it, because "no incidents" is only informative next to what would
         # have counted as one.
-        "incident_rule": {"addresses": MIN_ADDRESSES, "paths": SIGNATURE_PATHS},
+        "incident_rule": {
+            "addresses": MIN_ADDRESSES,
+            "paths": SIGNATURE_PATHS,
+            "window": INCIDENT_GAP_SECONDS,
+        },
         "empty": visits == 0,
     }

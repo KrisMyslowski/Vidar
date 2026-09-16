@@ -75,3 +75,52 @@ class TestTheApiReportsIt:
         body = client.get("/api/visits?ip=198.51.100.99").json()
         assert body["total"] == 0
         assert body["total_pages"] == 1
+
+
+def test_pages_of_tied_rows_cover_every_address_once(tmp_db):
+    """Ten addresses with one visit each, paged three at a time by visit count —
+    every row ties on the sort key, so only the tiebreaker decides which page an
+    address lands on. The ORDER BY carried none, and a plan free to reorder ties
+    between two requests is how an address shows twice and another never."""
+    from src.db import get_conn
+    from src.queries import get_visitors_grouped, insert_visit
+
+    ips = [f"203.0.113.{n}" for n in range(10)]
+    with get_conn(tmp_db) as conn:
+        for ip in reversed(ips):
+            insert_visit(conn, ip=ip, timestamp="2026-08-20T10:00:00+00:00", path="/")
+    with get_conn(tmp_db) as conn:
+        pages = [
+            [r["ip"] for r in get_visitors_grouped(conn, page=p, limit=3, sort="visit_count")]
+            for p in (1, 2, 3, 4)
+        ]
+    seen = [ip for page in pages for ip in page]
+    assert sorted(seen) == sorted(ips) and len(seen) == len(set(seen))
+    assert seen == sorted(ips), "ties resolve by address, the same way every time"
+
+
+class TestAPagePastTheEnd:
+    """?page=9999 rendered an empty table under a header still stating the real
+    total — "3 IPs", no rows, "Page 9999 / 1". /incidents/case clamps and says
+    why; the three paged pages now send the reader to their last page."""
+
+    @pytest.fixture
+    def client(self, dashboard_db):  # noqa: F811
+        with patch("src.config.settings.db_path", dashboard_db):
+            yield TestClient(app)
+
+    @pytest.mark.parametrize(
+        "url, last",
+        [
+            ("/visitors?range=all&page=9999", "/visitors?range=all&page=1"),
+            ("/visitors?group=asn&range=all&page=50", "/visitors?group=asn&range=all&page=1"),
+            ("/visitors/203.0.113.10?page=9999", "/visitors/203.0.113.10?page=1"),
+        ],
+    )
+    def test_it_redirects_to_the_last_page(self, client, url, last):
+        resp = client.get(url, follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == last
+
+    def test_a_page_that_exists_is_served(self, client):
+        assert client.get("/visitors?range=all&page=1", follow_redirects=False).status_code == 200

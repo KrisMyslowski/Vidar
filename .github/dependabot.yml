@@ -1,0 +1,18 @@
+# What keeps the pins from going stale. A pin nobody moves is a known
+# vulnerability kept on purpose, which is worse than the floating tag it replaced.
+#
+# Python dependencies are not here: runtime.lock is written by uv from runtime.txt
+# (scripts/lock_requirements.sh --upgrade), and CI requires the two to agree.
+version: 2
+updates:
+  # The base image digest in deploy/Dockerfile.
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly
+
+  # The actions in .github/workflows, pinned by commit SHA.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

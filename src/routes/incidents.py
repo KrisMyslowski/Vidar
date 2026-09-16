@@ -192,6 +192,7 @@ async def incident_case(
     from_: str = Query(alias="from"),
     to: str = Query(...),
     sig: str = Query(...),
+    last: str | None = None,
     page: int = Query(default=1, ge=1),
     sort: str = INCIDENT_PATH_DEFAULT_SORT,
     order: str = "ASC",
@@ -216,7 +217,9 @@ async def incident_case(
     total in the header is summed from them, so a page of them would put a
     partial sum under a heading that states a whole one.
     """
-    if not (valid_timestamp(from_) and valid_timestamp(to)):
+    if not (valid_timestamp(from_) and valid_timestamp(to)) or (
+        last is not None and not valid_timestamp(last)
+    ):
         raise HTTPException(status_code=400, detail="Incident bounds must be ISO timestamps")
     if not _DIGEST_RE.fullmatch(sig):
         raise HTTPException(status_code=400, detail="Signature must be a digest")
@@ -225,8 +228,8 @@ async def incident_case(
         # The signature comes back from the first query because only it knows
         # what the digest names, and the second needs it to ask what those
         # sessions requested.
-        signature, sessions = get_incident_sessions(conn, from_, to, sig)
-        paths = get_incident_paths(conn, from_, to, signature) if signature else []
+        signature, sessions = get_incident_sessions(conn, from_, to, sig, last)
+        paths = get_incident_paths(conn, from_, to, signature, last) if signature else []
         return sessions, paths
 
     sessions, paths = await fetch(_load)
@@ -275,13 +278,15 @@ async def incident_case(
             "started": from_,
             "ended": to,
             # The panel's own address, split the way the table macros take it:
-            # a base they put "?" after, and a tail they append. The three name
-            # the incident, so every sort and page link inside the panel has to
-            # carry them or the re-fetch asks for a different case.
+            # a base they put "?" after, and a tail they append. These name the
+            # incident, so every sort and page link inside the panel has to
+            # carry them or the re-fetch asks for a different case — `last`
+            # included, or a re-sort widens the membership back to `to`.
             "case_url": "/incidents/case",
             "case_params": (
                 f"&from={quote(from_, safe='')}"
                 f"&to={quote(to, safe='')}&sig={quote(sig, safe='')}"
+                + (f"&last={quote(last, safe='')}" if last else "")
             ),
         },
     )

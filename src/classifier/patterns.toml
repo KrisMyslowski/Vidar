@@ -115,12 +115,15 @@ entries = [
 # convention, and /.well-known/ is the reserved namespace (RFC 8615). Counting these
 # toward the error rate labelled 42 production IPs as vulnerability-probers whose only
 # "offence" was asking politely where to report a vulnerability.
+#
+# Anchored on the slash. Unanchored, `%ads.txt` matched /downloads.txt and
+# /uploads.txt, and `%security.txt` /insecurity.txt — probes set aside as protocol.
 entries = [
-  "%security.txt",
-  "%ads.txt",
-  "%llms.txt",
-  "%humans.txt",
-  "%robots.txt",
+  "%/security.txt",
+  "%/ads.txt",
+  "%/llms.txt",
+  "%/humans.txt",
+  "%/robots.txt",
   "%sitemap%.xml",
   "/.well-known/%",
   "/favicon.ico",

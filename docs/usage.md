@@ -570,7 +570,8 @@ The archive table lists every zip on disk:
 | **Delete** | On a database month, drops it with no archive written; on an archive, removes the zip. Both confirm first, neither can be undone |
 
 Everything the UI hands out is a zip, written to a temp file and deleted after the response,
-so nothing leaves uncompressed and no month is held in memory.
+so nothing leaves uncompressed and no month is held in memory. A download dropped half-way
+leaves its temp file behind; the retention task removes it once it is an hour old.
 
 **Snapshots** are the other half: a daily gzipped `VACUUM INTO` copy of the live database,
 keeping the newest `BACKUP_KEEP` (default 7). A pass declines rather than filling the volume
@@ -603,7 +604,7 @@ Two things follow from that, and both are visible in the output:
   consumers already strip it and a person reading the same file still sees why.
 
 ```
-# Vidar 1.0.0 — addresses matching a selection, not a verdict.
+# Vidar 1.4.0 — addresses matching a selection, not a verdict.
 # Vidar does not decide what is blocked. Review before you act on it.
 # Selection: threats/* (the recommended default)
 203.0.113.60  # threats/exploit-probers · 12 probes · 24 requests · on a blocklist · Tor exit

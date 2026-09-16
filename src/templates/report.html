@@ -178,7 +178,8 @@
 {% endif %}
 <p class="text-muted">An incident is {{ report.incident_rule.addresses }} or more addresses
    asking for the same first {{ report.incident_rule.paths }} missing paths, in the same order,
-   inside an hour — one program, run from several places.</p>
+   within {{ report.incident_rule.window | fmtduration }} of each other — one program, run from
+   several places.</p>
 
 <h3 class="section-label">What this server handed out</h3>
 {% if report.finding_total %}

@@ -149,6 +149,12 @@ def count_visits(
     return row[0] if row else 0
 
 
+def get_earliest_day(conn: sqlite3.Connection) -> str | None:
+    """The first day any visit was logged on, as YYYY-MM-DD, or None when empty."""
+    row = conn.execute("SELECT substr(MIN(timestamp), 1, 10) FROM visits").fetchone()
+    return row[0] if row else None
+
+
 def stream_visits_for_export(
     conn: sqlite3.Connection,
     from_date: str | None = None,

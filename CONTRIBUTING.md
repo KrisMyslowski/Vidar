@@ -12,26 +12,22 @@ pre-commit install
 missing black. The dev file pins the same versions as `.pre-commit-config.yaml`,
 so a local run and the commit hook cannot disagree about what is formatted.
 
+**The image does not install `runtime.txt`.** It installs `requirements/runtime.lock`:
+every package pinned, with hashes. After changing a range in `runtime.txt`, run
+`bash scripts/lock_requirements.sh` and commit both files — CI fails when they
+disagree. `--upgrade` moves every pin to the newest version the ranges allow.
+
 ## Before a commit
 
 ```bash
 bash scripts/run_tests.sh
 ```
 
-black, isort, ruff, pytest, then vitest. The commit hook runs the same gates, so
-a commit that passes locally passes there.
-
-**Read the last two lines.** The run ends with a `ran:` / `skipped:` summary,
-because a workstation may lack node, a headless browser or a 3.12 interpreter and
-those suites skip rather than fail — a green run can mean a suite did not
-execute. `VIDAR_STRICT=1 bash scripts/run_tests.sh` turns any skip into a
-failure, and `VIDAR_REQUIRE=pytest,vitest` insists on named suites while letting
-the rest skip — which is what the deploy uses. Details in
+black, isort, ruff, pytest, then vitest; the commit hook runs the same gates.
+**Read the `ran:` / `skipped:` summary it ends with** — a green run can mean a
+suite did not execute. Every other test command, the strict and required-suite
+modes, and running the layout suite without a local browser are in
 [testing.md](docs/testing.md).
-
-The layout suite is the one that skips for a reason you cannot fix by installing
-a Python package: it needs a headless browser. `bash scripts/run_layout_docker.sh`
-runs it in a container carrying chromium, so no browser has to be installed.
 
 ## Conventions you would not guess
 
@@ -40,9 +36,10 @@ runs it in a container carrying chromium, so no browser has to be installed.
 - **No inline `on*` handlers.** The dashboard runs under a CSP with a per-request
   nonce, which cannot cover attribute handlers. Use a data attribute and a
   delegated listener in `actions.js`.
-- **A classifier logic change must bump `CLASSIFIER_VERSION`**
+- **A classifier logic change must bump `_RULES_VERSION`**
   (`src/classifier/patterns.py`), which triggers a one-time reclassification of
-  every address at startup.
+  every address at startup. `CLASSIFIER_VERSION` is computed from it and the
+  pattern pack's digest — it is not the constant you edit.
 - **Section header comments** in `src/` are padded to 79 characters.
 - **Never hardcode a group or signal colour.** `src/taxonomy.py` and the
   `--grp-*` / `--sig-*` tokens are the single source.

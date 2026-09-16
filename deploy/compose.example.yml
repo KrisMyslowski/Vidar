@@ -52,9 +52,12 @@ services:
       - /var/run
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3

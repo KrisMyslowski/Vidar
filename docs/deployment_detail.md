@@ -495,8 +495,13 @@ was never "no proxy", it is that **the port stays on loopback**. `127.0.0.1:8080
 change; the proxy reaches it from the same host and nothing else can. The proxy *is* the login:
 there is no second one behind it.
 
-Three things to get right, none needing a code change:
+Four things to get right, none needing a code change:
 
+- **Add the proxy's name to `ALLOWED_HOSTS`.** The dashboard answers only to the host names
+  listed there — loopback by default, which is all the tunnel ever sends — and refuses every
+  other `Host` with a 400. That refusal is the defence against DNS rebinding, a page that points
+  its own domain at 127.0.0.1; see [data-reference.md §7](data-reference.md#7-config-settings-srcconfigpy).
+  `ALLOWED_HOSTS=localhost,127.0.0.1,[::1],vidar.your-site.example`.
 - **Forward the `Host` header unmodified.** The cross-origin write guard in `src/main.py`
   compares the `Origin` header against `Host`, and refuses a state-changing request whose origin
   is a different site. A proxy that rewrites `Host` to `localhost` while the browser sends the
@@ -604,7 +609,9 @@ emptier than the traffic suggests.
   authentication there is.
 - **Filesystem** — the container is `read_only` with tmpfs for `/tmp`, `/var/log` and
   `/var/run`; the log mount is `ro` and only `/data` is writable.
-- **Privileges** — `no-new-privileges`, running as non-root UID 1000.
+- **Privileges** — `no-new-privileges`, `cap_drop: [ALL]`, `pids_limit: 256`, running as
+  non-root UID 1000. No memory limit, deliberately: nothing measured says what a VACUUM or the
+  largest restore needs, and a guessed one kills the service in exactly those passes.
 - **Browser** — per-request CSP nonce, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
   and `form-action 'self'`. There is no login, so a page the operator has open in another tab is
   the realistic threat; the CSRF checks in `main.py` are what constrain it.

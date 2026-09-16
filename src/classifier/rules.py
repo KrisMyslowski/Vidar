@@ -82,13 +82,14 @@ def _browser_disqualified(e: _Evidence) -> bool:
 
     Each of these is something a real browsing session does not produce, and each was
     measured letting non-humans through the gate:
-      - probe paths, and a UA the parser already identified as a bot (21 IPs);
+      - a UA the parser already identified as a bot (21 IPs, with probe paths —
+        those are _rule_scanner_paths' now, which runs ten places earlier and
+        claims every address that asked for one, so no such address reaches here);
       - non-HTTP traffic: TLS handshakes on the plain port, empty request lines (28);
       - a high share of 404s or 400s — malformed requests are tooling, not browsing (37).
     """
     return (
-        e.n("scanner_paths") > 0
-        or e.n("bot_device") > 0
+        e.n("bot_device") > 0
         or e.n("protocol_mismatch") > 0
         or e.err_rate >= _PROBE_404_RATE
         or e.n("bad_requests") / e.content >= _MALFORMED_REQUEST_RATE

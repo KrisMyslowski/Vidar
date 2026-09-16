@@ -18,6 +18,103 @@ Versions follow [semantic versioning](https://semver.org).
 
 ---
 
+## 1.4.0 — 2026-09-17
+
+A review release: nothing new to look at, and a good deal less that was wrong. Two changes reach
+an operator directly, and both are under **Changed** — every stored address is reclassified once
+on the first start, and the dashboard now refuses a host name it does not know.
+
+### Added in 1.4.0
+
+- **`ALLOWED_HOSTS`.** The dashboard answers only to the host names listed, loopback by default,
+  and refuses any other `Host` with a 400 before a route runs. It is the defence against DNS
+  rebinding: a page that points its own domain at 127.0.0.1 is same-origin to the dashboard in
+  the operator's browser, which the tunnel does not prevent and the cross-origin write guard does
+  not cover — it could read `/api/export` and a whole database snapshot. Behind an authenticating
+  proxy, add the name you browse to.
+
+- **Abandoned temporaries are swept.** An export zip whose download was dropped, or a snapshot
+  pass killed mid-copy, left a month of visits or a whole uncompressed database on the data
+  volume, hidden from every listing and outside retention. Files matching the temporary names
+  and older than an hour are removed at startup and hourly, each one named in the log.
+
+### Changed in 1.4.0
+
+- **Classifier rules v7: a page is counted once however its query string is spelled.** The
+  human gate's page floors were measured in pages, and `/?utm_source=a`, `/?utm_source=b` and
+  `/?ref=c` were three of them. **Every stored address is reclassified on the first start.**
+
+- **Convention-file needles are anchored on the slash.** `%ads.txt` also matched
+  `/downloads.txt`, so probes for files like that were set aside as polite requests. A needle
+  edit moves the pack digest, which reclassifies too — the same single pass as above.
+
+- **A pattern pack that declares a crawler without `crawler_origins` refuses to load.** Added to
+  `[ai_uas]` alone, the real crawler on cloud hosting was filed as an impersonator of itself.
+  `name = []` says, deliberately, to verify by reverse DNS alone.
+
+- **The container keeps no capabilities**, has a PID ceiling, and no longer ships `curl`; the
+  healthcheck asks Python. No memory limit, deliberately — see
+  [deployment_detail.md §8](deployment_detail.md#8-security-notes).
+
+- **The image is built from a hashed lock and a base pinned by digest.** It installed
+  `runtime.txt`'s ranges from a moving `python:3.12-slim` tag, so two builds of one commit were
+  two images and rolling back restored code but not dependencies. `requirements/runtime.lock`
+  pins every package with hashes and is installed with `--require-hashes`; after changing a
+  range, run `scripts/lock_requirements.sh` — CI fails when the two disagree. The workflows' actions
+  are pinned by commit, and Dependabot proposes new digests and actions weekly.
+
+- **The deploy script uploads `.env` straight into the deploy root** under umask 077 instead of
+  via world-readable `/tmp`, quotes every name in its remote cleanup, and keeps the newest five
+  `.env` backups rather than all of them.
+
+### Fixed in 1.4.0
+
+- **Shodan's hostnames verified crawlers.** They were copied into `reverse_dns`, where only a
+  forward-confirmed name belongs, and survived every failed confirmation — so a PTR record set to
+  a googlebot.com name took an address out of `threats/*` and out of `/api/decisions`. Stored
+  names Shodan could have supplied are re-checked once on the first start, and every address
+  whose reverse DNS changes is re-judged.
+
+- **ip-api answers are believed only for addresses the batch asked about.** Over plain HTTP each
+  item names its own row, so anything on the path could write intel for any address. A single
+  malformed item also failed the whole batch, which was then retried whole, indefinitely.
+
+- **Exposure left out every address the enricher had not reached yet**, so a fresh burst of
+  probers stayed invisible, and a finding's row disagreed with its own panel.
+
+- **An incident's panel could list the next run of the same tool** when one member probed for
+  longer than the incident gap — six addresses under a row that counts three.
+
+- **The report said incidents cluster "inside an hour"**; they cluster within a day. It also
+  counted an address twice when it took part in two incidents.
+
+- **Archives and snapshots are durable across a power cut.** The rename was fsynced as a file
+  and not as a directory entry, so the rows could be deleted and the archive lost with them. A
+  restore no longer loads the whole month into memory, and the storage actions that delete data
+  finish even when the request that started them is dropped.
+
+- **Numbers that were stale after a write.** The Overview served pre-restore figures for up to a
+  minute and the date picker's floor was wrong for up to an hour; the Storage page reported 0 B
+  of archives, always.
+
+- **Links that widened what they led to.** The drawer's "Open as a filtered list" dropped the
+  search and New; the Overview's drill-downs carried no date window.
+
+- **Paging.** Ties in a sort had no tiebreaker, so a page turn could repeat or skip an address,
+  and a page past the end rendered an empty table under the real total.
+
+- **Sessions counted protocol errors as pages**, and took their entry path from SQLite's
+  bare-column rule where the query had three aggregates for it to follow.
+
+- **The non-UTC warning could never fire on a real site.** Static assets were excluded from its
+  count and not from its denominator.
+
+- **Smaller:** client-supplied strings are capped where a log line becomes a visit; the visitor
+  detail page no longer scans all of `ip_intel` for an IPv4 neighbourhood; a Shodan rate limit
+  is announced once rather than every 4.5 s for five minutes.
+
+---
+
 ## 1.3.0 — 2026-09-01
 
 The last ticket on the plan, and the one that changes what Vidar is for: a dashboard has to be
@@ -125,6 +222,12 @@ to itself.
   was not: whenever their spread did not quite fit, it dropped a level, and half-size world in a
   full-size panel meant grey ground above, below and either side of it — and the world tiled
   sideways to fill the gap, drawing North America twice. Zoom 2 covers the panel.
+
+- **An incident's addresses fall within a day of each other, not an hour.** The hour was reasoned,
+  not measured: a distributed scan was expected to spread its addresses over minutes. On the
+  running deployment eighteen addresses ran the same five-path probe over six days, one or two
+  at a time and never three within an hour, so `/incidents` showed nothing on a week with three
+  obvious campaigns in it.
 
 ### Fixed in 1.2.0
 

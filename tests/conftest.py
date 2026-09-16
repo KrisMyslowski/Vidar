@@ -15,6 +15,9 @@ os.environ["DB_PATH"] = ""  # will be overridden per test
 # setting the suite does not pin would otherwise come from it — three tests that
 # assert documented defaults failed exactly that way.
 os.environ["VIDAR_ENV_FILE"] = ""
+# TestClient sends Host: testserver, which the host check would refuse on every
+# request. tests/test_trusted_host.py pins the real default and the refusals.
+os.environ["ALLOWED_HOSTS"] = "localhost,127.0.0.1,[::1],testserver"
 
 _STATIC = Path(__file__).resolve().parent.parent / "src/static"
 _BASE_HTML = Path(__file__).resolve().parent.parent / "src/templates/base.html"

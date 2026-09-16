@@ -33,6 +33,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .archive import fsync_dir, sweep_abandoned
 from .config import settings
 from .db import get_conn
 from .queries import get_state, set_state
@@ -70,6 +71,12 @@ def backup_dir() -> Path:
         # writing, and `python -m src.preflight` names the mount and the fix.
         pass
     return d
+
+
+def sweep_abandoned_temps() -> list[str]:
+    """Temporaries a killed pass left: the raw VACUUM INTO copy and the half-gzipped
+    one. Neither ends in SUFFIX, so neither is ever listed — or ever removed."""
+    return sweep_abandoned(backup_dir(), ("*.tmp",))
 
 
 def snapshot_name(now: datetime) -> str:
@@ -165,6 +172,7 @@ def create_snapshot(now: datetime | None = None) -> Path | None:
         with open(tmp, "rb") as fh:
             os.fsync(fh.fileno())
         os.replace(tmp, target)
+        fsync_dir(target.parent)
     except (OSError, sqlite3.Error):
         for leftover in (raw, tmp):
             leftover.unlink(missing_ok=True)

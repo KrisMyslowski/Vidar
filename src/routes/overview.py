@@ -20,6 +20,7 @@ from ._range import (
     _remembered_range,
     _resolve_range,
 )
+from ._urls import window_params
 
 router = APIRouter()
 
@@ -76,6 +77,10 @@ async def overview(
         )
 
     stats, kpis, visitor_counts, prev_visits = await fetch(_load)
+    # Every link out carries the window, like /shodan's and /exposure's do. They
+    # worked without it only because _remember_range set the cookie in the same
+    # response — a link that depends on a side effect of rendering the page.
+    win = window_params(active_range, date_from, date_to)
     attention = await asyncio.to_thread(_attention_items)
     # Each finding carries a taxonomy/signal key; the color comes from the same
     # single source every other surface uses.
@@ -121,20 +126,20 @@ async def overview(
                         stats["top_countries"],
                         "country_code",
                         "count",
-                        href=lambda i: f"/visitors?country={quote(i['country_code'] or '')}",
+                        href=lambda i: f"/visitors?country={quote(i['country_code'] or '')}{win}",
                     ),
                     "pages": bar_rows(
                         stats["top_pages"],
                         "path",
                         "count",
-                        href=lambda i: f"/visitors?path={quote(i['path'] or '')}",
+                        href=lambda i: f"/visitors?path={quote(i['path'] or '')}{win}",
                     ),
                     "referrers": bar_rows(stats["top_referrers"], "domain", "count"),
                     "browsers": bar_rows(
                         stats["top_browsers"],
                         "browser",
                         "count",
-                        href=lambda i: f"/visitors?browser={quote(i['browser'] or '')}",
+                        href=lambda i: f"/visitors?browser={quote(i['browser'] or '')}{win}",
                     ),
                     "oses": bar_rows(stats["top_oses"], "os", "count"),
                 },
@@ -144,7 +149,7 @@ async def overview(
                         "label": group.title(),
                         "count": visitor_counts.get(group, 0),
                         "color": GROUP_COLOR_VARS[group],
-                        "href": f"/visitors?class={group}",
+                        "href": f"/visitors?class={group}{win}",
                     }
                     for group in GROUPS_WITH_UNKNOWN
                 ],

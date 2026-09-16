@@ -136,7 +136,8 @@ def _exec_agg_rows(
     query, params = _apply_signal_filter(query, params, signal_filter)
     query, params = _apply_date_filter(query, params, date_from, date_to)
     query, params = _apply_seen_filter(query, params, seen, date_from)
-    query += f" GROUP BY {group_by} ORDER BY {sort_col} {order_dir} LIMIT ? OFFSET ?"
+    # The group key breaks ties, for the reason get_visitors_grouped gives.
+    query += f" GROUP BY {group_by} ORDER BY {sort_col} {order_dir}, {group_by} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     return [dict(r) for r in conn.execute(query, params).fetchall()]
 
@@ -543,13 +544,25 @@ def get_neighbourhood(conn: sqlite3.Connection, ip: str) -> list[dict]:
     probers" is a bar that reads as evidence and is not one.
     """
     own = conn.execute("SELECT asn, org FROM ip_intel WHERE ip = ?", (ip,)).fetchone()
+    network = network_of(ip)
+    # net() is a Python function, so `net(ip) = net(?)` can use no index and ran
+    # over every row of ip_intel on every detail page. An IPv4 /24 is a text
+    # prefix — "203.0.113." — which the primary key can seek to ('/' sorts right
+    # after '.'), and net() then confirms only what the seek found. IPv6 text is
+    # not a prefix of its /64 (2001:db8::1, 2001:0db8:0:0::2), so it keeps the scan.
+    # By the parsed family, not by a "." in the text: ::ffff:192.0.2.1 has one
+    # and is IPv6, whose /64 no IPv4 prefix describes.
+    if network and network.endswith("/24"):
+        prefix = ip.rsplit(".", 1)[0] + "."
+        peers_sql = (
+            "SELECT ip FROM ip_intel WHERE ip >= ? AND ip < ? AND net(ip) = net(?) AND ip != ?"
+        )
+        peers_params = (prefix, prefix[:-1] + "/", ip, ip)
+    else:
+        peers_sql = "SELECT ip FROM ip_intel WHERE net(ip) = net(?) AND ip != ?"
+        peers_params = (ip, ip)
     scopes = (
-        (
-            "network",
-            network_of(ip),
-            "SELECT ip FROM ip_intel WHERE net(ip) = net(?) AND ip != ?",
-            (ip, ip),
-        ),
+        ("network", network, peers_sql, peers_params),
         (
             "asn",
             (own["asn"] if own else "") or "",

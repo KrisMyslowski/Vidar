@@ -1,8 +1,8 @@
 # Testing
 
-For anyone changing the code. 1869 Python tests across 55 files, plus 131 browser-side tests
-in 12 files. Three of the document tests are parametrised over `docs/*.md`, so the first number
-moves when a document is added.
+For anyone changing the code. The suite states no size here — every count this document once
+carried had drifted within a week. `python -m pytest --collect-only -q` gives the current one,
+and `tests/test_docs_counts.py` fails when a test file below goes unnamed.
 
 ## 1. Running
 
@@ -10,9 +10,9 @@ moves when a document is added.
 bash scripts/run_tests.sh                    # the full gate: black, isort, ruff, pytest, vitest
 VIDAR_STRICT=1 bash scripts/run_tests.sh     # same, but a skipped suite fails the run
 
-python3 -m pytest -q                         # Python only
-pytest tests/test_db.py                      # one file
-pytest tests/test_db.py::test_insert_and_get_visits   # one test
+python -m pytest -q                          # Python only — with the 3.12 environment active
+python -m pytest tests/test_db.py            # one file
+python -m pytest tests/test_db.py::test_insert_and_get_visits   # one test
 npx vitest run                               # browser-side modules only
 ```
 
@@ -52,51 +52,72 @@ from the previous test's data.
 
 Grouped by the property they defend rather than by module, because that is what breaks.
 
-**The data contract.** `test_db.py`, `test_db_contract.py`, `test_db_extended.py` (46),
-`test_request_identity.py`, `test_shodan_normalization.py`, `test_shodan_migration.py` — the
-schema, the migrations, the partial unique index that deduplicates crash replays, and the
-child tables that replaced the comma-separated Shodan columns.
+**The data contract.** `test_db.py`, `test_db_contract.py`, `test_db_extended.py`,
+`test_request_identity.py`, `test_shodan_normalization.py`, `test_shodan_migration.py`,
+`test_canonical_event.py` — the schema, the migrations, the partial unique index that
+deduplicates crash replays, the child tables that replaced the comma-separated Shodan columns,
+and the `Visit` boundary a log format is mapped onto.
 
 **Ingestion.** `test_log_processor*.py` (3 files), `test_log_rotation.py`,
 `test_cancellation_finishes_writes.py` — parsing, filtering, rotation and truncation
 handling, and that a shutdown mid-batch does not tear a write.
 
-**Enrichment.** `test_enricher.py`, `test_enricher_backs_off.py` (25),
-`test_enrichment_is_not_destructive.py`, `test_failures_are_visible.py` (22) — provider
+**Enrichment.** `test_enricher.py`, `test_enricher_backs_off.py`,
+`test_enrichment_is_not_destructive.py`, `test_failures_are_visible.py` — provider
 parsing, backoff, and the two invariants that cost real data when they broke: a silent Shodan
 lookup must not erase stored values, and a provider failure must be visible rather than
 silently recorded as "clean".
 
-**Classification.** `test_classifier.py` (132) — the priority chain branch by branch, plus a
-parametrized mirror test binding `_decisive_rule` to `_apply_priority_chain` so the detail
-page's evidence can never drift from the verdict it explains.
+**Classification.** `test_classifier.py`, `test_pattern_pack.py` — the priority chain branch
+by branch, every verdict a label the taxonomy knows with a reason attached, and the pattern
+pack: an overlay only adds, a broken pack stops the service, a needle edit changes the
+fingerprint, and a crawler cannot be declared without the networks it runs from.
 
-**Routes and filters.** `test_dashboard_routes.py` (235), `test_dashboard_filters.py` (39),
-`test_pagination.py`, `test_url_and_findings.py` (32), `test_filters_that_cost_data.py` (28) —
-every page renders, filters compose, and the filters that *reduce* a result set are the ones
-most heavily pinned.
+**Behaviour and events.** `test_sessions.py`, `test_incidents.py`, `test_baseline.py`,
+`test_neighbourhood.py` — sessions cut at the gap and counted in pages, incidents clustered by
+signature without one campaign's panel reaching into the next, the median hour a spike is
+measured against, and the /24 and ASN an address is judged beside.
 
-**Search.** `test_search.py` (57), `test_help_matches_behaviour.py` — the field grammar, and
+**What the site gave away.** `test_exposure.py`, `test_families.py`, `test_report.py`,
+`test_decisions.py` — findings that count every address, including ones not yet enriched;
+explanations that appear only where they belong; a monthly report that states the rules it
+applied and computes nothing of its own; and a decisions feed whose selection travels with it.
+
+**Routes and filters.** `test_dashboard_routes.py`, `test_dashboard_filters.py`,
+`test_pagination.py`, `test_url_and_findings.py`, `test_filters_that_cost_data.py`,
+`test_api_routes.py`, `test_settings_status.py`, `test_cache_invalidation.py`,
+`test_sql_lives_in_queries.py` — every page renders, filters compose, the filters that
+*reduce* a result set are the ones most heavily pinned, a write shows on the next render, and
+no route builds SQL.
+
+**Search.** `test_search.py`, `test_help_matches_behaviour.py` — the field grammar, and
 that the syntax panel describes what the parser actually does.
 
-**Markup and layout.** `test_tip_contract.py` (245), `test_tooltips.py` (31),
-`test_table_structure.py` (36), `test_assets.py`, `test_render_does_not_query.py` — tooltips
-are authored in exactly one place, header and body rows carry identical column keys, and
+**Markup and layout.** `test_tip_contract.py`, `test_tooltips.py`,
+`test_table_structure.py`, `test_assets.py`, `test_render_does_not_query.py`,
+`test_layout_browser.py` ([§5](#5-layout-is-measured-not-inferred)) — tooltips are authored in
+exactly one place, header and body rows carry identical column keys, and
 templates do not issue queries during rendering.
 
-**Security.** `test_csp.py` (24), `test_cross_origin_writes.py` (28) — the CSP header is well
-formed, its nonce matches the markup and changes per response, no template carries an inline
-`on*` handler, and a cross-site POST is refused.
+**Security.** `test_csp.py`, `test_cross_origin_writes.py`, `test_trusted_host.py` — the CSP
+header is well formed, its nonce matches the markup and changes per response, no template
+carries an inline `on*` handler, a cross-site POST is refused, and a host name outside
+`ALLOWED_HOSTS` — a rebound DNS name — gets nothing.
 
-**Storage.** `test_archive.py` (44), `test_archive_streams.py`, `test_retention.py`,
+**Storage.** `test_archive.py`, `test_archive_streams.py`, `test_retention.py`,
 `test_retention_boundaries.py`, `test_backup.py` — the archive round trip, pins, path safety,
 month boundaries across a year, and the write-order guarantee that a zip exists before rows
 are deleted.
 
-**Validation and config.** `test_validators.py` (94), `test_config.py`, `test_ua_parser.py`,
-`test_preflight.py` (12) — the last covers the checks in `src/preflight.py`, and asserts on the
-remedy each one names rather than only on the verdict: a check that reports "log format wrong"
+**Validation and config.** `test_validators.py`, `test_config.py`, `test_ua_parser.py`,
+`test_demo_mode.py`, `test_version.py`, `test_preflight.py` — demo data never lands on real
+data, the version is one number in two files, and the last covers the checks in
+`src/preflight.py`, asserting on the remedy each one names rather than only on the verdict: a check that reports "log format wrong"
 without saying which field is missing sends the operator back to the documentation.
+
+**The documents.** `test_docs.py`, `test_docs_reference.py`, `test_docs_counts.py` — every
+anchor and section reference resolves, data-reference.md's settings and signal tables match the code,
+and the counts and route lists in these documents match the app.
 
 ## 5. Layout is measured, not inferred
 

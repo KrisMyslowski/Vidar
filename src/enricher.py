@@ -29,6 +29,7 @@ from .queries import (
     get_stale_ips,
     get_unenriched_ips,
     mark_enrichment_failed,
+    purge_unconfirmed_reverse_dns,
     set_reverse_dns,
     set_visitor_class,
     upsert_ip_intel,
@@ -236,6 +237,11 @@ def _report_shodan_silence(silent: int, total: int) -> None:
     """
     if not silent:
         return
+    if _shodan_gate.in_cooldown() and not _shodan_rate_limited:
+        # A batch skipped by a cooldown the 429 batch already announced. Warning
+        # again would repeat it every 4.5 s for the length of the pause.
+        logger.debug("Shodan cooldown: skipped %d lookups", silent)
+        return
     reason = " (we are being rate-limited)" if _shodan_rate_limited else ""
     log = logger.warning if silent == total else logger.info
     log("Shodan did not answer %d of %d lookups%s", silent, total, reason)
@@ -267,20 +273,18 @@ async def _fetch_shodan(ip: str, client: httpx.AsyncClient) -> dict | None:
             _shodan_gate.back_off(settings.shodan_cooldown_seconds)
         resp.raise_for_status()
         data = resp.json()
-        hostnames = ",".join(data.get("hostnames", []))
-        result = {
+        # hostnames stays its own field and never becomes reverse_dns. Shodan
+        # records whatever PTR the block's owner published — the claim that
+        # forward confirmation exists to check — and a name copied across
+        # survived every failed confirmation, so a PTR set to a googlebot.com
+        # name read as a verified crawler.
+        return {
             "open_ports": ",".join(str(p) for p in data.get("ports", [])),
             "tags": ",".join(data.get("tags", [])),
-            "hostnames": hostnames,
+            "hostnames": ",".join(data.get("hostnames", [])),
             "cpes": ",".join(data.get("cpes", [])),
             "vulns": ",".join(data.get("vulns", [])),
         }
-        if hostnames:
-            # Only ever a name we actually got. reverse_dns holds forward-confirmed
-            # PTR data from the step below, and an empty Shodan answer is not a
-            # reason to drop it — set_reverse_dns() makes the same call.
-            result["reverse_dns"] = hostnames
-        return result
     except Exception as e:
         logger.debug("Shodan lookup failed for %s: %s", ip, e)
         return None
@@ -559,6 +563,12 @@ def _load_rdns_candidates() -> list[str]:
         return get_ips_without_rdns(conn)
 
 
+def _purge_unconfirmed_rdns() -> int:
+    """The one-off repair behind the round above. Blocking; runs in a thread."""
+    with get_conn() as conn:
+        return purge_unconfirmed_reverse_dns(conn)
+
+
 def _store_rdns_results(pairs: list[tuple[str, str]]) -> int:
     """Record one round's PTR results; returns how many resolved. Blocking.
 
@@ -591,6 +601,9 @@ async def reverse_dns_backfill() -> int:
     tailer runs on. This read its IPs and wrote up to 500 UPDATEs per round
     inline, at startup, where the backlog is largest.
     """
+    purged = await run_db(_purge_unconfirmed_rdns)
+    if purged:
+        logger.info("Re-checking %d reverse DNS names Shodan may have supplied", purged)
     resolved = 0
     while True:
         ips = await run_db(_load_rdns_candidates)
@@ -648,15 +661,36 @@ async def enrich_batch(
 
         resp.raise_for_status()
         results = resp.json()
+        if not isinstance(results, list):
+            # A batch failure, not an empty batch — see the docstring.
+            raise ValueError(f"expected a list, got {type(results).__name__}")
 
         enriched: list[dict] = []
         failed_ips: list[str] = []
+        # Each item names the row it writes by its own `query`, over plain HTTP.
+        # Believed as-is, anything on the path could write intel for any address
+        # it liked, so an answer counts only for an address this batch asked
+        # about, and only the first time. Unasked answers are dropped, not
+        # failed: failing them would stamp addresses nobody sent.
+        unasked = set(batch)
+        dropped = 0
         for item in results:
+            query = item.get("query") if isinstance(item, dict) else None
+            if query not in unasked:
+                dropped += 1
+                continue
+            unasked.discard(query)
             parsed = _parse_api_result(item)
             if parsed:
                 enriched.append(parsed)
-            elif item.get("query"):
-                failed_ips.append(item["query"])
+            else:
+                failed_ips.append(query)
+        if dropped:
+            logger.warning(
+                "ip-api returned %d item(s) for addresses this batch did not ask about; "
+                "ignored",
+                dropped,
+            )
 
         async def _fetch_shodan_bounded(ip: str) -> dict | None:
             async with _SHODAN_SEM:
@@ -674,9 +708,9 @@ async def enrich_batch(
                 entry.update(shodan)
         _report_shodan_silence(sum(s is None for s in shodan_results), len(enriched))
 
-        # A real PTR lookup, preferred over Shodan's hostnames: Shodan only knows
-        # hosts it has scanned, which left reverse_dns empty for ~85% of IPs — and
-        # the crawler-verification rules in the classifier are built on it.
+        # The only writer of reverse_dns: a PTR lookup confirmed forward. The
+        # crawler-verification rules in the classifier are built on it, so an
+        # unconfirmed name — Shodan's included — must never land there.
         rdns_results = await asyncio.gather(*[_bounded_reverse_dns(e["ip"]) for e in enriched])
         for entry, rdns in zip(enriched, rdns_results, strict=True):
             if rdns:
@@ -733,15 +767,15 @@ def _select_batch(pending: list[str]) -> list[str]:
     # against ip-api and Shodan minutes after the last time, past a 30-day cache
     # that already held the answers.
     cutoff = _stale_before(settings.enrichment_cache_ttl_days)
-    fresh: list[str] = []
-    expired: list[str] = []
+    never_enriched: list[str] = []
+    past_ttl: list[str] = []
     for ip in pending:
         intel = existing_intel[ip]
         if intel is None:
-            fresh.append(ip)
+            never_enriched.append(ip)
         elif (intel.get("fetched_at") or "") < cutoff:
-            expired.append(ip)
-    return fresh + expired
+            past_ttl.append(ip)
+    return never_enriched + past_ttl
 
 
 def _persist_batch(results: list[dict], failed_ips: list[str]) -> None:

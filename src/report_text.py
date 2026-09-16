@@ -103,8 +103,8 @@ def _incidents(r: dict) -> list[str]:
     rule = r["incident_rule"]
     definition = (
         f"An incident is {rule['addresses']} or more addresses asking for the same first "
-        f"{rule['paths']} missing paths, in the same order, inside an hour — one program, "
-        "run from several places."
+        f"{rule['paths']} missing paths, in the same order, within "
+        f"{fmtduration(rule['window'])} of each other — one program, run from several places."
     )
     if not r["incident_total"]:
         return [f"None. {definition}"]

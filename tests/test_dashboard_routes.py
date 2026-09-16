@@ -355,6 +355,54 @@ class TestDashboardViews:
             has_it = "All + New" in strip.group(1)
             assert has_it == (view == "timeline"), view
 
+    def test_exactly_one_address_tab_is_ever_pressed(self, client, dashboard_db):
+        """All was written as "active unless New", which is right on the table
+        and the map — SEEN_BOTH filters nothing there and All *is* the state —
+        and wrong on the timeline, where the comparison has a tab of its own.
+        Both lit up, and the control showed two selections at once."""
+
+        def pressed(view, seen):
+            with patch("src.config.settings.db_path", dashboard_db):
+                text = client.get(f"/visitors?view={view}&range=90d&seen={seen}").text
+            strip = re.search(
+                r'tab-row-label">Addresses</span>\s*<div class="tab-group">(.*?)</div>',
+                text,
+                re.S,
+            )
+            return re.findall(r'class="tab active"[^>]*>([^<]+)<', strip.group(1))
+
+        assert pressed("timeline", "") == ["All"]
+        assert pressed("timeline", "new") == ["New"]
+        assert pressed("timeline", "both") == ["All + New"]
+        # Off the timeline the comparison has no tab, so a carried-over `both`
+        # belongs to All — it is the unfiltered state there.
+        for view in ("table", "map"):
+            assert pressed(view, "both") == ["All"], view
+
+    def test_the_comparison_survives_a_zoom_into_hours(self, client, dashboard_db):
+        """The page ships daily rows inline and the chart refetches through
+        /api/activity once a zoom goes finer. That endpoint handed `seen`
+        straight to the query, and SEEN_BOTH filters nothing — so the second
+        series vanished mid-zoom, under a control still reading All + New."""
+
+        def rows(**params):
+            query = "&".join(f"{k}={v}" for k, v in params.items())
+            with patch("src.config.settings.db_path", dashboard_db):
+                return client.get(f"/api/activity?from=2000-01-01&to=2100-01-01&{query}").json()[
+                    "rows"
+                ]
+
+        for metric in ("visits", "addresses"):
+            for bucket in ("day", "hour"):
+                both = rows(metric=metric, bucket=bucket, seen="both")
+                assert both and "total_new" in both[0], (metric, bucket)
+                # And it is the same New the single view reports, not a third
+                # way of counting it.
+                new = rows(metric=metric, bucket=bucket, seen="new")
+                every = rows(metric=metric, bucket=bucket)
+                assert sum(r["total"] for r in both) == sum(r["total"] for r in every)
+                assert sum(r["total_new"] for r in both) == sum(r["total"] for r in new)
+
     def test_the_comparison_survives_the_links_the_page_builds(self, client, dashboard_db):
         """A state that every range tab, sort and view switch drops is a state
         nobody can hold. Only `new` was carried, from when there were two."""
@@ -545,6 +593,22 @@ class TestDashboardViews:
         drawer = re.search(r'data-drawer-src="(/visitors/rows\?[^"]*)"', grouped)
         assert drawer, "no drawer link on the grouped view"
         assert "seen=new" in drawer.group(1), "the drawer drops it"
+
+    def test_opening_the_drawer_as_a_list_keeps_the_search_and_the_selection(
+        self, client, dashboard_db
+    ):
+        """The drawer counts under the search and New; its "Open as a filtered list"
+        link carried neither, so it opened a list many times the size of the one
+        the drawer had just described — the exact widening _form_fields exists to
+        stop on every other link on the page."""
+        with patch("src.config.settings.db_path", dashboard_db):
+            text = unescape(client.get("/visitors/rows?asn=AS1&q=path:/wp-admin&seen=new").text)
+        link = re.search(r'class="drawer-full-link" href="([^"]*)"', text)
+        assert link, "no full-list link in the drawer"
+        href = link.group(1)
+        assert "asn=AS1" in href
+        assert "q=path%3A/wp-admin" in href, href
+        assert "seen=new" in href, href
 
     def test_the_map_ships_the_size_of_the_whole_selection(self, client, dashboard_db):
         """The header counts the viewport. Zoomed in, nothing said what fraction
@@ -1411,7 +1475,12 @@ class TestCleanSignal:
 
     @pytest.fixture
     def signals_db(self, tmp_db):
-        """Five IPs: one per signal, one clean, one mobile-but-clean, one raw."""
+        """Five IPs: one per signal, one clean, one mobile-but-clean, one raw.
+
+        Dated yesterday, not on a fixed day: the pages default to the last 90 days,
+        and a fixed date walked out of that window on its own and took the matrix
+        with it."""
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         with get_conn(tmp_db) as conn:
             for ip in (
                 "10.0.0.1",  # clean
@@ -1420,7 +1489,7 @@ class TestCleanSignal:
                 "10.0.0.4",  # mobile, no signals
                 "10.0.0.5",  # never enriched
             ):
-                insert_visit(conn, ip=ip, timestamp="2026-06-10T10:00:00", path="/")
+                insert_visit(conn, ip=ip, timestamp=yesterday, path="/")
             upsert_ip_intel(conn, _intel("10.0.0.1"))
             upsert_ip_intel(conn, _intel("10.0.0.2", is_tor=True))
             upsert_ip_intel(conn, _intel("10.0.0.3", tags="scanner"))
@@ -2523,3 +2592,24 @@ class TestTheRangeGovernsEveryPage:
         assert delta, "no delta rendered although the previous day has visits"
         assert "vs previous 24 h" in delta.group(1)
         assert "+300%" in delta.group(1)  # 4 today against 1 the day before
+
+
+@pytest.mark.parametrize(
+    "query, carried",
+    [
+        ("range=7d", "range=7d"),
+        ("range=custom&date_from=2026-01-01&date_to=2030-01-01", "date_from=2026-01-01"),
+    ],
+)
+def test_overview_drilldowns_carry_the_window(client, dashboard_db, query, carried):
+    """Every figure on the Overview answers for the selected range, and the links
+    out of it — top countries, pages, browsers, the class mix — carried none. They
+    worked only because the range cookie was set in the same response, and /shodan
+    and /exposure both state what happens without it: the click widens the window
+    back to the default."""
+    with patch("src.config.settings.db_path", dashboard_db):
+        text = unescape(client.get(f"/?{query}").text)
+    links = re.findall(r'href="(/visitors\?(?:country|path|browser|class)=[^"]*)"', text)
+    assert links, "no drill-down links rendered"
+    for link in links:
+        assert carried in link, link

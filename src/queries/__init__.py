@@ -54,6 +54,7 @@ from .aggregations import get_neighbourhood as get_neighbourhood
 from .aggregations import get_networks as get_networks
 from .aggregations import get_paths as get_paths
 from .analysis import _shodan_value_filters as _shodan_value_filters
+from .analysis import count_intel_in_window as count_intel_in_window
 from .analysis import count_shodan_hosts as count_shodan_hosts
 from .analysis import get_activity_timeline as get_activity_timeline
 from .analysis import get_analysis_data as get_analysis_data
@@ -103,6 +104,7 @@ from .intel import get_state as get_state
 from .intel import get_unenriched_ips as get_unenriched_ips
 from .intel import mark_enrichment_failed as mark_enrichment_failed
 from .intel import purge_old_rate_limits as purge_old_rate_limits
+from .intel import purge_unconfirmed_reverse_dns as purge_unconfirmed_reverse_dns
 from .intel import reclassify_stale_ips as reclassify_stale_ips
 from .intel import record_export_hit as record_export_hit
 from .intel import set_reverse_dns as set_reverse_dns
@@ -120,6 +122,7 @@ from .visitors import get_visitor_detail as get_visitor_detail
 from .visitors import get_visitor_requests as get_visitor_requests
 from .visitors import get_visitors_grouped as get_visitors_grouped
 from .visits import count_visits as count_visits
+from .visits import get_earliest_day as get_earliest_day
 from .visits import get_visits as get_visits
 from .visits import insert_visit as insert_visit
 from .visits import stream_visits_for_export as stream_visits_for_export

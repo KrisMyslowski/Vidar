@@ -193,8 +193,14 @@ An IP active in three months appears in all three archives. The duplication is
 deliberate: each archive has to restore on its own.
 
 `meta.json` is written **last** into the zip, and the zip is renamed into place
-only after `fsync` — a file that has meta is a file that finished. Rows are
-deleted only after that rename.
+only after `fsync` — a file that has meta is a file that finished. The directory
+is then synced too, because a file's fsync does not make its new name durable,
+and rows are deleted only after that.
+
+Every temporary here is named so the retention task can sweep it: an export built
+for a download (`.export-*.zip`) and an archive not yet renamed (`.*.tmp`) are
+removed on the task's next hourly tick once they are an hour old. The listing hides
+both names, so nothing else would.
 
 On restore, visits go in with `INSERT OR IGNORE` on their original `id`, and
 intel is inserted **only for IPs that have none** (`insert_missing_intel`): the
@@ -371,14 +377,15 @@ visitor_class
 Reading the hierarchy: **the group answers "what kind of thing is this"**, the class
 answers "which one". `threats` is about an action, `bots` about a named actor, `automated`
 about a machine we can describe but not attribute, `humans` about a person, `unknown` about
-insufficient evidence. An IP has exactly one class; Tor / proxy / hosting / DNSBL / Shodan
-tags ride alongside as signals and can be combined freely.
+insufficient evidence. An IP has exactly one class; Tor / proxy / hosting / mobile / DNSBL /
+Shodan tags ride alongside as signals and can be combined freely.
 
 ### 4.2 The rules, exactly
 
 18 classes across 5 groups, defined in `taxonomy.py` (`VISITOR_CATEGORIES` — the single
-source of truth). `_decisive_rule()` mirrors this chain condition-for-condition to produce
-the "Why this verdict" evidence on `/visitors/{ip}`; a test asserts the two never diverge.
+source of truth). The "Why this verdict" evidence on `/visitors/{ip}` comes from the same
+walk of this chain — `_decisive_rule()` and `_apply_priority_chain()` are both `_decide()` —
+so the explanation cannot name a rule the verdict did not come from.
 
 #### 4.2.1 Precedence: first match wins
 
@@ -555,7 +562,7 @@ window: an IP that browsed in June and probed in August is judged on the union.
 | `bad_requests` | `status=400` count — malformed requests are tooling, not browsing |
 | `isp` | `ip_intel.isp`, lowercased — checked against `_CLOUD_ISP_PATTERNS` |
 | `internal_nav`, `cross_site_nav` | [§4.2.2](#422-the-browser-gate-rule-8) |
-| `unique_paths` | distinct paths **excluding** `[binary payload]` / `[handshake on HTTP port]` / `[empty request]` — those are protocol errors, not pages |
+| `unique_paths` | distinct pages: paths up to their query string, **excluding** `[binary payload]` / `[handshake on HTTP port]` / `[empty request]` — those are protocol errors, not pages, and `/?utm_source=a` is the same page as `/?utm_source=b` |
 | `all_uas_lower`, `reverse_dns`, `tags` | UA concat, `ip_intel.reverse_dns`, `ip_intel_tags` |
 | `is_hosting`, `is_proxy` | read by rules 8 and 12 only; `is_hosting` is OR-ed with the cloud-ISP name check |
 | `is_tor`, `dnsbl_listed`, `tags` | **selected but never read by the chain** — context for `explain_classification()` and the `?signal=` filter |
@@ -787,7 +794,7 @@ reader, so an operator addition cannot change how an existing match is described
 
 ### The fingerprint
 
-`CLASSIFIER_VERSION` is `<rules>+<pack digest>` — for example `6+ebf8dfe2`. The rules half is
+`CLASSIFIER_VERSION` is `<rules>+<pack digest>` — `7+` and eight hex digits at the time of writing. The rules half is
 bumped by hand when the chain changes; the digest is a sha256 prefix over the canonical form of
 the effective pack, so comments and formatting do not affect it but any needle does.
 
@@ -800,7 +807,10 @@ measured at 5.8 s per million visits.
 
 Loading validates: the `schema` key must match, every table the classifier reads must be present
 in the shipped pack, an unknown table is refused (nothing would read it, so it would look applied
-and never be), and every entry must be a non-empty string.
+and never be), and every entry must be a non-empty string. Every needle in `search_uas` and
+`ai_uas` must also have a key in `crawler_origins` — checked on the merged pack, so an overlay can
+supply either half. Without one, the real crawler on cloud hosting with no PTR record is filed as
+an impersonator of itself; `name = []` is accepted and means "verify by reverse DNS alone".
 
 A failure raises at import and stops the service, naming the file, the table and the value.
 Detection that quietly falls back to "no patterns" produces a dashboard where everything is
@@ -835,8 +845,8 @@ unknown and nothing is wrong — the same silent-failure shape as the cron that 
 | `get_neighbourhood` | `conn, ip` | list[dict] | `/visitors/{ip}`: the class-group and signal breakdown of the peers in the same /24 (or /64) and the same ASN, excluding the address itself. Uses the `net()` SQL function registered by `get_conn` — see `db.network_of()`. A scope with no peers is omitted |
 | `get_sessions` / `count_sessions` | `conn, ip[, limit]` / `conn, ip` | list[dict] / int | `/visitors/{ip}`: the address's visits cut into sessions at a gap of `SESSION_GAP_SECONDS` (`src/sessions.py`), newest first, each with the aggregates `behaviour_for()` reads. The cut is a window function over `idx_visits_ip_timestamp`, so no sort happens; nothing is stored |
 | `get_incidents` | `conn, since, until[, limit]` | list[dict] | `/incidents`: sessions across addresses sharing a signature — the first `SIGNATURE_PATHS` missing paths in the order they were probed — clustered in time. The one query that sessionises every address; cached by the route. Thresholds and the sort key live in `src/incidents.py` |
-| `get_incident_sessions` | `conn, since, until, digest` | tuple[str, list[dict]] | `/incidents/case`: the sessions one incident is made of, one row per address. Shares `_SESSION_SPANS_CTE` with `get_incidents` so both agree on what a session is; the window is padded back one session gap so boundary detection sees the silence that defines a start |
-| `get_incident_paths` | `conn, since, until, signature` | list[dict] | `/incidents/case`: the paths one incident asked for, in arrival order, with how many of its addresses tried each. Counts only what the incident is built from, so its total equals the row's probe count |
+| `get_incident_sessions` | `conn, since, until, digest, last_started=None` | tuple[str, list[dict]] | `/incidents/case`: the sessions one incident is made of, one row per address. Shares `_SESSION_SPANS_CTE` with `get_incidents` so both agree on what a session is; the window is padded back one session gap so boundary detection sees the silence that defines a start. Membership is a start between `since` and `last_started` (the incident's latest member start), not `until`: one member can outlast the start of the next run of the same tool |
+| `get_incident_paths` | `conn, since, until, signature, last_started=None` | list[dict] | `/incidents/case`: the paths one incident asked for, in arrival order, with how many of its addresses tried each. Counts only what the incident is built from, so its total equals the row's probe count |
 | `get_hourly_baseline` / `get_typical_hour` | `conn[, now]` / `conn, since, until` | dict | What an ordinary hour here holds, as a **median** with empty hours counted as zero. The first compares the last complete hour against the trailing 28 days for the Overview's findings; the second gives one window's typical hour, so past events can be placed against it. Both report `enough_history` / `usable` rather than comparing against noise |
 | `get_activity_timeline` | `conn, since, until` | list[dict] | `/` route: `[{day, total, humans, bots, automated, threats, unknown}]` daily taxonomy breakdown |
 | `get_ip_intel` | `conn, ip` | dict or None | Single IP enrichment lookup |
@@ -912,6 +922,7 @@ These are computed at query time — not stored in the database.
 | `tor_cache_ttl_seconds` | `TOR_CACHE_TTL_SECONDS` | `86400` | Tor exit list refresh interval (seconds) |
 | `enrichment_queue_maxsize` | `ENRICHMENT_QUEUE_MAXSIZE` | `10000` | Max IPs queued for enrichment |
 | `db_connection_timeout` | `DB_CONNECTION_TIMEOUT` | `10` | SQLite connection timeout (seconds) |
+| `allowed_hosts` | `ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | Host names the dashboard answers to; any other `Host` gets a 400 before any route runs. The defence against DNS rebinding, where a page re-points its own domain at 127.0.0.1 and becomes same-origin to the dashboard in the operator's browser — the tunnel does not stop that, and neither does the cross-origin write guard. Matched without the port, case-insensitively. Behind an authenticating proxy, add the name browsed to; `*` turns the check off. Comma-separated |
 | `export_rate_limit` | `EXPORT_RATE_LIMIT` | `5` | Max `/api/export` calls per IP per window |
 | `export_rate_limit_window_s` | `EXPORT_RATE_LIMIT_WINDOW_S` | `3600` | Rate limit window (seconds) |
 | `backup_enabled` | `BACKUP_ENABLED` | `true` | Whether the daily snapshot pass runs at all |
@@ -948,18 +959,8 @@ mobile or proxied address is often the wrong city entirely.
 ### 8.2 What leaves the machine
 
 **Only the address, and never anything else.** Path, referer and user agent stay
-local; no provider is told what was requested.
-
-| Destination | Sent | Transport |
-|-------------|------|-----------|
-| `ip-api.com` | the addresses of a batch, as a JSON array | **HTTP** — the free tier offers no TLS (`BATCH_URL`, `enricher.py`) |
-| `internetdb.shodan.io` | one address per request, in the path | HTTPS |
-| DNSBL zones | the reversed address as a DNS name, e.g. `4.3.2.1.zen.spamhaus.org` | DNS |
-| the system resolver | the address, for a PTR lookup | DNS |
-| `check.torproject.org` | nothing — the exit list is downloaded | HTTPS |
-
-The DNSBL query is a DNS lookup, so the recursive resolver in the path sees it
-too. That is how blocklists work, and it is worth knowing before enabling one.
+local; no provider is told what was requested. Who receives it, and over which
+transport, has one home: [privacy.md §2](privacy.md#2-what-leaves-the-server).
 
 Enrichment can be switched off in parts: `DNSBL_ENABLED=false` stops the
 blocklist queries. The others are not individually gated — a deployment that must

@@ -44,7 +44,7 @@ from ._charts import (
     pick_bucket,
 )
 from ._filters import _DRILL_KINDS, _GROUP_SPECS, _build_filter_context, _normalize_filters
-from ._helpers import total_pages
+from ._helpers import past_the_last_page, total_pages
 from ._range import _RANGE_KEYS, _remember_range, _remembered_range, _resolve_range
 from ._urls import _form_fields, _visitors_url
 
@@ -348,6 +348,8 @@ async def visitors(
         visitor_counts,
         unmapped,
     ) = await fetch(_load)
+    if view == "table" and (redirect := past_the_last_page(request, page, total, limit)):
+        return redirect
     heatmap_grid, heatmap_max = heatmap
 
     # Sort links and the pager carry the full filter state minus what they set.
@@ -449,6 +451,12 @@ async def visitors(
         ]
     )
 
+    # The comparison is drawable on the timeline and nowhere else, so that is the
+    # only view offering it a tab. Named once here because two things depend on
+    # it: whether the tab is rendered at all, and — below — whether All may keep
+    # the pressed state while SEEN_BOTH is selected.
+    both_has_a_tab = view == "timeline"
+
     return _remember_range(
         templates.TemplateResponse(
             request,
@@ -541,9 +549,13 @@ async def visitors(
                     {
                         "label": "All",
                         "href": _visitors_url(params, seen="", page=""),
-                        # SEEN_BOTH filters nothing, so off the timeline it *is*
-                        # All, and All is the tab that should look pressed.
-                        "active": seen != SEEN_NEW,
+                        # SEEN_BOTH filters nothing, so on the table and the map
+                        # it *is* All, and All is the tab that should look
+                        # pressed there. Where the comparison has a tab of its
+                        # own, that tab owns the state — without the second half
+                        # of this condition both lit up at once and the control
+                        # showed two selections.
+                        "active": seen != SEEN_NEW and not (both_has_a_tab and seen == SEEN_BOTH),
                         "tip": (
                             "Every address in the selected range.",
                             "First-time and returning alike — the unfiltered state.",
@@ -601,7 +613,7 @@ async def visitors(
                                 ),
                             }
                         ]
-                        if view == "timeline"
+                        if both_has_a_tab
                         else []
                     ),
                 ],
@@ -748,6 +760,10 @@ async def visitor_rows(
                     "signal": signal_filter,
                     "date_from": date_from or "",
                     "date_to": date_to or "",
+                    # The drawer counted under both; a list without them was
+                    # many times the size of the one it had just described.
+                    "q": q or "",
+                    "seen": seen if seen == SEEN_NEW else "",
                 }
             ),
         },

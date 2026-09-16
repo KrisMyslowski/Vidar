@@ -26,8 +26,9 @@ documented blind spot in what Vidar observes, not a way into the service.
 
 ## What the service reaches out to
 
-Four hosts, and only IP addresses ever leave: ip-api.com, Shodan InternetDB, the
-configured DNSBL zones, and the Tor exit list. The dashboard additionally loads
-Leaflet from unpkg (pinned by subresource integrity) and map tiles from Carto.
-The full account is in
-[data-reference.md §8](docs/data-reference.md#8-what-is-stored-and-where-it-goes).
+Only visitor IP addresses ever leave — to ip-api.com, Shodan InternetDB, the
+configured DNSBL zones and the resolver's PTR lookup; the Tor exit list is a
+download and receives nothing. The dashboard additionally loads Leaflet from unpkg
+(pinned by subresource integrity) and map tiles from Carto. Who receives what, and
+over which transport, is in
+[privacy.md §2](docs/privacy.md#2-what-leaves-the-server).

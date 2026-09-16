@@ -111,6 +111,34 @@ def test_sessions_come_back_newest_first(tmp_db):
         ]
 
 
+def test_a_protocol_error_is_not_a_page(tmp_db):
+    """The classifier's unique_paths already excluded these, because a failed
+    handshake plus `/` read as someone exploring two pages. The session query,
+    feeding a field of the same name, did not — and unserved_paths counted the
+    pseudo-path too, making enumeration easier to reach."""
+    with get_conn(tmp_db) as conn:
+        _req(conn, "203.0.113.1", 0, path="[handshake on HTTP port]", status=400)
+        _req(conn, "203.0.113.1", 5, path="[binary payload]", status=400)
+        _req(conn, "203.0.113.1", 10, path="/")
+    with get_conn(tmp_db) as conn:
+        session = get_sessions(conn, "203.0.113.1")[0]
+    assert session["requests"] == 3
+    assert session["unique_paths"] == 1
+    assert session["unserved_paths"] == 0
+
+
+def test_the_entry_survives_the_first_request_being_a_protocol_error(tmp_db):
+    """The entry is the first request, whatever it was; excluding pseudo-paths from
+    the page count must not move it."""
+    with get_conn(tmp_db) as conn:
+        _req(conn, "203.0.113.1", 0, path="[empty request]", status=400)
+        _req(conn, "203.0.113.1", 5, path="/about", referer="https://example.org/")
+    with get_conn(tmp_db) as conn:
+        session = get_sessions(conn, "203.0.113.1")[0]
+    assert session["entry_path"] == "[empty request]"
+    assert session["entry_referer"] == ""
+
+
 def test_the_entry_is_the_first_request_not_an_arbitrary_one(tmp_db):
     """The whole narrative hangs on this: where the session came in."""
     with get_conn(tmp_db) as conn:

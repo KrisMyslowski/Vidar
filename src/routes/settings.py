@@ -18,7 +18,7 @@ from ..preflight import FAIL, _check_writable
 from ..queries import count_stale_ips, count_unenriched_ips, get_state, get_visit_months
 from ..validators import valid_month
 from ._app import templates
-from ._cache import fetch
+from ._cache import fetch, write
 
 router = APIRouter()
 
@@ -75,6 +75,7 @@ _CONFIG_GROUPS = (
         "Server marker",
         ("server_lat", "server_lon", "server_city", "server_country", "server_asn", "server_ip"),
     ),
+    ("Access", ("allowed_hosts",)),
     (
         "Limits",
         (
@@ -329,7 +330,7 @@ async def settings_storage(request: Request):
             # What switching expiry on right now would remove, so the number is
             # on the page before the click rather than in the log after it.
             "archives_expiring_now": _expiring_now(archives, archive_keep, today),
-            "archives_total_bytes": sum(a.get("size") or 0 for a in archives),
+            "archives_total_bytes": sum(a["bytes"] for a in archives),
             "oldest_archive": min((a["month"] for a in archives), default=None),
             "archives": archives,
             "months": months,
@@ -348,14 +349,16 @@ async def settings_storage(request: Request):
 async def _run_archive_action(month: str, action) -> RedirectResponse:
     """Validate the month, run `action(conn, month)` off the loop, redirect.
 
-    Goes through fetch() rather than opening a connection here and handing it to
+    Goes through write() rather than opening a connection here and handing it to
     a thread: an sqlite3.Connection may only be used on the thread that made it.
+    write(), not fetch(): each of these changes or deletes data, and fetch() is
+    unshielded — a dropped connection stopped the waiting and not the delete.
     """
     valid = valid_month(month)
     if not valid:
         raise HTTPException(status_code=400, detail="Invalid month")
     try:
-        await fetch(partial(action, month=valid))
+        await write(partial(action, month=valid))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="No archive for that month") from None
     return _storage_redirect()
@@ -364,14 +367,14 @@ async def _run_archive_action(month: str, action) -> RedirectResponse:
 @router.post("/settings/storage/mode")
 async def settings_storage_mode(mode: str = Form(...)):
     """Switch between rolling and lifetime. Unknown values fall back to rolling."""
-    await fetch(lambda conn: archive.set_mode(conn, mode))
+    await write(lambda conn: archive.set_mode(conn, mode))
     return _storage_redirect()
 
 
 @router.post("/settings/storage/window")
 async def settings_storage_window(months: int = Form(...)):
     """Set how many months before the current one stay active. Clamped 0..24."""
-    await fetch(lambda conn: archive.set_rolling_months(conn, months))
+    await write(lambda conn: archive.set_rolling_months(conn, months))
     return _storage_redirect()
 
 
@@ -383,7 +386,7 @@ async def settings_storage_archive_keep(months: int = Form(...)):
     the zips beside it. set_archive_keep_months clamps a value below the rolling
     window up to it, so what is stored can differ from what was submitted.
     """
-    await fetch(lambda conn: archive.set_archive_keep_months(conn, months))
+    await write(lambda conn: archive.set_archive_keep_months(conn, months))
     return _storage_redirect()
 
 
