@@ -1,0 +1,365 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-classes" viewBox="0 0 960 3526" width="960" height="3526" role="img" aria-labelledby="vidar-classes-title vidar-classes-desc">
+<title id="vidar-classes-title">Vidar Python classes</title>
+<desc id="vidar-classes-desc">Every class defined under src/ in Vidar, with attributes, methods and relationships.</desc>
+<style>
+.vidar-classes text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-classes .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-classes .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-classes .sb { font-weight: 600; }
+.vidar-classes .h { font-size: 16px; font-weight: 600; }
+.vidar-classes .ti { font-size: 22px; font-weight: 600; }
+.vidar-classes .st { fill: #59636e; }
+.vidar-classes .it { font-style: italic; }
+.vidar-classes .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-classes .ko { fill: #ffffff; }
+.vidar-classes .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-classes .hdr { fill: #eaeef2; }
+.vidar-classes .tbl { fill: #d6efea; }
+.vidar-classes .cls { fill: #dce7f7; }
+.vidar-classes .ext { fill: #f5e6c8; }
+.vidar-classes .proc { fill: #e7e0f6; }
+.vidar-classes .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-classes .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-classes .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-classes .dash { stroke-dasharray: 6 4; }
+.vidar-classes .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-classes .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-classes .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-classes .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-classes .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-classes .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-classes .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-classes .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-classes .dot { fill: #59636e; }
+.vidar-classes .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-classes text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-classes .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-classes .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-classes .sb { font-weight: 600; }
+.vidar-classes .h { font-size: 16px; font-weight: 600; }
+.vidar-classes .ti { font-size: 22px; font-weight: 600; }
+.vidar-classes .st { fill: #9198a1; }
+.vidar-classes .it { font-style: italic; }
+.vidar-classes .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-classes .ko { fill: #0d1117; }
+.vidar-classes .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-classes .hdr { fill: #212830; }
+.vidar-classes .tbl { fill: #12332e; }
+.vidar-classes .cls { fill: #1a2940; }
+.vidar-classes .ext { fill: #3a2d13; }
+.vidar-classes .proc { fill: #2a2342; }
+.vidar-classes .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-classes .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-classes .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-classes .dash { stroke-dasharray: 6 4; }
+.vidar-classes .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-classes .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-classes .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-classes .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-classes .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-classes .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-classes .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-classes .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-classes .dot { fill: #9198a1; }
+.vidar-classes .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-classes-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-classes-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-classes-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-classes-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="959" height="3525" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — Python classes</text>
+<text x="30" y="70" class="st" xml:space="preserve">Every class statement under src/ (13). Plain functions, the 12 query modules and the 17 classifier</text>
+<text x="30" y="90" class="st" xml:space="preserve">rules are not classes and appear only in notes. − marks a leading-underscore name.</text>
+<rect class="box" x="360" y="126" width="240" height="58"/>
+<rect class="hdr ext" x="360.6" y="126.6" width="238.8" height="57.4"/>
+<text x="372" y="151" class="st" xml:space="preserve">«external» pydantic_settings</text>
+<text x="372" y="171" class="mb" xml:space="preserve">BaseSettings</text>
+<path class="ln" d="M480,244 L480,184" marker-end="url(#vidar-classes-tri)"/>
+<rect class="box" x="30" y="244" width="900" height="574"/>
+<rect class="hdr cls" x="30.6" y="244.6" width="898.8" height="57.4"/>
+<text x="42" y="269" class="st" xml:space="preserve">config.py</text>
+<text x="42" y="289" class="mb" xml:space="preserve">Settings</text>
+<line class="sep" x1="30" y1="302" x2="930" y2="302"/>
+<text x="42" y="323" class="st" xml:space="preserve">42 fields, grouped by concern (names only; types and defaults: docs/data-reference.md)</text>
+<text x="42" y="343" class="st it" xml:space="preserve">paths and database (5)</text>
+<text x="42" y="363" class="m" xml:space="preserve">log_path, db_path, archive_dir, backup_dir,</text>
+<text x="42" y="383" class="m" xml:space="preserve">db_connection_timeout</text>
+<text x="42" y="403" class="m" xml:space="preserve"></text>
+<text x="42" y="423" class="st it" xml:space="preserve">ingestion (5)</text>
+<text x="42" y="443" class="m" xml:space="preserve">poll_interval_seconds, ingest_existing_backlog,</text>
+<text x="42" y="463" class="m" xml:space="preserve">filter_static_assets, filter_internal_ips,</text>
+<text x="42" y="483" class="m" xml:space="preserve">static_extensions</text>
+<text x="42" y="503" class="m" xml:space="preserve"></text>
+<text x="42" y="523" class="st it" xml:space="preserve">site-specific (ship blank) (3)</text>
+<text x="42" y="543" class="m" xml:space="preserve">site_base_url, static_asset_prefixes,</text>
+<text x="42" y="563" class="m" xml:space="preserve">js_only_path_prefixes</text>
+<text x="42" y="583" class="m" xml:space="preserve"></text>
+<text x="42" y="603" class="st it" xml:space="preserve">classifier (2)</text>
+<text x="42" y="623" class="m" xml:space="preserve">patterns_path, reclassify_interval_minutes</text>
+<text x="42" y="643" class="m" xml:space="preserve"></text>
+<text x="42" y="663" class="st it" xml:space="preserve">mode (1)</text>
+<text x="42" y="683" class="m" xml:space="preserve">demo_mode</text>
+<text x="492" y="343" class="st it" xml:space="preserve">enrichment (12)</text>
+<text x="492" y="363" class="m" xml:space="preserve">enrichment_batch_size, enrichment_queue_maxsize,</text>
+<text x="492" y="383" class="m" xml:space="preserve">enrichment_cache_ttl_days, shodan_concurrency,</text>
+<text x="492" y="403" class="m" xml:space="preserve">shodan_requests_per_minute,</text>
+<text x="492" y="423" class="m" xml:space="preserve">shodan_cooldown_seconds, dns_timeout_seconds,</text>
+<text x="492" y="443" class="m" xml:space="preserve">dnsbl_enabled, dnsbl_providers, dnsbl_dqs_key,</text>
+<text x="492" y="463" class="m" xml:space="preserve">dnsbl_concurrency, tor_cache_ttl_seconds</text>
+<text x="492" y="483" class="m" xml:space="preserve"></text>
+<text x="492" y="503" class="st it" xml:space="preserve">retention and backup (4)</text>
+<text x="492" y="523" class="m" xml:space="preserve">retention_days (deprecated), archive_restore_days,</text>
+<text x="492" y="543" class="m" xml:space="preserve">backup_enabled, backup_keep</text>
+<text x="492" y="563" class="m" xml:space="preserve"></text>
+<text x="492" y="583" class="st it" xml:space="preserve">web and security (4)</text>
+<text x="492" y="603" class="m" xml:space="preserve">allowed_hosts, export_rate_limit,</text>
+<text x="492" y="623" class="m" xml:space="preserve">export_rate_limit_window_s, carto_api_key</text>
+<text x="492" y="643" class="m" xml:space="preserve"></text>
+<text x="492" y="663" class="st it" xml:space="preserve">map marker (6)</text>
+<text x="492" y="683" class="m" xml:space="preserve">server_lat, server_lon, server_city,</text>
+<text x="492" y="703" class="m" xml:space="preserve">server_country, server_asn, server_ip</text>
+<line class="sep" x1="480" y1="332" x2="480" y2="708"/>
+<line class="sep" x1="30" y1="714" x2="930" y2="714"/>
+<text x="42" y="735" class="m" xml:space="preserve">−_blank_is_unset(v)  «field_validator» server_lat, server_lon</text>
+<text x="42" y="755" class="m" xml:space="preserve">−_split_csv_providers(v)  «field_validator» the four comma-separated lists</text>
+<text x="42" y="775" class="m" xml:space="preserve">model_config: env_prefix '' · env_file from $VIDAR_ENV_FILE, else .env</text>
+<line class="sep" x1="30" y1="786" x2="930" y2="786"/>
+<text x="42" y="807" class="m" xml:space="preserve">settings = Settings()   ·   unset_site_settings() : list[str]</text>
+<rect class="box" x="120" y="878" width="240" height="58"/>
+<rect class="hdr ext" x="120.6" y="878.6" width="238.8" height="57.4"/>
+<text x="132" y="903" class="st" xml:space="preserve">«external» pydantic</text>
+<text x="132" y="923" class="mb" xml:space="preserve">BaseModel</text>
+<path class="ln" d="M240,996 L240,936" marker-end="url(#vidar-classes-tri)"/>
+<rect class="box" x="30" y="996" width="420" height="622"/>
+<rect class="hdr cls" x="30.6" y="996.6" width="418.8" height="57.4"/>
+<text x="42" y="1021" class="st" xml:space="preserve">models.py</text>
+<text x="42" y="1041" class="mb" xml:space="preserve">LogEntry</text>
+<line class="sep" x1="30" y1="1054" x2="450" y2="1054"/>
+<text x="42" y="1075" class="m" xml:space="preserve">time : str</text>
+<text x="42" y="1095" class="m" xml:space="preserve">remote_addr : str</text>
+<text x="42" y="1115" class="m" xml:space="preserve">request : str</text>
+<text x="42" y="1135" class="m" xml:space="preserve">status : int</text>
+<text x="42" y="1155" class="m" xml:space="preserve">body_bytes_sent : int</text>
+<text x="42" y="1175" class="m" xml:space="preserve">http_referer : str = ''</text>
+<text x="42" y="1195" class="m" xml:space="preserve">http_user_agent : str = ''</text>
+<text x="42" y="1215" class="m" xml:space="preserve">request_time : float = 0.0</text>
+<text x="42" y="1235" class="m" xml:space="preserve">ssl_protocol : str = ''</text>
+<text x="42" y="1255" class="m" xml:space="preserve">request_method : str = ''</text>
+<text x="42" y="1275" class="m" xml:space="preserve">request_uri : str = ''</text>
+<text x="42" y="1295" class="m" xml:space="preserve">server_port : int = 0</text>
+<text x="42" y="1315" class="m" xml:space="preserve">http_accept_language : str = ''</text>
+<text x="42" y="1335" class="m" xml:space="preserve">request_length : int = 0</text>
+<text x="42" y="1355" class="m" xml:space="preserve">http_x_forwarded_for : str = ''</text>
+<text x="42" y="1375" class="m" xml:space="preserve">ssl_cipher : str = ''</text>
+<text x="42" y="1395" class="m" xml:space="preserve">connection : int = 0</text>
+<text x="42" y="1415" class="m" xml:space="preserve">connection_requests : int = 0</text>
+<text x="42" y="1435" class="m" xml:space="preserve">limit_req_status : str = ''</text>
+<text x="42" y="1455" class="m" xml:space="preserve">http_version : str = ''</text>
+<text x="42" y="1475" class="m" xml:space="preserve">sec_fetch_dest : str = ''</text>
+<text x="42" y="1495" class="m" xml:space="preserve">sec_fetch_mode : str = ''</text>
+<text x="42" y="1515" class="m" xml:space="preserve">sec_fetch_site : str = ''</text>
+<text x="42" y="1535" class="m" xml:space="preserve">accept_encoding : str = ''</text>
+<text x="42" y="1555" class="m" xml:space="preserve">ssl_session_reused : str = ''</text>
+<line class="sep" x1="30" y1="1566" x2="450" y2="1566"/>
+<text x="42" y="1587" class="st" xml:space="preserve">one nginx JSON log line; field names follow</text>
+<text x="42" y="1607" class="m" xml:space="preserve">deploy/nginx-log-format.conf</text>
+<rect class="box" x="510" y="878" width="420" height="734"/>
+<rect class="hdr cls" x="510.6" y="878.6" width="418.8" height="57.4"/>
+<text x="522" y="903" class="st" xml:space="preserve">models.py  «TypedDict» total=True</text>
+<text x="522" y="923" class="mb" xml:space="preserve">Visit</text>
+<line class="sep" x1="510" y1="936" x2="930" y2="936"/>
+<text x="522" y="957" class="m" xml:space="preserve">ip : str</text>
+<text x="522" y="977" class="m" xml:space="preserve">timestamp : str</text>
+<text x="522" y="997" class="m" xml:space="preserve">method : str</text>
+<text x="522" y="1017" class="m" xml:space="preserve">path : str</text>
+<text x="522" y="1037" class="m" xml:space="preserve">server_port : int</text>
+<text x="522" y="1057" class="m" xml:space="preserve">status : int</text>
+<text x="522" y="1077" class="m" xml:space="preserve">bytes_sent : int</text>
+<text x="522" y="1097" class="m" xml:space="preserve">user_agent : str</text>
+<text x="522" y="1117" class="m" xml:space="preserve">referer : str</text>
+<text x="522" y="1137" class="m" xml:space="preserve">request_time : float</text>
+<text x="522" y="1157" class="m" xml:space="preserve">ssl_protocol : str</text>
+<text x="522" y="1177" class="m" xml:space="preserve">browser : str</text>
+<text x="522" y="1197" class="m" xml:space="preserve">os : str</text>
+<text x="522" y="1217" class="m" xml:space="preserve">device : str</text>
+<text x="522" y="1237" class="m" xml:space="preserve">accept_language : str</text>
+<text x="522" y="1257" class="m" xml:space="preserve">request_length : int</text>
+<text x="522" y="1277" class="m" xml:space="preserve">http_x_forwarded_for : str</text>
+<text x="522" y="1297" class="m" xml:space="preserve">ssl_cipher : str</text>
+<text x="522" y="1317" class="m" xml:space="preserve">connection : int</text>
+<text x="522" y="1337" class="m" xml:space="preserve">connection_requests : int</text>
+<text x="522" y="1357" class="m" xml:space="preserve">limit_req_status : str</text>
+<text x="522" y="1377" class="m" xml:space="preserve">http_version : str</text>
+<text x="522" y="1397" class="m" xml:space="preserve">sec_fetch_dest : str</text>
+<text x="522" y="1417" class="m" xml:space="preserve">sec_fetch_mode : str</text>
+<text x="522" y="1437" class="m" xml:space="preserve">sec_fetch_site : str</text>
+<text x="522" y="1457" class="m" xml:space="preserve">accept_encoding : str</text>
+<text x="522" y="1477" class="m" xml:space="preserve">ssl_session_reused : str</text>
+<line class="sep" x1="510" y1="1488" x2="930" y2="1488"/>
+<text x="522" y="1509" class="m" xml:space="preserve">REQUIRED_FIELDS = ('ip', 'timestamp')</text>
+<text x="522" y="1529" class="m" xml:space="preserve">NGINX_ONLY_FIELDS: 4 names</text>
+<text x="522" y="1549" class="m" xml:space="preserve">PSEUDO_PATHS: 3 pseudo-paths</text>
+<line class="sep" x1="510" y1="1560" x2="930" y2="1560"/>
+<text x="522" y="1581" class="st" xml:space="preserve">stored as a visits row by</text>
+<text x="522" y="1601" class="m" xml:space="preserve">queries.visits.insert_visit()</text>
+<path class="ln dash" d="M240,1618 L240,1668 L720,1668 L720,1612" marker-end="url(#vidar-classes-open)"/>
+<text x="480" y="1694" class="m" text-anchor="middle" xml:space="preserve">«maps to»  log_processor.process_entry(entry) : Visit</text>
+<rect class="box" x="30" y="1738" width="420" height="334"/>
+<rect class="hdr cls" x="30.6" y="1738.6" width="418.8" height="57.4"/>
+<text x="42" y="1763" class="st" xml:space="preserve">classifier/rules.py  __slots__</text>
+<text x="42" y="1783" class="mb" xml:space="preserve">_Evidence</text>
+<line class="sep" x1="30" y1="1796" x2="450" y2="1796"/>
+<text x="42" y="1817" class="m" xml:space="preserve">−row : dict</text>
+<text x="42" y="1837" class="m" xml:space="preserve">−content : int</text>
+<text x="42" y="1857" class="m" xml:space="preserve">−uas : str</text>
+<text x="42" y="1877" class="m" xml:space="preserve">−rdns : str</text>
+<text x="42" y="1897" class="m" xml:space="preserve">−owner : str</text>
+<text x="42" y="1917" class="m" xml:space="preserve">−hosting : bool</text>
+<text x="42" y="1937" class="m" xml:space="preserve">−err_rate : float</text>
+<line class="sep" x1="30" y1="1948" x2="450" y2="1948"/>
+<text x="42" y="1969" class="m" xml:space="preserve">+__init__(row: dict)</text>
+<text x="42" y="1989" class="m" xml:space="preserve">+n(key: str) : int</text>
+<line class="sep" x1="30" y1="2000" x2="450" y2="2000"/>
+<text x="42" y="2021" class="st" xml:space="preserve">row: one row of evidence_sql._classify_sql()</text>
+<text x="42" y="2041" class="m" xml:space="preserve">_decide(d) walks _RULES (17 rules);</text>
+<text x="42" y="2061" class="st" xml:space="preserve">the first verdict wins</text>
+<rect class="box" x="30" y="2112" width="420" height="314"/>
+<rect class="hdr cls" x="30.6" y="2112.6" width="418.8" height="57.4"/>
+<text x="42" y="2137" class="st" xml:space="preserve">enricher.py</text>
+<text x="42" y="2157" class="mb" xml:space="preserve">_RateGate</text>
+<line class="sep" x1="30" y1="2170" x2="450" y2="2170"/>
+<text x="42" y="2191" class="m" xml:space="preserve">−_interval : float</text>
+<text x="42" y="2211" class="m" xml:space="preserve">−_next_at : float</text>
+<text x="42" y="2231" class="m" xml:space="preserve">−_resume_at : float</text>
+<text x="42" y="2251" class="m" xml:space="preserve">−_lock : asyncio.Lock | None</text>
+<line class="sep" x1="30" y1="2262" x2="450" y2="2262"/>
+<text x="42" y="2283" class="m" xml:space="preserve">+__init__(per_minute: int)</text>
+<text x="42" y="2303" class="m" xml:space="preserve">+reset() : None</text>
+<text x="42" y="2323" class="m" xml:space="preserve">+in_cooldown() : bool</text>
+<text x="42" y="2343" class="m" xml:space="preserve">+back_off(seconds: float) : None</text>
+<text x="42" y="2363" class="m" xml:space="preserve">+wait() : None   «async»</text>
+<line class="sep" x1="30" y1="2374" x2="450" y2="2374"/>
+<text x="42" y="2395" class="m" xml:space="preserve">_shodan_gate = _RateGate(</text>
+<text x="42" y="2415" class="m" xml:space="preserve">    settings.shodan_requests_per_minute)</text>
+<rect class="box" x="510" y="1738" width="420" height="354"/>
+<rect class="hdr cls" x="510.6" y="1738.6" width="418.8" height="57.4"/>
+<text x="522" y="1763" class="st" xml:space="preserve">taxonomy.py  «dataclass(frozen=True)»</text>
+<text x="522" y="1783" class="mb" xml:space="preserve">Signal</text>
+<line class="sep" x1="510" y1="1796" x2="930" y2="1796"/>
+<text x="522" y="1817" class="m" xml:space="preserve">+key : str</text>
+<text x="522" y="1837" class="m" xml:space="preserve">+alias : str</text>
+<text x="522" y="1857" class="m" xml:space="preserve">+label : str</text>
+<text x="522" y="1877" class="m" xml:space="preserve">+sql : str</text>
+<text x="522" y="1897" class="m" xml:space="preserve">+column : str = ''</text>
+<text x="522" y="1917" class="m" xml:space="preserve">+label_short : str = ''</text>
+<text x="522" y="1937" class="m" xml:space="preserve">+tip : tuple[str, str] = ()</text>
+<text x="522" y="1957" class="m" xml:space="preserve">+color_var : str = ''</text>
+<text x="522" y="1977" class="m" xml:space="preserve">+badge : str = ''</text>
+<text x="522" y="1997" class="m" xml:space="preserve">+in_clean : bool = True</text>
+<line class="sep" x1="510" y1="2008" x2="930" y2="2008"/>
+<text x="522" y="2029" class="m" xml:space="preserve">+condition(prefix='i.', ip_ref='i.ip') : str</text>
+<text x="522" y="2049" class="m" xml:space="preserve">+short : str   «property»</text>
+<line class="sep" x1="510" y1="2060" x2="930" y2="2060"/>
+<text x="522" y="2081" class="m" xml:space="preserve">SIGNALS : tuple[Signal, ...]</text>
+<rect class="box" x="510" y="2132" width="420" height="182"/>
+<rect class="hdr cls" x="510.6" y="2132.6" width="418.8" height="57.4"/>
+<text x="522" y="2157" class="st" xml:space="preserve">sessions.py  «NamedTuple»</text>
+<text x="522" y="2177" class="mb" xml:space="preserve">Behaviour</text>
+<line class="sep" x1="510" y1="2190" x2="930" y2="2190"/>
+<text x="522" y="2211" class="m" xml:space="preserve">+key : str</text>
+<text x="522" y="2231" class="m" xml:space="preserve">+label : str</text>
+<text x="522" y="2251" class="m" xml:space="preserve">+what : str</text>
+<line class="sep" x1="510" y1="2262" x2="930" y2="2262"/>
+<text x="522" y="2283" class="m" xml:space="preserve">BEHAVIOURS: brute-force, enumeration,</text>
+<text x="522" y="2303" class="m" xml:space="preserve">  recon, scraping, browsing</text>
+<rect class="box" x="510" y="2354" width="420" height="150"/>
+<rect class="hdr cls" x="510.6" y="2354.6" width="418.8" height="57.4"/>
+<text x="522" y="2379" class="st" xml:space="preserve">preflight.py  «dataclass(frozen=True)»</text>
+<text x="522" y="2399" class="mb" xml:space="preserve">Check</text>
+<line class="sep" x1="510" y1="2412" x2="930" y2="2412"/>
+<text x="522" y="2433" class="m" xml:space="preserve">+name : str</text>
+<text x="522" y="2453" class="m" xml:space="preserve">+status : str</text>
+<text x="522" y="2473" class="m" xml:space="preserve">+detail : str</text>
+<text x="522" y="2493" class="m" xml:space="preserve">+command : str = ''</text>
+<rect class="box" x="30" y="2544" width="420" height="262"/>
+<rect class="hdr cls" x="30.6" y="2544.6" width="418.8" height="57.4"/>
+<text x="42" y="2569" class="st" xml:space="preserve">search.py  «dataclass(frozen=True)»</text>
+<text x="42" y="2589" class="mb" xml:space="preserve">Field</text>
+<line class="sep" x1="30" y1="2602" x2="450" y2="2602"/>
+<text x="42" y="2623" class="m" xml:space="preserve">+name : str</text>
+<text x="42" y="2643" class="m" xml:space="preserve">+label : str</text>
+<text x="42" y="2663" class="m" xml:space="preserve">+source : str  # intel|visit|child</text>
+<text x="42" y="2683" class="m" xml:space="preserve">+match : str</text>
+<text x="42" y="2703" class="m" xml:space="preserve">+columns : tuple[str, ...] = ()</text>
+<text x="42" y="2723" class="m" xml:space="preserve">+aliases : tuple[str, ...] = ()</text>
+<text x="42" y="2743" class="m" xml:space="preserve">+example : str = ''</text>
+<text x="42" y="2763" class="m" xml:space="preserve">+note : str = ''</text>
+<line class="sep" x1="30" y1="2774" x2="450" y2="2774"/>
+<text x="42" y="2795" class="m" xml:space="preserve">FIELDS : tuple[Field, ...]</text>
+<rect class="box" x="510" y="2544" width="420" height="242"/>
+<rect class="hdr cls" x="510.6" y="2544.6" width="418.8" height="57.4"/>
+<text x="522" y="2569" class="st" xml:space="preserve">families.py  «NamedTuple»</text>
+<text x="522" y="2589" class="mb" xml:space="preserve">Family</text>
+<line class="sep" x1="510" y1="2602" x2="930" y2="2602"/>
+<text x="522" y="2623" class="m" xml:space="preserve">+key : str</text>
+<text x="522" y="2643" class="m" xml:space="preserve">+title : str</text>
+<text x="522" y="2663" class="m" xml:space="preserve">+what : str</text>
+<text x="522" y="2683" class="m" xml:space="preserve">+why : str</text>
+<text x="522" y="2703" class="m" xml:space="preserve">+check : str</text>
+<text x="522" y="2723" class="m" xml:space="preserve">+fix : str</text>
+<text x="522" y="2743" class="m" xml:space="preserve">+config : tuple[tuple[str, str], ...] = ()</text>
+<line class="sep" x1="510" y1="2754" x2="930" y2="2754"/>
+<text x="522" y="2775" class="m" xml:space="preserve">FAMILIES : tuple[tuple[str, Family], ...]</text>
+<rect class="box" x="30" y="2886" width="420" height="214"/>
+<rect class="hdr cls" x="30.6" y="2886.6" width="418.8" height="57.4"/>
+<text x="42" y="2911" class="st" xml:space="preserve">search.py  «dataclass(frozen=True)»</text>
+<text x="42" y="2931" class="mb" xml:space="preserve">Term</text>
+<line class="sep" x1="30" y1="2944" x2="450" y2="2944"/>
+<text x="42" y="2965" class="m" xml:space="preserve">+raw : str</text>
+<text x="42" y="2985" class="m" xml:space="preserve">+value : str</text>
+<text x="42" y="3005" class="m" xml:space="preserve">+field : Field | None = None</text>
+<text x="42" y="3025" class="m" xml:space="preserve">+match : str = BROAD</text>
+<line class="sep" x1="30" y1="3036" x2="450" y2="3036"/>
+<text x="42" y="3057" class="m" xml:space="preserve">+label : str   «property»</text>
+<line class="sep" x1="30" y1="3068" x2="450" y2="3068"/>
+<text x="42" y="3089" class="m" xml:space="preserve">parse(q) : tuple[list[Term], list[str]]</text>
+<rect class="box" x="510" y="2886" width="420" height="162"/>
+<rect class="hdr cls" x="510.6" y="2886.6" width="418.8" height="57.4"/>
+<text x="522" y="2911" class="st" xml:space="preserve">families.py  «NamedTuple»</text>
+<text x="522" y="2931" class="mb" xml:space="preserve">Explained</text>
+<line class="sep" x1="510" y1="2944" x2="930" y2="2944"/>
+<text x="522" y="2965" class="m" xml:space="preserve">+family : Family</text>
+<text x="522" y="2985" class="m" xml:space="preserve">+paths : list[str]</text>
+<text x="522" y="3005" class="m" xml:space="preserve">+checks : list[str]</text>
+<line class="sep" x1="510" y1="3016" x2="930" y2="3016"/>
+<text x="522" y="3037" class="m" xml:space="preserve">explain_paths(paths, host) : list[Explained]</text>
+<path class="ln" d="M240,2886 L240,2806" marker-end="url(#vidar-classes-open)"/>
+<text x="254" y="2836" class="m" xml:space="preserve">field</text>
+<text x="254" y="2874" class="m" xml:space="preserve">0..1</text>
+<path class="ln" d="M720,2886 L720,2786" marker-end="url(#vidar-classes-open)"/>
+<text x="734" y="2816" class="m" xml:space="preserve">family</text>
+<text x="734" y="2874" class="m" xml:space="preserve">1</text>
+<rect class="box" x="120" y="3140" width="240" height="58"/>
+<rect class="hdr ext" x="120.6" y="3140.6" width="238.8" height="57.4"/>
+<text x="132" y="3165" class="st" xml:space="preserve">«builtin»</text>
+<text x="132" y="3185" class="mb" xml:space="preserve">Exception</text>
+<rect class="box" x="120" y="3258" width="240" height="58"/>
+<rect class="hdr cls" x="120.6" y="3258.6" width="238.8" height="57.4"/>
+<text x="132" y="3283" class="st" xml:space="preserve">classifier/pack.py</text>
+<text x="132" y="3303" class="mb" xml:space="preserve">PackError</text>
+<path class="ln" d="M240,3258 L240,3198" marker-end="url(#vidar-classes-tri)"/>
+<rect class="note" x="30" y="3356" width="900" height="140" rx="6"/>
+<text x="46" y="3384" class="sb" xml:space="preserve">Notation</text>
+<path class="ln" d="M46,3410 L106,3410" marker-end="url(#vidar-classes-tri)"/>
+<text x="122" y="3415" xml:space="preserve">generalisation: real Python inheritance</text>
+<path class="ln" d="M46,3430 L106,3430" marker-end="url(#vidar-classes-open)"/>
+<text x="122" y="3435" xml:space="preserve">navigable association: a typed attribute, multiplicity at the target end</text>
+<path class="ln dash" d="M46,3450 L106,3450" marker-end="url(#vidar-classes-open)"/>
+<text x="122" y="3455" xml:space="preserve">dependency</text>
+<text x="46" y="3475" xml:space="preserve">Stereotypes name the Python construct (dataclass, NamedTuple, TypedDict, __slots__).</text>
+</svg>

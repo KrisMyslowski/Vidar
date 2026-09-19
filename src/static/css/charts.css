@@ -15,10 +15,10 @@
 .tl-hero { height: 150px; }
 .tl-svg { display: block; width: 100%; height: 100%; }
 .tl-grid { stroke: var(--border); stroke-width: 1; }
-.tl-axis { fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono); }
+.tl-axis { fill: var(--text-muted); font-size: var(--font-xxs); font-family: var(--font-mono); }
 /* The second axis row on an hourly view: which day a block of hours is in.
    Without it the axis reads 00:00 12:00 00:00 12:00 and names no day at all. */
-.tl-axis--date { font-size: 9px; opacity: 0.75; }
+.tl-axis--date { font-size: var(--font-xxs); opacity: 0.75; }
 .tl-daytick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
 .tl-line { stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
 .tl-line--total { stroke-width: 1.75; opacity: 0.7; }
@@ -66,7 +66,7 @@
   margin: var(--space-2xs) 0 0;
   font-size: var(--font-xs);
   color: var(--text-muted);
-  transition: opacity 0.4s;
+  transition: opacity var(--dur-slow);
 }
 .timeline-hint--done { opacity: 0; }
 /* The drag band: what the reader is about to zoom into. */
@@ -77,7 +77,7 @@
   top: 0;
   transform: translateX(8px);
   pointer-events: none;
-  z-index: 20;
+  z-index: var(--z-tip);
   min-width: 9rem;
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-opaque);
@@ -102,7 +102,7 @@
   font-size: var(--font-xxs);
   margin-left: 4px;
 }
-.tl-tip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tl-tip-dot { width: 8px; height: 8px; border-radius: var(--radius-round); flex-shrink: 0; }
 /* Zoom controls, where the zoom chip used to sit. The chip spelled out the
    window it had zoomed to and carried the only way back; these say it with two
    states instead — a disabled minus is "you are looking at everything", a
@@ -111,23 +111,6 @@
    absolutely it landed on top of the subtitle as soon as that subtitle wrapped,
    which it does at 420px. */
 .timeline-zoombar { display: flex; gap: 4px; margin-left: auto; }
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.btn-icon svg { width: 14px; height: 14px; }
-.btn-icon:hover:not(:disabled) { background: var(--border); color: var(--text); }
-.btn-icon:disabled { opacity: 0.35; cursor: default; }
 
 .daybars {
   display: flex;
@@ -143,7 +126,7 @@
   min-height: 2px;
   display: flex;
   flex-direction: column-reverse;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 6%, transparent);
   cursor: help;
@@ -165,15 +148,15 @@
   text-decoration: none;
 }
 a.series-chip:hover { color: var(--text); text-decoration: none; }
-.series-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--clr, var(--text-muted)); }
+.series-dot { width: 8px; height: 8px; border-radius: var(--radius-xs); background: var(--clr, var(--text-muted)); }
 
 /* Overview — hero tiles, needs-attention findings, class-mix links. */
 .cards--hero { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .nav-badge {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 10px;
+  padding: 0 var(--space-2xs);
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--red) 22%, transparent);
   color: var(--red);
   font-size: var(--font-xxs);
@@ -194,14 +177,14 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
    supported, which is the normal panel. */
 .panel--attention {
   border-color: color-mix(in srgb, var(--red) 40%, var(--border));
-  background: color-mix(in srgb, var(--red) 4%, var(--bg-panel));
+  background: color-mix(in srgb, var(--red) 4%, var(--bg-card));
 }
 
 .attention { list-style: none; margin: 0; padding: 0; }
 .attention-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--red);
   flex: none;
 }
@@ -210,7 +193,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
   display: flex;
   align-items: baseline;
   gap: var(--space-sm);
-  padding: 6px 4px;
+  padding: var(--space-xs) var(--space-2xs);
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   text-decoration: none;
@@ -220,7 +203,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
 .attention-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); text-decoration: none; }
 .attention-tag {
   flex: none;
-  padding: 1px 6px;
+  padding: var(--space-3xs) var(--space-xs);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--clr, var(--text-muted)) 18%, transparent);
   color: var(--clr, var(--text-muted));
@@ -258,7 +241,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
   content: '';
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--clr, var(--text-muted));
 }
 .verdict-sub {
@@ -273,7 +256,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: 6px 0;
+  padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--border);
   font-size: var(--font-sm);
   color: var(--text-muted);
@@ -315,7 +298,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
 .matrix .matrix-cell {
   text-align: center;
   height: 36px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 .matrix .matrix-cell.filled {
   background: color-mix(in srgb, var(--text) var(--shade, 0%), transparent);
@@ -335,7 +318,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
   content: '';
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--clr, var(--text-muted));
 }
 
@@ -356,7 +339,7 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
   grid-template-columns: minmax(0, var(--label-w, 6.5rem)) minmax(0, 1fr) var(--count-w, 3rem);
   align-items: center;
   gap: var(--space-xs);
-  padding: 3px 6px;
+  padding: var(--space-3xs) var(--space-xs);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-decoration: none;
@@ -393,21 +376,24 @@ a.series-chip:hover { color: var(--text); text-decoration: none; }
 
 /* Slide-over — the IPs behind an aggregation row, without a page change. */
 tr[data-drawer-src] { cursor: pointer; }
+/* The row is a control for a keyboard too, and the reader has to see which one
+   Enter will open. Inset, so the table's own scroller does not clip it. */
+tr[data-drawer-src]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: var(--z-drawer-backdrop);
   background: color-mix(in srgb, var(--mix-anchor) 45%, transparent);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s;
+  transition: opacity var(--dur-fast);
 }
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
 .drawer {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 41;
+  z-index: var(--z-drawer);
   width: min(46rem, 92vw);
   height: 100vh;
   overflow-y: auto;
@@ -416,7 +402,7 @@ tr[data-drawer-src] { cursor: pointer; }
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow);
   transform: translateX(100%);
-  transition: transform 0.18s ease;
+  transition: transform var(--dur-base) var(--ease-std);
 }
 .drawer.open { transform: translateX(0); }
 .drawer-head {
@@ -437,7 +423,7 @@ tr[data-drawer-src] { cursor: pointer; }
   color: var(--text-muted);
   font-size: var(--font-base);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--space-2xs);
 }
 .drawer-close:hover { color: var(--text); }
 .drawer-loading { color: var(--text-muted); font-size: var(--font-sm); }
@@ -475,7 +461,7 @@ tr[data-drawer-src] { cursor: pointer; }
 /* Heat legend: the shade ramp with its two ends named, since the cells carry a
    count rather than a category. */
 .heat-scale { display: flex; gap: 2px; margin: 2px 0 4px; }
-.heat-step { display: block; width: 22px; height: 10px; border-radius: 2px; }
+.heat-step { display: block; width: 22px; height: 10px; border-radius: var(--radius-xs); }
 .heat-scale-ends {
   display: flex;
   justify-content: space-between;
@@ -486,18 +472,18 @@ tr[data-drawer-src] { cursor: pointer; }
 .ldot {
   display: inline-block;
   width: 10px; height: 10px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   margin-right: 6px;
   vertical-align: middle;
 }
 .mcluster {
   background: var(--bg-card);
   border: 2px solid;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text);
   box-shadow: var(--halo-shadow);

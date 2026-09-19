@@ -155,15 +155,20 @@ def get_earliest_day(conn: sqlite3.Connection) -> str | None:
     return row[0] if row else None
 
 
-def stream_visits_for_export(
+def get_export_page(
     conn: sqlite3.Connection,
     from_date: str | None = None,
     to_date: str | None = None,
-) -> Iterator[dict]:
-    """Yield all visits (joined with ip_intel geo data) for export, newest first.
+    after: tuple[str, int] | None = None,
+    limit: int = 1000,
+) -> list[dict]:
+    """One page of the export, newest first, continuing after `(timestamp, id)`.
 
-    Fetches in chunks of 1000 to avoid materializing the entire result set.
-    Dates are inclusive YYYY-MM-DD bounds; to_date covers the full day.
+    Keyset rather than one open cursor, so a caller can take each page on its
+    own short connection. The export streams through the thread pool one row at
+    a time, and a cursor held across those steps is used from whichever worker
+    thread takes the next one — which SQLite refuses. The id breaks ties, so no
+    row is repeated or skipped at a page boundary between equal timestamps.
     """
     query = """
         SELECT v.*, i.country, i.country_code, i.city, i.isp,
@@ -179,12 +184,26 @@ def stream_visits_for_export(
     if to_date:
         query += " AND v.timestamp < date(substr(?, 1, 10), '+1 day')"
         params.append(to_date)
-    query += " ORDER BY v.timestamp DESC"
+    if after is not None:
+        query += " AND (v.timestamp < ? OR (v.timestamp = ? AND v.id < ?))"
+        params.extend([after[0], after[0], after[1]])
+    query += " ORDER BY v.timestamp DESC, v.id DESC LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in conn.execute(query, params).fetchall()]
 
-    cursor = conn.execute(query, params)
-    while True:
-        rows = cursor.fetchmany(1000)
-        if not rows:
-            break
-        for row in rows:
-            yield dict(row)
+
+def stream_visits_for_export(
+    conn: sqlite3.Connection,
+    from_date: str | None = None,
+    to_date: str | None = None,
+) -> Iterator[dict]:
+    """Yield all visits for export, newest first, on one connection.
+
+    For a caller that consumes it on a single thread. The /api/export route does
+    not — it streams through the thread pool — and pages with get_export_page on
+    a fresh connection per page instead. Both read the same query.
+    """
+    after = None
+    while page := get_export_page(conn, from_date, to_date, after):
+        yield from page
+        after = (page[-1]["timestamp"], page[-1]["id"])

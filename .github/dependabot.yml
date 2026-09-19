@@ -5,14 +5,26 @@
 # (scripts/lock_requirements.sh --upgrade), and CI requires the two to agree.
 version: 2
 updates:
-  # The base image digest in deploy/Dockerfile.
+  # The base image digest in deploy/Dockerfile — the digest, not the version.
+  # The project requires Python 3.12 and runtime.lock is resolved for it, so a
+  # move to 3.14-slim is a migration with a relock and a test run, not an update
+  # to accept from a pull request. It was the first one this file produced.
   - package-ecosystem: docker
     directory: /deploy
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
-  # The actions in .github/workflows, pinned by commit SHA.
+  # The actions in .github/workflows, pinned by commit SHA. Patch and minor
+  # releases only: a major version can change inputs or defaults, and the image
+  # actions run only in the public repository, so a bump to them cannot be
+  # tested here before it is merged.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

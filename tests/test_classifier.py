@@ -1230,6 +1230,33 @@ def test_explain_classification_reports_decision_and_context(tmp_db):
     assert all(e["decisive"] is False for e in ev[1:])
 
 
+def test_explain_classification_names_every_signal_it_can_see(tmp_db):
+    """The context lines for Tor, proxy, Shodan and the redirect share had no test,
+    so any of them could have stopped rendering on the detail page with the suite
+    green. Each is asserted by what a reader would look for."""
+    from src.queries import explain_classification
+
+    with get_conn(tmp_db) as conn:
+        _visit(conn, "45.1.1.2", path="/", status=200)
+        _visit(conn, "45.1.1.2", path="/about", status=301, server_port=80)
+        _intel(
+            conn,
+            "45.1.1.2",
+            is_tor=1,
+            is_proxy=1,
+            tags="scanner",
+            open_ports="22,443",
+            vulns="CVE-2021-44228",
+        )
+    with get_conn(tmp_db) as conn:
+        rest = " | ".join(e["text"] for e in explain_classification(conn, "45.1.1.2")[1:])
+
+    assert "Tor exit node" in rest
+    assert "proxy or VPN" in rest
+    assert "Shodan tags: scanner, 2 open ports, 1 known CVE" in rest
+    assert "1 of those never got past the HTTP→HTTPS redirect" in rest
+
+
 def test_explain_classification_unknown_ip_is_empty(tmp_db):
     from src.queries import explain_classification
 

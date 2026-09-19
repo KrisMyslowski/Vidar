@@ -29,7 +29,7 @@ describe('actions.js — the behaviours that used to be inline handlers', () => 
     });
 
     it('ignores clicks on buttons that do not carry the attribute', () => {
-      document.body.innerHTML = '<button class="btn-refresh">Not me</button>';
+      document.body.innerHTML = '<button class="btn">Not me</button>';
       const reload = vi.fn();
       Object.defineProperty(window, 'location', {
         value: { reload }, writable: true, configurable: true,

@@ -5,8 +5,9 @@ is the wrong place: Deployment and Data Reference are wanted while operating the
 service, through the tunnel, not while browsing a repository.
 
 They ship in the image. deploy/Dockerfile copies docs/ next to src/, and
-.dockerignore keeps only docs/img/ out — no .md references an image, and the
-screenshots are for the README.
+.dockerignore keeps only docs/img/ out — the screenshots are for the README. The
+diagrams under docs/diagrams/ do ship: architecture.md embeds them, and
+/docs/diagrams/<name>.svg serves them to the page.
 
 Nothing here touches the database.
 """
@@ -18,7 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from markdown_it import MarkdownIt
 
 from ._app import templates
@@ -30,6 +31,7 @@ router = APIRouter()
 DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs"
 
 ORDER_FILE = ".order"
+DIAGRAMS_DIR = DOCS_DIR / "diagrams"
 
 # ── Rendering ────────────────────────────────────────────────────────────────
 # html=False is the point of this renderer and has to be asked for: the
@@ -58,6 +60,32 @@ def _link_open(self, tokens, idx, options, env):
 
 
 _md.add_render_rule("link_open", _link_open)
+
+
+def _image(self, tokens, idx, options, env):
+    """Serve a diagram from the route, and let it scale down to the column.
+
+    The documents embed `![…](diagrams/<name>.svg)`, relative so GitHub renders
+    it too. Relative also works here by accident of the URL shape (/docs/<slug>
+    sits one level up from /docs/diagrams/), so the rewrite is to an absolute
+    path — a document moving under a deeper URL must not lose its pictures.
+    """
+    token = tokens[idx]
+    src = token.attrGet("src") or ""
+    match = re.fullmatch(r"diagrams/([A-Za-z0-9_-]+\.svg)", src)
+    if not match:
+        return self.image(tokens, idx, options, env)
+    url = f"/docs/diagrams/{match.group(1)}"
+    token.attrSet("src", url)
+    token.attrSet("class", "doc-diagram")
+    token.attrSet("loading", "lazy")
+    # Scaled to the column a diagram can be too small to read; the picture itself
+    # is the link to it at full size. The name matched the pattern above, so it
+    # needs no escaping.
+    return f'<a href="{url}" class="doc-diagram-link">{self.image(tokens, idx, options, env)}</a>'
+
+
+_md.add_render_rule("image", _image)
 
 
 def _slug(text: str) -> str:
@@ -152,6 +180,28 @@ async def docs_index():
     if not documents:
         raise HTTPException(status_code=404, detail="No documentation is installed")
     return RedirectResponse(url=f"/docs/{documents[0][0]}", status_code=301)
+
+
+@lru_cache(maxsize=1)
+def _diagrams() -> frozenset[str]:
+    """The SVG filenames actually shipped — the only names the route will open."""
+    if not DIAGRAMS_DIR.is_dir():
+        return frozenset()
+    return frozenset(p.name for p in DIAGRAMS_DIR.glob("*.svg") if p.is_file())
+
+
+@router.get("/docs/diagrams/{name}")
+async def docs_diagram(name: str):
+    """One diagram, for an <img> in a rendered document.
+
+    Same membership test as docs_page: the name is looked up among the files on
+    disk before a path is built from it. The files are hand-checked and carry no
+    script, and the security middleware's CSP applies to this response like any
+    other.
+    """
+    if name not in _diagrams():
+        raise HTTPException(status_code=404, detail="No such diagram")
+    return FileResponse(DIAGRAMS_DIR / name, media_type="image/svg+xml")
 
 
 @router.get("/docs/{slug}")

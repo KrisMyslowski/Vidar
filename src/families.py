@@ -26,6 +26,7 @@ The check is always a command the reader can run against their own site, because
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Iterable
 from typing import NamedTuple
 
@@ -61,8 +62,9 @@ class Family(NamedTuple):
 # nginx. They come back if a second log format ever does.
 _DENY_DOTFILES: tuple[tuple[str, str], ...] = (("nginx", "location ~ /\\. {\n    deny all;\n}"),)
 
-# The literal `{path}` in a check is replaced with the path that was found, so a
-# reader can paste the command rather than adapt it.
+# The literal `{url}` in a check is replaced with the URL that was found, quoted
+# as one shell word (see _url), so a reader can paste the command rather than
+# adapt it.
 FAMILIES: tuple[tuple[str, Family], ...] = (
     (
         r"(^|/)\.ds_store$|(^|/)thumbs\.db$|(^|/)desktop\.ini$",
@@ -77,7 +79,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "It lists the names of every file in its directory, including the ones not "
                 "linked from anywhere. That turns a guess into a directory listing."
             ),
-            check="curl -sI https://{host}{path}",
+            check="curl -sI {url}",
             fix=(
                 "Delete it from the document root and stop it being uploaded again — that is "
                 "usually rsync or an FTP client carrying the whole folder. Then refuse "
@@ -101,7 +103,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "read .git/config can usually reconstruct the source, and history often "
                 "contains credentials that were removed from the current files."
             ),
-            check="curl -s https://{host}{path} | head",
+            check="curl -s {url} | head",
             fix=(
                 "Do not deploy the repository. Build or copy the files rather than syncing the "
                 "working tree, then deny dotfiles in the server config. If it was reachable, "
@@ -125,7 +127,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "deployment .env and its variants were asked for 9 360 times in three months, "
                 "by machines, continuously."
             ),
-            check="curl -s https://{host}{path}",
+            check="curl -s {url}",
             fix=(
                 "Move it out of the document root entirely — an environment file belongs beside "
                 "the application, not under it. Then rotate every credential it contained. A "
@@ -152,7 +154,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "The live file is protected by being interpreted; the copy is not. A .bak of a "
                 "configuration file hands out exactly what the original was hiding."
             ),
-            check="curl -s https://{host}{path} | head",
+            check="curl -s {url} | head",
             fix=(
                 "Delete it, and keep backups outside the document root. Add the suffixes to "
                 "the server's deny rules so the next one is refused rather than served."
@@ -174,7 +176,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "These describe the shape of the deployment: internal hostnames, ports, service "
                 "names, sometimes credentials. It is reconnaissance handed over for free."
             ),
-            check="curl -s https://{host}{path} | head -20",
+            check="curl -s {url} | head -20",
             fix=(
                 "Keep deployment configuration out of the document root. If it must live there, "
                 "deny the extension explicitly — serving .yml as text is the default in most "
@@ -193,7 +195,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "damage assessment short of assuming it was taken. A private key is not a "
                 "password: rotating it means replacing every place that trusts it."
             ),
-            check="curl -sI https://{host}{path}",
+            check="curl -sI {url}",
             fix=(
                 "Remove it, then rotate the key or credential — not because a fetch is proven, "
                 "but because it cannot be disproven. Then find out how it got there; a key in "
@@ -215,7 +217,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "Individually minor, collectively a map of how the site is built and deployed — "
                 "and .npmrc and .htpasswd carry credentials outright."
             ),
-            check="curl -sI https://{host}{path}",
+            check="curl -sI {url}",
             fix=(
                 "One deny rule covers all of these. The underlying cause is usually the same "
                 "too: a deployment that copies a working directory instead of a build output."
@@ -235,7 +237,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "visitors, which makes serving them a data protection question and not only a "
                 "security one."
             ),
-            check="curl -s https://{host}{path} | tail -5",
+            check="curl -s {url} | tail -5",
             fix=(
                 "Move logs out of the document root. If a log must be readable remotely, put it "
                 "behind authentication rather than behind an unguessable name."
@@ -255,7 +257,7 @@ FAMILIES: tuple[tuple[str, Family], ...] = (
                 "It hands over versions, module lists, absolute paths and environment "
                 "variables. It is the page an attacker reads before choosing an exploit."
             ),
-            check="curl -sI https://{host}{path}",
+            check="curl -sI {url}",
             fix=(
                 "Delete it. There is no configuration that makes a diagnostic page safe to "
                 "leave in place, and 'nobody knows the URL' is not one either — every path in "
@@ -320,16 +322,27 @@ def explain_paths(paths: Iterable[str], host: str) -> list[Explained]:
         Explained(
             families[key],
             covered,
-            [families[key].check.format(host=host, path=path) for path in covered],
+            [families[key].check.format(url=_url(host, path)) for path in covered],
         )
         for key, covered in grouped.items()
     ]
 
 
+def _url(host: str, path: str) -> str:
+    """The finding's URL as one shell word, for a command meant to be pasted.
+
+    The path is whatever a stranger asked for, and on a site that answers every
+    path with 200 it reaches the findings unchanged — `/x;$(…)` included. Pasted
+    unquoted, that runs on the operator's own machine. shlex.quote leaves an
+    ordinary path such as /.DS_Store as it is and single-quotes anything else.
+    """
+    return shlex.quote(f"https://{host}{path}")
+
+
 # Headers only. A finding is by definition something already handed to strangers,
 # so fetching it changes nothing — but a command that prints a database dump into
 # somebody's terminal is still the wrong default.
-_GENERIC_CHECK = "curl -sI https://{host}{path}"
+_GENERIC_CHECK = "curl -sI {url}"
 
 
 def unexplained_paths(paths: Iterable[str], host: str) -> list[tuple[str, str]]:
@@ -346,7 +359,7 @@ def unexplained_paths(paths: Iterable[str], host: str) -> list[tuple[str, str]]:
     real ones too.
     """
     return [
-        (path, _GENERIC_CHECK.format(host=host, path=path))
+        (path, _GENERIC_CHECK.format(url=_url(host, path)))
         for path in paths
         if family_for(path) is None
     ]

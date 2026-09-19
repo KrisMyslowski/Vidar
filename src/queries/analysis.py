@@ -87,7 +87,9 @@ def get_geo_data(
     )
     marker_query, marker_params = _apply_seen_filter(marker_query, marker_params, seen, date_from)
     # Same search the table applies, so panning the map shows the same selection.
-    marker_query, marker_params = _apply_visitor_search(marker_query, marker_params, q)
+    marker_query, marker_params = _apply_visitor_search(
+        marker_query, marker_params, q, date_from, date_to
+    )
     marker_query += " GROUP BY i.ip"
     if min_visits > 0:
         marker_query += f" HAVING COUNT(v.id) >= {int(min_visits)}"
@@ -225,7 +227,7 @@ def _timeline(
     query, params = _apply_signal_filter(query, params, signal_filter)
     # Search selects visitors, so the chart shows those visitors' activity over
     # time — the same selection the table and the map show.
-    query, params = _apply_visitor_search(query, params, q)
+    query, params = _apply_visitor_search(query, params, q, since, until)
     query, params = _apply_seen_filter(query, params, seen, since)
     # A copy: both charts are handed the same dict, and popping min_visits out
     # of the caller's would leave the second one unfiltered by it.
@@ -337,7 +339,7 @@ def get_hourly_heatmap(
     query = "WHERE 1=1" + ("".join(f" AND {c}" for c in conditions))
     query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
-    query, params = _apply_visitor_search(query, params, q)
+    query, params = _apply_visitor_search(query, params, q, since, until)
     query, params = _apply_seen_filter(query, params, seen, since)
     drill = dict(drill or {})
     min_visits = drill.pop("min_visits", 0)

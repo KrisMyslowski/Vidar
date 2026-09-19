@@ -100,7 +100,7 @@
 #}
 {%- macro sortable_th(col, label, tip, sort, order, suffix_params='', default_order='DESC', col_key='', w='', base='', pfx='') -%}
 {% if sort == col %}{% if order == 'ASC' %}{% set next_order = 'DESC' %}{% else %}{% set next_order = 'ASC' %}{% endif %}{% else %}{% set next_order = default_order %}{% endif %}
-<th{% if col_key %} data-col="{{ col_key }}"{% endif %} class="{{ w }}{% if sort == col and order == 'ASC' %} sort-asc{% elif sort == col and order == 'DESC' %} sort-desc{% endif %}"><a{% if tip %} class="label-help"{% endif %}{{ tip_attrs(tip) }} href="{{ base }}?{% if not pfx %}page=1&{% endif %}{{ pfx }}sort={{ col }}&{{ pfx }}order={{ next_order }}{{ suffix_params }}">{{ label }}</a></th>
+<th{% if col_key %} data-col="{{ col_key }}"{% endif %} class="{{ w }}{% if sort == col and order == 'ASC' %} sort-asc{% elif sort == col and order == 'DESC' %} sort-desc{% endif %}"{% if sort == col %} aria-sort="{{ 'ascending' if order == 'ASC' else 'descending' }}"{% endif %}><a{% if tip %} class="label-help"{% endif %}{{ tip_attrs(tip) }} href="{{ base }}?{% if not pfx %}page=1&{% endif %}{{ pfx }}sort={{ col }}&{{ pfx }}order={{ next_order }}{{ suffix_params }}">{{ label }}</a></th>
 {%- endmacro -%}
 
 

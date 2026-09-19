@@ -279,6 +279,80 @@ class TestExportEndpoint:
             assert len(data) == 4
             assert all("ip" in v for v in data)
 
+    @pytest.mark.parametrize("fmt", ["json", "csv"])
+    def test_export_survives_each_chunk_on_a_different_thread(
+        self, client, tmp_db, fmt, monkeypatch
+    ):
+        """StreamingResponse pulls a sync generator through the thread pool, one
+        next() at a time, and nothing promises the same worker twice. The export
+        opened its SQLite connection inside the generator and used it across
+        yields — a connection may only be used on the thread that created it, so
+        a busy pool failed the download mid-stream. Here consecutive steps always
+        land on different threads, which is the worst the pool is allowed to do."""
+        import itertools
+        import queue
+        import threading
+        from unittest.mock import patch
+
+        import starlette.responses
+
+        from src.config import settings
+        from src.queries import insert_visit
+
+        threads = set()
+
+        class Worker(threading.Thread):
+            """A long-lived thread running one next() per request. Two alternate,
+            so consecutive steps land on different *live* threads: a thread that
+            has exited can pass its ident on, and SQLite's same-thread check
+            compares idents."""
+
+            def __init__(self):
+                super().__init__(daemon=True)
+                self.jobs, self.results = queue.Queue(), queue.Queue()
+                self.start()
+
+            def run(self):
+                threads.add(threading.get_ident())
+                while (iterator := self.jobs.get()) is not None:
+                    try:
+                        self.results.put(("ok", next(iterator, StopIteration)))
+                    except BaseException as exc:  # noqa: BLE001 — re-raised by the caller
+                        self.results.put(("err", exc))
+
+        async def alternate_threads(iterator):
+            pair = (Worker(), Worker())
+            try:
+                for turn in itertools.count():
+                    worker = pair[turn % 2]
+                    worker.jobs.put(iterator)
+                    kind, value = worker.results.get()
+                    if kind == "err":
+                        raise value
+                    if value is StopIteration:
+                        return
+                    yield value
+            finally:
+                for worker in pair:
+                    worker.jobs.put(None)
+
+        monkeypatch.setattr(starlette.responses, "iterate_in_threadpool", alternate_threads)
+        now = datetime.now(timezone.utc).isoformat()
+        with get_conn(tmp_db) as conn:
+            for n in range(2500):
+                insert_visit(conn, ip=f"203.0.113.{n % 250}", timestamp=now, path=f"/p{n}")
+        with patch.object(settings, "db_path", tmp_db):
+            response = client.get(f"/api/export?format={fmt}")
+
+        assert len(threads) == 2, "the stream was not driven through the patched iterator"
+        assert response.status_code == 200
+        if fmt == "json":
+            rows = json.loads(response.text)
+        else:
+            rows = list(csv.DictReader(io.StringIO(response.text)))
+        assert len(rows) == 2500
+        assert len({r["path"] for r in rows}) == 2500, "no row twice, none missing"
+
     def test_export_csv_empty(self, client, tmp_db):
         """Empty export as CSV."""
         from unittest.mock import patch

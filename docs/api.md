@@ -205,6 +205,7 @@ HTML, not JSON. Listed so the URL surface is documented in one place.
 | `GET /settings/storage` | Retention mode, archives, snapshots |
 | `GET /settings/api` | This endpoint list, in the UI |
 | `GET /docs`, `GET /docs/{slug}` | These documents, rendered |
+| `GET /docs/diagrams/{name}` | A diagram embedded by those documents (`image/svg+xml`); only files present in `docs/diagrams/` |
 
 The Storage page posts its actions back to these. They are form targets rather than an API —
 no JSON, and each redirects to `/settings/storage` — but four of them destroy data, so they

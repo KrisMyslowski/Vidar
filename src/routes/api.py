@@ -32,10 +32,10 @@ from ..queries import (
     count_visits,
     get_activity_timeline,
     get_decisions,
+    get_export_page,
     get_stats,
     get_visitor_timeline,
     get_visits,
-    stream_visits_for_export,
     valid_selection,
 )
 from ..taxonomy import VALID_CLASSES, VALID_GROUPS, VALID_SIGNALS
@@ -210,13 +210,25 @@ async def export(
     to_date = valid_date(to_date)
 
     def row_generator():
-        """Stream rows while keeping the connection open for the response lifetime.
+        """Stream rows, a page at a time, each page on its own connection.
 
         Deliberately synchronous: StreamingResponse iterates a sync generator in
-        a threadpool, so this already stays off the event loop.
+        the thread pool, so this stays off the event loop. But it does so one
+        next() at a time, and each may run on a different worker thread. The
+        connection used to stay open across the yields, and SQLite refuses a
+        connection on any thread but its own — the download failed mid-stream
+        whenever the pool handed a step to another worker. Every connection now
+        opens and closes between two yields, so it lives and dies on one thread,
+        and an abandoned download holds nothing open.
         """
-        with get_conn() as conn:
-            yield from stream_visits_for_export(conn, from_date, to_date)
+        after = None
+        while True:
+            with get_conn() as conn:
+                page = get_export_page(conn, from_date, to_date, after)
+            if not page:
+                return
+            yield from page
+            after = (page[-1]["timestamp"], page[-1]["id"])
 
     if format == "csv":
 

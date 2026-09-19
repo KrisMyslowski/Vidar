@@ -175,12 +175,12 @@ table.sortable th:hover { color: var(--text); }
 table.sortable:not(.server-sort) th:not(.sort-asc):not(.sort-desc)::after,
 table.sortable.server-sort th:not(.sort-asc):not(.sort-desc):has(a)::after {
   content: ' ↕';
-  font-size: 0.6rem;
+  font-size: var(--font-xxs);
   color: color-mix(in srgb, var(--text-muted) 45%, transparent);
 }
 table.sortable th.sort-asc, table.sortable th.sort-desc { color: var(--text); }
-table.sortable th.sort-asc::after { content: ' ▲'; font-size: 0.6rem; }
-table.sortable th.sort-desc::after { content: ' ▼'; font-size: 0.6rem; }
+table.sortable th.sort-asc::after { content: ' ▲'; font-size: var(--font-xxs); }
+table.sortable th.sort-desc::after { content: ' ▼'; font-size: var(--font-xxs); }
 
 /* ── Badges ── */
 .badge {
@@ -192,14 +192,25 @@ table.sortable th.sort-desc::after { content: ' ▼'; font-size: 0.6rem; }
   margin-right: 2px;
   white-space: nowrap;
 }
-.badge-red    { background: color-mix(in srgb, var(--red)    20%, transparent); color: var(--red); }
-.badge-yellow { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
-.badge-blue   { background: color-mix(in srgb, var(--blue)   20%, transparent); color: var(--blue); }
-.badge-purple { background: color-mix(in srgb, var(--purple) 20%, transparent); color: var(--purple); }
+/* The hue lives in the tint and a hairline ring; the label is ink. Coloured
+   text on a tint of its own colour measured 2.91:1 (yellow), 3.13:1 (orange)
+   and 3.71:1 (teal) in light mode before the tint took its share — under 4.5:1
+   for 0.7rem text. The ring is an inset shadow, not a border, so no badge
+   changes size and no column width moves. */
+.badge-red, .badge-yellow, .badge-blue, .badge-purple,
+.badge-green, .badge-teal, .badge-orange {
+  color: var(--text);
+  background: color-mix(in srgb, var(--clr) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--clr) 60%, transparent);
+}
+.badge-red    { --clr: var(--red); }
+.badge-yellow { --clr: var(--yellow); }
+.badge-blue   { --clr: var(--blue); }
+.badge-purple { --clr: var(--purple); }
+.badge-green  { --clr: var(--green); }
+.badge-teal   { --clr: var(--teal); }
+.badge-orange { --clr: var(--orange); }
 .badge-muted  { background: color-mix(in srgb, var(--text)    8%, transparent); color: var(--text-muted); font-weight: 500; }
-.badge-green  { background: color-mix(in srgb, var(--green)  20%, transparent); color: var(--green); }
-.badge-teal   { background: color-mix(in srgb, var(--teal)   20%, transparent); color: var(--teal); }
-.badge-orange { background: color-mix(in srgb, var(--orange) 20%, transparent); color: var(--orange); }
 .badge.label-help { border-bottom: none; cursor: help; }
 /* Table headers stay visually uniform: no dotted hover-underline on any <th>
    tooltip (sortable or not). The tooltip still opens on hover (cursor:help),
@@ -219,7 +230,7 @@ th a.label-help { cursor: pointer; }
   align-items: center;
   gap: var(--space-md);
   margin-top: var(--space-md);
-  font-size: 0.85rem;
+  font-size: var(--font-ui);
 }
 .pagination a { color: var(--accent); text-decoration: none; }
 .pagination a:hover { text-decoration: underline; }

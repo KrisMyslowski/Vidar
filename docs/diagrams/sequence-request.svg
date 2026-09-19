@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-sequence-request" viewBox="0 0 1000 1556" width="1000" height="1556" role="img" aria-labelledby="vidar-sequence-request-title vidar-sequence-request-desc">
+<title id="vidar-sequence-request-title">Vidar request sequence</title>
+<desc id="vidar-sequence-request-desc">UML sequence: a dashboard GET through the middleware stack, the aggregate cache and Jinja rendering.</desc>
+<style>
+.vidar-sequence-request text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-sequence-request .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-request .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-request .sb { font-weight: 600; }
+.vidar-sequence-request .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-request .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-request .st { fill: #59636e; }
+.vidar-sequence-request .it { font-style: italic; }
+.vidar-sequence-request .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-sequence-request .ko { fill: #ffffff; }
+.vidar-sequence-request .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-sequence-request .hdr { fill: #eaeef2; }
+.vidar-sequence-request .tbl { fill: #d6efea; }
+.vidar-sequence-request .cls { fill: #dce7f7; }
+.vidar-sequence-request .ext { fill: #f5e6c8; }
+.vidar-sequence-request .proc { fill: #e7e0f6; }
+.vidar-sequence-request .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-request .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-request .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-sequence-request .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-request .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-request .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-sequence-request .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-request .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-request .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-request .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-request .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-request .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-request .dot { fill: #59636e; }
+.vidar-sequence-request .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-sequence-request text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-sequence-request .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-request .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-request .sb { font-weight: 600; }
+.vidar-sequence-request .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-request .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-request .st { fill: #9198a1; }
+.vidar-sequence-request .it { font-style: italic; }
+.vidar-sequence-request .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-sequence-request .ko { fill: #0d1117; }
+.vidar-sequence-request .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-sequence-request .hdr { fill: #212830; }
+.vidar-sequence-request .tbl { fill: #12332e; }
+.vidar-sequence-request .cls { fill: #1a2940; }
+.vidar-sequence-request .ext { fill: #3a2d13; }
+.vidar-sequence-request .proc { fill: #2a2342; }
+.vidar-sequence-request .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-request .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-request .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-sequence-request .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-request .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-request .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-sequence-request .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-request .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-request .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-request .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-request .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-request .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-request .dot { fill: #9198a1; }
+.vidar-sequence-request .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-sequence-request-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-sequence-request-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-sequence-request-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-sequence-request-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="999" height="1555" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — a dashboard request (GET /)</text>
+<text x="30" y="70" class="st" xml:space="preserve">Middleware runs outermost first. Route handlers read the database only inside _cache.fetch,</text>
+<text x="30" y="90" class="st" xml:space="preserve">which moves the work to a worker thread with its own connection.</text>
+<rect class="box hdr" x="22.5" y="126" width="95" height="52"/>
+<text x="70" y="147" class="st" text-anchor="middle" xml:space="preserve">«external»</text>
+<text x="70" y="168" class="mb" text-anchor="middle" xml:space="preserve">Browser</text>
+<path class="life" d="M70,178 L70,1336"/>
+<rect class="box hdr" x="133.8" y="126" width="132.5" height="52"/>
+<text x="200" y="147" class="st" text-anchor="middle" xml:space="preserve">«middleware» ×4</text>
+<text x="200" y="168" class="mb" text-anchor="middle" xml:space="preserve">main.py</text>
+<path class="life" d="M200,178 L200,1336"/>
+<rect class="box hdr" x="292.8" y="126" width="104.5" height="52"/>
+<text x="345" y="147" class="st" text-anchor="middle" xml:space="preserve">«route»</text>
+<text x="345" y="168" class="mb" text-anchor="middle" xml:space="preserve">overview()</text>
+<path class="life" d="M345,178 L345,1336"/>
+<rect class="box hdr" x="431.6" y="126" width="146.8" height="52"/>
+<text x="505" y="147" class="st" text-anchor="middle" xml:space="preserve">«component»</text>
+<text x="505" y="168" class="mb" text-anchor="middle" xml:space="preserve">Jinja2Templates</text>
+<path class="life" d="M505,178 L505,1336"/>
+<rect class="box hdr" x="600.1" y="126" width="129.8" height="52"/>
+<text x="665" y="147" class="st" text-anchor="middle" xml:space="preserve">«thread»</text>
+<text x="665" y="168" class="mb" text-anchor="middle" xml:space="preserve">worker thread</text>
+<path class="life" d="M665,178 L665,1336"/>
+<rect class="box hdr" x="748.8" y="126" width="102.5" height="52"/>
+<text x="800" y="147" class="st" text-anchor="middle" xml:space="preserve">«component»</text>
+<text x="800" y="168" class="mb" text-anchor="middle" xml:space="preserve">queries</text>
+<path class="life" d="M800,178 L800,1336"/>
+<rect class="box hdr" x="877.5" y="126" width="95" height="52"/>
+<text x="925" y="147" class="st" text-anchor="middle" xml:space="preserve">«artifact»</text>
+<text x="925" y="168" class="mb" text-anchor="middle" xml:space="preserve">SQLite</text>
+<path class="life" d="M925,178 L925,1336"/>
+<rect class="act" x="196" y="225" width="8" height="16"/>
+<path class="ln" d="M74,228 L195,228" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="78" y="204" width="219.9" height="20"/>
+<text x="82" y="219" class="m" xml:space="preserve">GET /  Host: localhost:8080</text>
+<rect class="act" x="196" y="246" width="8" height="26"/>
+<path class="ln" d="M204,250 L236,250 L236,268 L205,268" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="242" y="249" width="172.8" height="20"/>
+<text x="246" y="264" class="m" xml:space="preserve">refuse_unknown_hosts:</text>
+<rect class="ko" x="242" y="269" width="329.8" height="20"/>
+<text x="246" y="284" class="m" xml:space="preserve">  host must be in ALLOWED_HOSTS, else 400</text>
+<rect class="act" x="196" y="316" width="8" height="26"/>
+<path class="ln" d="M204,320 L236,320 L236,338 L205,338" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="242" y="319" width="212.1" height="20"/>
+<text x="246" y="334" class="m" xml:space="preserve">block_cross_origin_writes:</text>
+<rect class="ko" x="242" y="339" width="212.1" height="20"/>
+<text x="246" y="354" class="m" xml:space="preserve">  GET is not a write, pass</text>
+<rect class="act" x="196" y="386" width="8" height="26"/>
+<path class="ln" d="M204,390 L236,390 L236,408 L205,408" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="242" y="389" width="141.4" height="20"/>
+<text x="246" y="404" class="m" xml:space="preserve">security_headers:</text>
+<rect class="ko" x="242" y="409" width="361.2" height="20"/>
+<text x="246" y="424" class="m" xml:space="preserve">  request.state.csp_nonce = token_urlsafe(16)</text>
+<rect class="act" x="196" y="456" width="8" height="26"/>
+<path class="ln" d="M204,460 L236,460 L236,478 L205,478" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="242" y="459" width="149.3" height="20"/>
+<text x="246" y="474" class="m" xml:space="preserve">rate_limit_export:</text>
+<rect class="ko" x="242" y="479" width="290.6" height="20"/>
+<text x="246" y="494" class="m" xml:space="preserve">  path is not /api/export, call_next</text>
+<rect class="act" x="341" y="547" width="8" height="16"/>
+<path class="ln" d="M204,550 L340,550" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="208" y="526" width="165" height="20"/>
+<text x="212" y="541" class="m" xml:space="preserve">overview(request, …)</text>
+<rect class="act" x="661" y="609" width="8" height="16"/>
+<path class="ln" d="M349,612 L660,612" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="353" y="568" width="204.2" height="20"/>
+<text x="357" y="583" class="m" xml:space="preserve">await _cache.fetch(_load)</text>
+<rect class="ko" x="353" y="588" width="267.1" height="20"/>
+<text x="357" y="603" class="m" xml:space="preserve">asyncio.to_thread, own get_conn()</text>
+<rect class="act" x="796" y="671" width="8" height="16"/>
+<path class="ln" d="M669,674 L795,674" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="673" y="630" width="212.1" height="20"/>
+<text x="677" y="645" class="m" xml:space="preserve">get_stats · get_daily_kpis</text>
+<rect class="ko" x="673" y="650" width="290.6" height="20"/>
+<text x="677" y="665" class="m" xml:space="preserve">(60 s cache) · get_visitor_ip_counts</text>
+<rect class="act" x="921" y="713" width="8" height="16"/>
+<path class="ln" d="M804,716 L920,716" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="808" y="692" width="70.8" height="20"/>
+<text x="812" y="707" class="m" xml:space="preserve">SELECT …</text>
+<path class="ln dash" d="M661,758 L350,758" marker-end="url(#vidar-sequence-request-open)"/>
+<rect class="ko" x="353" y="734" width="259.2" height="20"/>
+<text x="357" y="749" class="m" xml:space="preserve">stats, kpis, counts, prev_visits</text>
+<rect class="act" x="661" y="797" width="8" height="16"/>
+<path class="ln" d="M349,800 L660,800" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="353" y="776" width="329.8" height="20"/>
+<text x="357" y="791" class="m" xml:space="preserve">await asyncio.to_thread(_attention_items)</text>
+<path class="ln dash" d="M661,842 L350,842" marker-end="url(#vidar-sequence-request-open)"/>
+<rect class="ko" x="353" y="818" width="78.6" height="20"/>
+<text x="357" y="833" class="m" xml:space="preserve">attention</text>
+<rect class="act" x="501" y="901" width="8" height="16"/>
+<path class="ln" d="M349,904 L500,904" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="353" y="860" width="204.2" height="20"/>
+<text x="357" y="875" class="m" xml:space="preserve">TemplateResponse(request,</text>
+<rect class="ko" x="353" y="880" width="172.8" height="20"/>
+<text x="357" y="895" class="m" xml:space="preserve">'overview.html', ctx)</text>
+<rect class="act" x="501" y="922" width="8" height="26"/>
+<path class="ln" d="M509,926 L541,926 L541,944 L510,944" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="547" y="925" width="267.1" height="20"/>
+<text x="551" y="940" class="m" xml:space="preserve">render base.html: inline &lt;script&gt;</text>
+<rect class="ko" x="547" y="945" width="251.3" height="20"/>
+<text x="551" y="960" class="m" xml:space="preserve">  gets request.state.csp_nonce;</text>
+<rect class="ko" x="547" y="965" width="290.6" height="20"/>
+<text x="551" y="980" class="m" xml:space="preserve">  attention_count(), earliest_date()</text>
+<rect class="ko" x="547" y="985" width="110" height="20"/>
+<text x="551" y="1000" class="m" xml:space="preserve">  read caches</text>
+<path class="ln dash" d="M501,1056 L350,1056" marker-end="url(#vidar-sequence-request-open)"/>
+<rect class="ko" x="353" y="1032" width="70.8" height="20"/>
+<text x="357" y="1047" class="m" xml:space="preserve">response</text>
+<rect class="act" x="341" y="1074" width="8" height="26"/>
+<path class="ln" d="M349,1078 L381,1078 L381,1096 L350,1096" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="387" y="1077" width="251.3" height="20"/>
+<text x="391" y="1092" class="m" xml:space="preserve">_remember_range(): range cookie</text>
+<path class="ln dash" d="M341,1152 L205,1152" marker-end="url(#vidar-sequence-request-open)"/>
+<rect class="ko" x="208" y="1128" width="70.8" height="20"/>
+<text x="212" y="1143" class="m" xml:space="preserve">response</text>
+<rect class="act" x="196" y="1170" width="8" height="26"/>
+<path class="ln" d="M204,1174 L236,1174 L236,1192 L205,1192" marker-end="url(#vidar-sequence-request-filled)"/>
+<rect class="ko" x="242" y="1173" width="243.5" height="20"/>
+<text x="246" y="1188" class="m" xml:space="preserve">security_headers adds nosniff,</text>
+<rect class="ko" x="242" y="1193" width="188.5" height="20"/>
+<text x="246" y="1208" class="m" xml:space="preserve">  X-Frame-Options DENY,</text>
+<rect class="ko" x="242" y="1213" width="243.5" height="20"/>
+<text x="246" y="1228" class="m" xml:space="preserve">  Referrer-Policy no-referrer,</text>
+<rect class="ko" x="242" y="1233" width="290.6" height="20"/>
+<text x="246" y="1248" class="m" xml:space="preserve">  Content-Security-Policy with nonce</text>
+<path class="ln dash" d="M196,1304 L75,1304" marker-end="url(#vidar-sequence-request-open)"/>
+<rect class="ko" x="78" y="1280" width="110" height="20"/>
+<text x="82" y="1295" class="m" xml:space="preserve">200 text/html</text>
+<rect class="note" x="30" y="1366" width="940" height="160" rx="6"/>
+<text x="46" y="1394" class="sb" xml:space="preserve">Notation</text>
+<path class="ln" d="M46,1420 L106,1420" marker-end="url(#vidar-sequence-request-filled)"/>
+<text x="122" y="1425" xml:space="preserve">call the caller waits for (awaited coroutine, or a blocking call in a thread)</text>
+<path class="ln" d="M46,1440 L106,1440" marker-end="url(#vidar-sequence-request-open)"/>
+<text x="122" y="1445" xml:space="preserve">asynchronous send: the caller does not wait for a reply</text>
+<path class="ln dash" d="M46,1460 L106,1460" marker-end="url(#vidar-sequence-request-open)"/>
+<text x="122" y="1465" xml:space="preserve">return</text>
+<text x="46" y="1485" xml:space="preserve">Writes (Settings POSTs) use _cache.write, which runs through db.run_db and then refreshes the caches.</text>
+<text x="46" y="1505" xml:space="preserve">Other pages follow the same shape with their own queries and template.</text>
+</svg>

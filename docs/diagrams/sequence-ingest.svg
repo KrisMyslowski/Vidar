@@ -1,0 +1,209 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-sequence-ingest" viewBox="0 0 1000 1540" width="1000" height="1540" role="img" aria-labelledby="vidar-sequence-ingest-title vidar-sequence-ingest-desc">
+<title id="vidar-sequence-ingest-title">Vidar ingestion sequence</title>
+<desc id="vidar-sequence-ingest-desc">UML sequence: a new nginx log line becomes a visits row and its IP is queued for enrichment.</desc>
+<style>
+.vidar-sequence-ingest text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-sequence-ingest .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-ingest .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-ingest .sb { font-weight: 600; }
+.vidar-sequence-ingest .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-ingest .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-ingest .st { fill: #59636e; }
+.vidar-sequence-ingest .it { font-style: italic; }
+.vidar-sequence-ingest .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-sequence-ingest .ko { fill: #ffffff; }
+.vidar-sequence-ingest .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-sequence-ingest .hdr { fill: #eaeef2; }
+.vidar-sequence-ingest .tbl { fill: #d6efea; }
+.vidar-sequence-ingest .cls { fill: #dce7f7; }
+.vidar-sequence-ingest .ext { fill: #f5e6c8; }
+.vidar-sequence-ingest .proc { fill: #e7e0f6; }
+.vidar-sequence-ingest .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-ingest .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-ingest .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-sequence-ingest .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-ingest .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-ingest .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-sequence-ingest .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-ingest .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-ingest .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-ingest .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-ingest .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-ingest .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-ingest .dot { fill: #59636e; }
+.vidar-sequence-ingest .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-sequence-ingest text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-sequence-ingest .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-ingest .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-ingest .sb { font-weight: 600; }
+.vidar-sequence-ingest .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-ingest .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-ingest .st { fill: #9198a1; }
+.vidar-sequence-ingest .it { font-style: italic; }
+.vidar-sequence-ingest .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-sequence-ingest .ko { fill: #0d1117; }
+.vidar-sequence-ingest .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-sequence-ingest .hdr { fill: #212830; }
+.vidar-sequence-ingest .tbl { fill: #12332e; }
+.vidar-sequence-ingest .cls { fill: #1a2940; }
+.vidar-sequence-ingest .ext { fill: #3a2d13; }
+.vidar-sequence-ingest .proc { fill: #2a2342; }
+.vidar-sequence-ingest .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-ingest .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-ingest .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-sequence-ingest .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-ingest .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-ingest .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-sequence-ingest .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-ingest .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-ingest .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-ingest .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-ingest .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-ingest .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-ingest .dot { fill: #9198a1; }
+.vidar-sequence-ingest .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-sequence-ingest-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-sequence-ingest-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-sequence-ingest-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-sequence-ingest-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="999" height="1539" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — ingestion: log line to visit</text>
+<text x="30" y="70" class="st" xml:space="preserve">tail_log() is an asyncio task; blocking SQLite work runs in a worker thread through db.run_db,</text>
+<text x="30" y="90" class="st" xml:space="preserve">so the event loop keeps serving while a batch is written.</text>
+<rect class="box hdr" x="37.5" y="126" width="95" height="52"/>
+<text x="85" y="147" class="st" text-anchor="middle" xml:space="preserve">«external»</text>
+<text x="85" y="168" class="mb" text-anchor="middle" xml:space="preserve">nginx</text>
+<path class="life" d="M85,178 L85,1320"/>
+<rect class="box hdr" x="162.8" y="126" width="104.5" height="52"/>
+<text x="215" y="147" class="st" text-anchor="middle" xml:space="preserve">«artifact»</text>
+<text x="215" y="168" class="mb" text-anchor="middle" xml:space="preserve">access.log</text>
+<path class="life" d="M215,178 L215,1320"/>
+<rect class="box hdr" x="287.5" y="126" width="125" height="52"/>
+<text x="350" y="147" class="st" text-anchor="middle" xml:space="preserve">«asyncio task»</text>
+<text x="350" y="168" class="mb" text-anchor="middle" xml:space="preserve">tail_log()</text>
+<path class="life" d="M350,178 L350,1320"/>
+<rect class="box hdr" x="428.8" y="126" width="132.5" height="52"/>
+<text x="495" y="147" class="st" text-anchor="middle" xml:space="preserve">«asyncio.Queue»</text>
+<text x="495" y="168" class="mb" text-anchor="middle" xml:space="preserve">new_ips_queue</text>
+<path class="life" d="M495,178 L495,1320"/>
+<rect class="box hdr" x="575.1" y="126" width="129.8" height="52"/>
+<text x="640" y="147" class="st" text-anchor="middle" xml:space="preserve">«thread»</text>
+<text x="640" y="168" class="mb" text-anchor="middle" xml:space="preserve">worker thread</text>
+<path class="life" d="M640,178 L640,1320"/>
+<rect class="box hdr" x="738.8" y="126" width="102.5" height="52"/>
+<text x="790" y="147" class="st" text-anchor="middle" xml:space="preserve">«component»</text>
+<text x="790" y="168" class="mb" text-anchor="middle" xml:space="preserve">queries</text>
+<path class="life" d="M790,178 L790,1320"/>
+<rect class="box hdr" x="877.5" y="126" width="95" height="52"/>
+<text x="925" y="147" class="st" text-anchor="middle" xml:space="preserve">«artifact»</text>
+<text x="925" y="168" class="mb" text-anchor="middle" xml:space="preserve">SQLite</text>
+<path class="life" d="M925,178 L925,1320"/>
+<rect class="sframe" x="590" y="510" width="385" height="362"/>
+<path class="box hdr" d="M590,510 L648,510 L648,524 L640,534 L590,534 Z"/>
+<text x="597" y="527" class="mb" xml:space="preserve">loop</text>
+<rect class="ko" x="654" y="512" width="94.3" height="20"/>
+<text x="658" y="527" class="m" xml:space="preserve">[each line]</text>
+<rect class="sframe" x="300" y="1148" width="390" height="110"/>
+<path class="box hdr" d="M300,1148 L349,1148 L349,1162 L341,1172 L300,1172 Z"/>
+<text x="307" y="1165" class="mb" xml:space="preserve">opt</text>
+<rect class="ko" x="355" y="1150" width="196.4" height="20"/>
+<text x="359" y="1165" class="m" xml:space="preserve">[IP not yet in seen_ips]</text>
+<rect class="sframe" x="23" y="214" width="964" height="1074"/>
+<path class="box hdr" d="M23,214 L81,214 L81,228 L73,238 L23,238 Z"/>
+<text x="30" y="231" class="mb" xml:space="preserve">loop</text>
+<rect class="ko" x="87" y="216" width="298.4" height="20"/>
+<text x="91" y="231" class="m" xml:space="preserve">[every POLL_INTERVAL_SECONDS (1.0 s)]</text>
+<path class="ln" d="M89,274 L210,274" marker-end="url(#vidar-sequence-ingest-open)"/>
+<rect class="ko" x="93" y="250" width="149.3" height="20"/>
+<text x="97" y="265" class="m" xml:space="preserve">append a JSON line</text>
+<rect class="act" x="211" y="333" width="8" height="16"/>
+<path class="ln" d="M346,336 L220,336" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="223" y="292" width="188.5" height="20"/>
+<text x="227" y="307" class="m" xml:space="preserve">_read_batch(fh, offset)</text>
+<rect class="ko" x="223" y="312" width="149.3" height="20"/>
+<text x="227" y="327" class="m" xml:space="preserve">reads at most 1 MB</text>
+<path class="ln dash" d="M219,378 L345,378" marker-end="url(#vidar-sequence-ingest-open)"/>
+<rect class="ko" x="223" y="354" width="172.8" height="20"/>
+<text x="227" y="369" class="m" xml:space="preserve">raw_lines, new_offset</text>
+<rect class="act" x="636" y="437" width="8" height="16"/>
+<path class="ln" d="M354,440 L635,440" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="358" y="396" width="314.1" height="20"/>
+<text x="362" y="411" class="m" xml:space="preserve">await db.run_db(_write_batch, lines, …)</text>
+<rect class="ko" x="358" y="416" width="149.3" height="20"/>
+<text x="362" y="431" class="m" xml:space="preserve">to_thread + shield</text>
+<rect class="act" x="921" y="479" width="8" height="16"/>
+<path class="ln" d="M644,482 L920,482" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="648" y="458" width="243.5" height="20"/>
+<text x="652" y="473" class="m" xml:space="preserve">db.get_conn(): one transaction</text>
+<rect class="act" x="636" y="546" width="8" height="26"/>
+<path class="ln" d="M644,550 L676,550 L676,568 L645,568" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="682" y="549" width="165" height="20"/>
+<text x="686" y="564" class="m" xml:space="preserve">parse_log_line(line)</text>
+<rect class="ko" x="682" y="569" width="157.2" height="20"/>
+<text x="686" y="584" class="m" xml:space="preserve">  : LogEntry | None</text>
+<rect class="act" x="636" y="616" width="8" height="26"/>
+<path class="ln" d="M644,620 L676,620 L676,638 L645,638" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="682" y="619" width="149.3" height="20"/>
+<text x="686" y="634" class="m" xml:space="preserve">skip_reason(entry)</text>
+<rect class="ko" x="682" y="639" width="204.2" height="20"/>
+<text x="686" y="654" class="m" xml:space="preserve">  internal or invalid IP,</text>
+<rect class="ko" x="682" y="659" width="227.8" height="20"/>
+<text x="686" y="674" class="m" xml:space="preserve">  static asset, health check</text>
+<rect class="act" x="636" y="706" width="8" height="26"/>
+<path class="ln" d="M644,710 L676,710 L676,728 L645,728" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="682" y="709" width="165" height="20"/>
+<text x="686" y="724" class="m" xml:space="preserve">process_entry(entry)</text>
+<rect class="ko" x="682" y="729" width="78.6" height="20"/>
+<text x="686" y="744" class="m" xml:space="preserve">  : Visit</text>
+<rect class="act" x="786" y="797" width="8" height="16"/>
+<path class="ln" d="M644,800 L785,800" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="648" y="776" width="219.9" height="20"/>
+<text x="652" y="791" class="m" xml:space="preserve">insert_visit(conn, **visit)</text>
+<rect class="act" x="921" y="839" width="8" height="16"/>
+<path class="ln" d="M794,842 L920,842" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="798" y="818" width="149.3" height="20"/>
+<text x="802" y="833" class="m" xml:space="preserve">INSERT INTO visits</text>
+<rect class="act" x="786" y="931" width="8" height="16"/>
+<path class="ln" d="M644,934 L785,934" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="648" y="890" width="172.8" height="20"/>
+<text x="652" y="905" class="m" xml:space="preserve">set_state(conn, …) ×3</text>
+<rect class="ko" x="648" y="910" width="329.8" height="20"/>
+<text x="652" y="925" class="m" xml:space="preserve">file_offset, file_inode, file_fingerprint</text>
+<rect class="act" x="921" y="993" width="8" height="16"/>
+<path class="ln" d="M794,996 L920,996" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="798" y="952" width="165" height="20"/>
+<text x="802" y="967" class="m" xml:space="preserve">INSERT … ON CONFLICT</text>
+<rect class="ko" x="798" y="972" width="125.8" height="20"/>
+<text x="802" y="987" class="m" xml:space="preserve">(key) DO UPDATE</text>
+<rect class="act" x="921" y="1055" width="8" height="16"/>
+<path class="ln" d="M644,1058 L920,1058" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<rect class="ko" x="648" y="1014" width="125.8" height="20"/>
+<text x="652" y="1029" class="m" xml:space="preserve">COMMIT on exit;</text>
+<rect class="ko" x="648" y="1034" width="204.2" height="20"/>
+<text x="652" y="1049" class="m" xml:space="preserve">ROLLBACK keeps the offset</text>
+<path class="ln dash" d="M636,1120 L355,1120" marker-end="url(#vidar-sequence-ingest-open)"/>
+<rect class="ko" x="358" y="1076" width="282.8" height="20"/>
+<text x="362" y="1091" class="m" xml:space="preserve">(unparseable, invalid_ips, non_utc,</text>
+<rect class="ko" x="358" y="1096" width="188.5" height="20"/>
+<text x="362" y="1111" class="m" xml:space="preserve"> batch_ips, first_keys)</text>
+<path class="ln" d="M354,1228 L490,1228" marker-end="url(#vidar-sequence-ingest-open)"/>
+<rect class="ko" x="358" y="1184" width="290.6" height="20"/>
+<text x="362" y="1199" class="m" xml:space="preserve">await wait_for(queue.put(ip), 1.0 s)</text>
+<rect class="ko" x="358" y="1204" width="267.1" height="20"/>
+<text x="362" y="1219" class="m" xml:space="preserve">skipped when the queue stays full</text>
+<rect class="note" x="30" y="1350" width="940" height="160" rx="6"/>
+<text x="46" y="1378" class="sb" xml:space="preserve">Notation</text>
+<path class="ln" d="M46,1404 L106,1404" marker-end="url(#vidar-sequence-ingest-filled)"/>
+<text x="122" y="1409" xml:space="preserve">call the caller waits for (awaited coroutine, or a blocking call in a thread)</text>
+<path class="ln" d="M46,1424 L106,1424" marker-end="url(#vidar-sequence-ingest-open)"/>
+<text x="122" y="1429" xml:space="preserve">asynchronous send: the caller does not wait for a reply</text>
+<path class="ln dash" d="M46,1444 L106,1444" marker-end="url(#vidar-sequence-ingest-open)"/>
+<text x="122" y="1449" xml:space="preserve">return</text>
+<text x="46" y="1469" xml:space="preserve">seen_ips remembers up to 50 000 addresses per process; the enricher still drops IPs whose intel is fresh.</text>
+<text x="46" y="1489" xml:space="preserve">Rotation, truncation and the first-start read position are handled in tail_log and not shown.</text>
+</svg>

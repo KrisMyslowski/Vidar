@@ -176,6 +176,8 @@ Index: `idx_ip_intel_fetched (fetched_at)`, `idx_ip_intel_visitor_class (visitor
 | `retention.archive_keep_months` | integer as string | Months an archive survives after its own month. Absent, unparseable or `0` keeps every archive; otherwise clamped to `rolling_months + 1`–120, since a shorter window would archive a month and delete it in the same pass |
 | `retention.last_run` | ISO-8601 | When the daily pass last completed; `_retention_task()` uses it to decide whether a pass is due |
 | `archive.pin.<YYYY-MM>` | ISO-8601 or `''` | A re-imported month is protected from re-archiving until this time. Empty means no pin |
+| `backup.last_run` | ISO-8601 | When the daily snapshot last completed; `_backup_task()` uses it to decide whether one is due |
+| `rdns_unconfirmed_purged` | `1` | Set once the one-off purge of reverse DNS names that were never forward-confirmed (copied from Shodan's hostnames by older versions) has run, so a confirmed name is not thrown out again on every start |
 
 ### 2.3.1 Monthly archives
 

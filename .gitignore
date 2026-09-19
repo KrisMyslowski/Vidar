@@ -24,6 +24,11 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+# pytest-cov. Not merely clutter: sync_public.sh publishes every file git does
+# not ignore, so a coverage run left one on its way to the public mirror.
+.coverage
+.coverage.*
+htmlcov/
 # Local 3.12 virtualenv — scripts/run_tests.sh prefers it, so a workstation
 # runs the gates on the interpreter the deploy image ships.
 .venv/

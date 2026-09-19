@@ -4,9 +4,18 @@
   /* ── Core appearance — web dark values ──────────────── */
   --bg:          #0d0d0d;
   --bg-card:     #171717;
-  --bg-panel:    #171717;
   --border:      #2e2e2e;
+  /* The edge of something you can operate: inputs, tab strips, buttons,
+     disclosures. --border is 1.32:1 on --bg-card here, fine for a card and
+     under the 3:1 WCAG 1.4.11 asks of a control boundary. Kept at 3:1 on both
+     --bg and --bg-card, in both themes (test_design_tokens.py). */
+  --border-control: #6b6b6b;
   --text:        #f1f1f1;
+  /* The fill under a hovered nav item or button. It used to be --border, which
+     in light mode is a mid-grey block (#8395a4) louder than the active state's
+     10 % accent. A tint of the ink stays under it in both themes, and follows
+     the theme without a second definition. */
+  --bg-hover:    color-mix(in srgb, var(--text) 8%, transparent);
   --text-muted:  #b9b9b9;
   --accent:      #ffffff;
   --accent-soft: #dcdcdc;
@@ -15,11 +24,7 @@
   --shadow:              0 22px 40px -28px rgba(0, 0, 0, 0.8);
   --halo-shadow:         0 0 0 4px rgba(0, 0, 0, 0.35);   /* map cluster ring */
   --pop-shadow:          0 8px 20px rgba(0, 0, 0, 0.25);  /* tooltip overlay  */
-  --hover-shadow:        0 18px 28px -22px rgba(255, 255, 255, 0.9);
   --mix-anchor:          black;
-  --scanline:            rgba(255, 255, 255, 0.14);
-  --divider-line:        rgba(255, 255, 255, 0.08);
-  --divider-line-strong: rgba(255, 255, 255, 0.14);
 
   /* ── Overlay ─────────────────────────────────────────── */
   --bg-opaque: rgba(13, 13, 13, 0.95);
@@ -66,6 +71,7 @@
   /* ── Spacing scale ───────────────────────────────────── */
   /* Below --space-xs everything was a literal, which is why 1px, 2px, 3px, 6px
      and 0.3rem all appear in the type surfaces for the same "a hair apart". */
+  --space-3xs: 2px;      /* a hairline apart: control padding, never layout */
   --space-2xs: 0.25rem;
   --space-xs: 0.5rem;
   --space-sm: 0.75rem;
@@ -88,29 +94,59 @@
   --font-md:   1.2rem;
   --font-lg:   1.4rem;
   --font-xl:   1.6rem;
+  /* Two sizes that sit between steps on purpose, named so they stop being
+     literals. Controls (buttons, inputs, pagination) are a notch under body
+     text; the sidebar and settings nav a notch over the controls. */
+  --font-ui:   0.85rem;
+  --font-nav:  0.9rem;
+
+  /* ── Controls ────────────────────────────────────────── */
+  --control-h: 26px;     /* submit button, icon buttons */
 
   /* ── Border radius ───────────────────────────────────── */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-xs: 2px;      /* heat cells, bar tops, legend swatches */
+  --radius-pill: 999px;  /* filter chips, drill pills, the search box, counters */
+  --radius-round: 50%;   /* dots and map clusters */
+
+  /* ── Motion ──────────────────────────────────────────── */
+  /* Zeroed under prefers-reduced-motion below; nothing waits on transitionend,
+     so an instant transition is safe everywhere these are used. */
+  --dur-fast: 0.15s;     /* hover and colour changes */
+  --dur-base: 0.2s;      /* the drawer sliding in, the theme toggle */
+  --dur-slow: 0.4s;      /* a hint fading out */
+  --ease-std: ease;
+
+  /* ── Stacking ────────────────────────────────────────── */
+  /* In one place so a new layer is placed against the others, not guessed. */
+  --z-raised:          10;    /* filter bar over the table below it */
+  --z-tip:             20;    /* timeline hover tip */
+  --z-popover:         30;    /* column picker, range form, filter menus */
+  --z-drawer-backdrop: 40;
+  --z-drawer:          41;
+  --z-sidebar:         100;
+  --z-map-overlay:     500;   /* above Leaflet panes, below its popups (600+) */
+  --z-tooltip:         1000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0s; --dur-base: 0s; --dur-slow: 0s; }
 }
 
 [data-theme="light"] {
   --bg:          #e9edf2;
   --bg-card:     #fdfefe;
-  --bg-panel:    #fdfefe;
   --border:      #8395a4;
+  --border-control: #72838f;
   --text:        #17202a;
   --text-muted:  #4d5e70;
   --accent:      #0e1620;
   --accent-soft: #314455;
 
   --shadow:              0 22px 40px -30px rgba(20, 28, 36, 0.42);
-  --hover-shadow:        0 18px 28px -22px rgba(0, 0, 0, 0.42);
   --mix-anchor:          white;
-  --scanline:            rgba(17, 29, 42, 0.11);
-  --divider-line:        rgba(16, 24, 32, 0.3);
-  --divider-line-strong: rgba(16, 24, 32, 0.44);
 
   --bg-opaque: rgba(253, 254, 254, 0.97);
 

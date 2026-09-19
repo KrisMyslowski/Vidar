@@ -82,3 +82,23 @@ def test_every_stated_class_count_is_the_taxonomy():
         if (int(m.group(1)), int(m.group(2))) != (classes, groups)
     ]
     assert wrong == [], wrong
+
+
+def test_every_stated_column_count_is_the_schema(tmp_db):
+    """data-reference.md heads its two table sections with a column count, and
+    architecture.md repeats both. A migration adds a column and the four numbers
+    go stale in silence."""
+    from src.db import get_conn
+
+    with get_conn(tmp_db) as conn:
+        actual = {
+            t: len(conn.execute(f"PRAGMA table_info({t})").fetchall())
+            for t in ("visits", "ip_intel")
+        }
+    wrong = []
+    for name in ("data-reference.md", "architecture.md"):
+        text = (DOCS / name).read_text(encoding="utf-8")
+        for table, stated in re.findall(r"`(visits|ip_intel)`[^\n]*?\b(\d+) columns", text):
+            if int(stated) != actual[table]:
+                wrong.append(f"{name}: {table} says {stated}, the schema has {actual[table]}")
+    assert wrong == [], wrong

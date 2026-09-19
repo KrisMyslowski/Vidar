@@ -386,7 +386,7 @@ Every step so far is about a host. To see what the dashboard *is* before committ
 it, `DEMO_MODE=true` skips the host entirely:
 
 ```bash
-docker run --rm -p 127.0.0.1:8080:8080 -e DEMO_MODE=true ghcr.io/krismyslowski/vidar:1.0.0
+docker run --rm -p 127.0.0.1:8080:8080 -e DEMO_MODE=true ghcr.io/krismyslowski/vidar:1.5.0
 ```
 
 (The image is published from the first tagged release onward — see [4.6](#46-without-a-checkout-the-published-image). From a checkout today:

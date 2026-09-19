@@ -254,3 +254,85 @@ class TestTheEntryPoints:
     def test_the_book_is_marked_active_only_on_a_docs_page(self, client):
         assert "sidebar-docs active" in client.get("/docs/usage").text
         assert "sidebar-docs active" not in client.get("/settings/storage").text
+
+
+class TestDiagrams:
+    """docs/diagrams/*.svg: embedded by the documents, served by one route.
+
+    The route is the slug check again — a name found on disk or a 404 — and the
+    files themselves are held to what an image in this repo may contain: no
+    script, nothing loaded from elsewhere, and nothing about the machine or the
+    site they were drawn on, because the tree is mirrored publicly.
+    """
+
+    DIAGRAMS = REAL_DOCS / "diagrams"
+
+    def _svgs(self):
+        return sorted(self.DIAGRAMS.glob("*.svg"))
+
+    def test_there_are_diagrams(self):
+        assert self._svgs(), "docs/diagrams/ is empty"
+
+    def test_every_embedded_diagram_exists_and_every_diagram_is_embedded(self):
+        embedded = set()
+        for doc in REAL_DOCS.glob("*.md"):
+            embedded |= set(re.findall(r"!\[[^\]]*\]\(diagrams/([^)\s]+)\)", doc.read_text()))
+        shipped = {p.name for p in self._svgs()}
+        assert embedded - shipped == set(), "embedded but missing"
+        assert shipped - embedded == set(), "shipped but never embedded"
+
+    @pytest.mark.parametrize(
+        "name", [p.name for p in sorted((REAL_DOCS / "diagrams").glob("*.svg"))]
+    )
+    def test_a_diagram_is_served_as_svg(self, client, name):
+        docs_module._diagrams.cache_clear()
+        response = client.get(f"/docs/diagrams/{name}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/svg+xml")
+
+    @pytest.mark.parametrize(
+        "name", ["nope.svg", "..%2Farchitecture.md", "%2e%2e%2f.order", "architecture.md"]
+    )
+    def test_anything_else_is_not_found(self, client, name):
+        docs_module._diagrams.cache_clear()
+        assert client.get(f"/docs/diagrams/{name}").status_code == 404
+
+    def test_the_page_points_its_images_at_the_route(self, client):
+        docs_module._documents.cache_clear()
+        body = client.get("/docs/architecture").text
+        assert 'src="/docs/diagrams/' in body
+        assert 'src="diagrams/' not in body
+
+    def test_a_diagram_carries_no_script_and_loads_nothing(self):
+        for svg in self._svgs():
+            text = svg.read_text(encoding="utf-8")
+            assert "<script" not in text.lower(), svg.name
+            assert not re.search(r"\son[a-z]+\s*=", text, re.I), svg.name
+            assert not re.search(r"(href|src)\s*=\s*[\"'](https?:|//|data:)", text, re.I), svg.name
+            assert "@import" not in text, svg.name
+            assert "<foreignObject" not in text, svg.name
+
+    def test_a_diagram_says_nothing_about_where_it_was_drawn(self):
+        local = re.compile(
+            r"/Users/|/home/|/private/|/tmp/|scratchpad|@[a-z0-9-]+\.[a-z]{2,}", re.I
+        )
+        for svg in self._svgs():
+            text = svg.read_text(encoding="utf-8")
+            assert not local.search(text), f"{svg.name}: {local.search(text).group(0)}"
+
+    def test_the_committed_diagrams_are_what_the_generator_writes(self, tmp_path):
+        """The SVGs are build output checked in so GitHub can show them. Edited by
+        hand, or left behind after the generator changed, they would describe code
+        the script no longer does — so they must match a fresh run byte for byte."""
+        import subprocess
+        import sys
+
+        script = REAL_DOCS.parent / "scripts" / "make_diagrams.py"
+        subprocess.run(
+            [sys.executable, str(script), str(tmp_path)], check=True, capture_output=True
+        )
+        fresh = {p.name: p.read_bytes() for p in tmp_path.glob("*.svg")}
+        committed = {p.name: p.read_bytes() for p in self._svgs()}
+        assert fresh.keys() == committed.keys()
+        stale = sorted(name for name in fresh if fresh[name] != committed[name])
+        assert not stale, f"regenerate with scripts/make_diagrams.py: {stale}"

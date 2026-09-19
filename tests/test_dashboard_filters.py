@@ -273,3 +273,34 @@ class TestInlineCode:
         """Unpaired is malformed input, not a hole — the tail is still closed."""
         out = str(_inline_code("odd ` backtick"))
         assert out.count("<code>") == out.count("</code>")
+
+
+def test_a_search_matches_requests_inside_the_window_only(tmp_db):
+    """Search selects visitors by what they requested — and "requested" meant ever.
+    Under the last week, `path:/.env` listed an address that asked for /.env two
+    months ago and only browsed the homepage this week, while the Paths grouping
+    beside it, which filters the rows themselves, correctly found no /.env at all.
+    The selected range governs every number on the page; the search is one of them."""
+    from datetime import datetime, timedelta, timezone
+
+    from src.db import get_conn
+    from src.queries import count_visitors_grouped, get_visitors_grouped, insert_visit
+
+    now = datetime.now(timezone.utc)
+    old, recent = (now - timedelta(days=60)).isoformat(), (now - timedelta(days=1)).isoformat()
+    week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    with get_conn(tmp_db) as conn:
+        insert_visit(conn, ip="203.0.113.1", timestamp=old, path="/.env", status=404)
+        insert_visit(conn, ip="203.0.113.1", timestamp=recent, path="/", status=200)
+        insert_visit(conn, ip="203.0.113.2", timestamp=recent, path="/.env", status=404)
+    with get_conn(tmp_db) as conn:
+        rows = get_visitors_grouped(conn, date_from=week_ago, q="path:/.env")
+        total = count_visitors_grouped(conn, date_from=week_ago, q="path:/.env")
+        every = get_visitors_grouped(conn, q="path:/.env")
+
+    assert [r["ip"] for r in rows] == ["203.0.113.2"]
+    assert total == 1
+    assert sorted(r["ip"] for r in every) == [
+        "203.0.113.1",
+        "203.0.113.2",
+    ], "all-time still finds both"

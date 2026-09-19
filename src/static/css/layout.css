@@ -26,17 +26,6 @@
   margin-bottom: var(--space-sm);
 }
 
-.btn-refresh {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  border-radius: var(--radius-md);
-  padding: 0.3rem 0.7rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.btn-refresh:hover { background: var(--border); color: var(--text); }
 
 /* ── Cards ── */
 .cards {
@@ -76,7 +65,7 @@
 }
 
 .panel {
-  background: var(--bg-panel);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 1.25rem;
@@ -132,10 +121,10 @@
      fixing — the width follows the panel, and a slightly wide cell reads the
      rhythm exactly as well as a square one. */
   height: 22px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   /* The floor is 18%, not 10%: the ramp has to start at a shade that is
      visibly a value rather than almost the panel behind it. */
-  background: color-mix(in srgb, var(--hm-color) calc(18% + 77% * var(--hm, 0)), var(--bg-panel));
+  background: color-mix(in srgb, var(--hm-color) calc(18% + 77% * var(--hm, 0)), var(--bg-card));
 }
 .heatmap-cell.label-help { display: block; border-bottom: none; }
 .heatmap-cell--zero { background: color-mix(in srgb, var(--text) 4%, transparent); }

@@ -1,4 +1,11 @@
-/* responsive.css — Every media query the dashboard has.
+/* responsive.css — The page-level media queries.
+ *
+ * Three breakpoints and no others: 1100px (tables become cards), 900px (grids
+ * collapse, the sidebar narrows), 640px (single column). A component may keep
+ * its own query beside its rules (blocks.css does), but only at one of these
+ * widths — test_only_the_documented_breakpoints holds that. The one query that
+ * is not about width, prefers-reduced-motion, lives in tokens.css because all
+ * it does is zero the duration tokens.
  *
  * One of seven parts split out of dashboard.css. base.html loads them in
  * the order they were cut out, so the cascade is the single file's cascade.
@@ -35,7 +42,8 @@
   /* Wrapping alone was not enough: items are `flex: 0 0 auto` so overflow.js
      can measure what fits, and a single path badge is wider than a card. They
      spilled instead of being cut, which `html, body { overflow-x: hidden }`
-     then cut anyway — the same silent loss by a different route. In card mode
+     then cut anyway — the same silent loss by a different route (that rule is
+     gone now; a layout test measures page width instead). In card mode
      nothing is measuring, so they may shrink, and a path may break inside a
      word rather than leave the card. Vertical space is the one thing this
      layout has. */

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vidar"
-version = "1.4.0"
+version = "1.5.0"
 description = "Passive visitor intelligence dashboard"
 requires-python = ">=3.12"
 
@@ -44,6 +44,9 @@ ignore = [
 # Verbatim user-agent strings kept as they arrive on the wire; wrapping them
 # would make them stop being the thing under test.
 "tests/test_ua_parser.py" = ["E501"]
+# The diagram generator is mostly label text; a wrapped label is harder to
+# check against the rendered picture than a long line.
+"scripts/make_diagrams.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -117,7 +117,8 @@ def resolve_snapshot(name: str) -> Path | None:
         return None
     root = backup_dir().resolve()
     path = (root / name).resolve()
-    if root not in path.parents or not path.is_file():
+    # Directly in the directory, not merely under it — see resolve_archive.
+    if path.parent != root or not path.is_file():
         return None
     return path
 

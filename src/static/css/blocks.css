@@ -15,44 +15,44 @@
 [data-theme="light"] #detail-map .leaflet-tile-pane { filter: none; }
 
 /* ── Visitor filter bar ───────────────────────────────────────────────────── */
-.visitor-filter-bar { margin-bottom: var(--space-md); padding: 0.6rem 0.75rem 0.5rem; position: relative; z-index: 10; display: flex; flex-direction: column; gap: 0; width: 100%; box-sizing: border-box; }
+.visitor-filter-bar { margin-bottom: var(--space-md); padding: 0.6rem 0.75rem 0.5rem; position: relative; z-index: var(--z-raised); display: flex; flex-direction: column; gap: 0; width: 100%; box-sizing: border-box; }
 
 .filter-toggle {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
   background: transparent;
   cursor: pointer;
   font-size: var(--font-xs);
   font-family: inherit;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
   white-space: nowrap;
   user-select: none;
 }
 .filter-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   flex-shrink: 0;
   background: var(--text-muted);
-  transition: background 0.15s;
+  transition: background var(--dur-fast);
 }
 .filter-toggle:not(.active) {
-  background: color-mix(in srgb, var(--clr, var(--text-muted)) 10%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--clr, var(--text-muted)) 28%, var(--bg-panel));
+  background: color-mix(in srgb, var(--clr, var(--text-muted)) 10%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--clr, var(--text-muted)) 28%, var(--bg-card));
   color: color-mix(in srgb, var(--clr, var(--text-muted)) 60%, var(--text-muted));
 }
 .filter-toggle.active {
-  background: color-mix(in srgb, var(--clr, var(--border)) 22%, var(--bg-panel));
+  background: color-mix(in srgb, var(--clr, var(--border)) 22%, var(--bg-card));
   border-color: var(--clr, var(--border));
   color: var(--text);
 }
 .filter-toggle.active .filter-dot { background: var(--clr, var(--text-muted)); }
-.filter-toggle:not(.active) .filter-dot { background: color-mix(in srgb, var(--clr, var(--text-muted)) 50%, var(--bg-panel)); }
-.filter-toggle--all.active { border-color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 15%, var(--bg-panel)); }
+.filter-toggle:not(.active) .filter-dot { background: color-mix(in srgb, var(--clr, var(--text-muted)) 50%, var(--bg-card)); }
+.filter-toggle--all.active { border-color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 15%, var(--bg-card)); }
 
 /* No per-signal colour rules here. The chip carries --clr inline from
    SIGNAL_COLOR_VARS (taxonomy.py), which is where the mapping belongs; the five
@@ -78,7 +78,7 @@
 }
 .mix-seg { height: 100%; flex: 0 0 auto; }
 /* Bands that filter on click: give them the affordance, not just the cursor. */
-.mix-bar--linked .mix-seg { cursor: pointer; transition: opacity 0.15s; }
+.mix-bar--linked .mix-seg { cursor: pointer; transition: opacity var(--dur-fast); }
 .mix-bar--linked:hover .mix-seg { opacity: 0.55; }
 .mix-bar--linked .mix-seg:hover { opacity: 1; }
 /* Disk bar (Settings › Storage). Same 10px track and radius as .mix-bar so the
@@ -104,7 +104,7 @@
 /* inline-block, or the width and height do nothing: an inline span ignores
    both. It went unnoticed while the only user was a flex container, which
    blockifies its children anyway — the report puts one in a table cell. */
-.mix-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.mix-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-xs); flex-shrink: 0; }
 .mix-legend-item strong { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Empty state — names the filter that caused it, offers that step back. */
@@ -131,7 +131,7 @@
 .empty-state-action {
   color: var(--accent);
   text-decoration: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   padding: 0.25rem 0.6rem;
   font-size: var(--font-xs);
@@ -162,8 +162,8 @@
   cursor: pointer;
   color: var(--text-muted);
   list-style: none;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
+  padding: var(--space-3xs) var(--space-xs);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   user-select: none;
 }
@@ -173,7 +173,7 @@
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 30;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -203,7 +203,7 @@
 /* The strip itself: everything after the label sits inside one frame. */
 .tab-group {
   display: flex;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-md);
 }
 /* Deliberately NOT overflow:hidden. The Custom range control is a <details>
@@ -221,9 +221,9 @@
   border-bottom-right-radius: var(--radius-md);
 }
 .tab {
-  padding: 4px 12px;
+  padding: var(--space-2xs) var(--space-sm);
   border: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-control);
   border-radius: 0;
   font-family: inherit;
   font-size: var(--font-xs);
@@ -251,7 +251,7 @@
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 30;
+  z-index: var(--z-popover);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -279,9 +279,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 /* A class or signal pill carries its taxonomy colour, so the pill row reads as
@@ -317,9 +317,9 @@
 .filter-disclosure > summary {
   cursor: pointer;
   list-style: none;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
   font-size: var(--font-xs);
   color: var(--text-muted);
   user-select: none;
@@ -332,7 +332,7 @@
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
-  z-index: 30;
+  z-index: var(--z-popover);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -400,9 +400,9 @@
 
 .search-unknown { align-self: center; font-size: var(--font-xs); color: var(--sig-dnsbl); }
 
-@media (max-width: 700px) {
+@media (max-width: 640px) {
   /* Two columns stop fitting; stack them and let the example lead each row. */
-  .search-help-table td { display: block; padding: 2px 0; }
+  .search-help-table td { display: block; padding: var(--space-3xs) 0; }
   .search-help-table td:first-child { width: auto; padding-right: 0; }
   .search-help-table tr + tr td:first-child { border-top: 1px solid var(--border); padding-top: 8px; }
   .search-help-table tr + tr td:last-child { border-top: 0; }
@@ -410,9 +410,9 @@
 .filter-rail-search input[type="search"] {
   flex: 1;
   min-width: 0;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
@@ -434,7 +434,7 @@
 .map-frame { position: relative; }
 .map-overlay {
   position: absolute;
-  z-index: 500; /* above Leaflet panes, below its popups (600+) */
+  z-index: var(--z-map-overlay);
   background: var(--bg-opaque);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -445,7 +445,7 @@
 .map-overlay--bl { left: 13px; bottom: 13px; }
 .map-overlay .tab-group { border: 0; }
 .map-hint {
-  padding: 6px 10px;
+  padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-xs);
   color: var(--text-muted);
 }

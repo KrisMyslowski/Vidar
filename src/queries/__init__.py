@@ -123,6 +123,7 @@ from .visitors import get_visitor_requests as get_visitor_requests
 from .visitors import get_visitors_grouped as get_visitors_grouped
 from .visits import count_visits as count_visits
 from .visits import get_earliest_day as get_earliest_day
+from .visits import get_export_page as get_export_page
 from .visits import get_visits as get_visits
 from .visits import insert_visit as insert_visit
 from .visits import stream_visits_for_export as stream_visits_for_export

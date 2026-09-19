@@ -15,7 +15,7 @@
   {%- if refresh or caller is defined %}
   <div class="page-header-actions">
     {%- if caller is defined %}{{ caller() }}{% endif %}
-    {%- if refresh %}<button class="btn-refresh" data-reload>↻ Refresh</button>{% endif %}
+    {%- if refresh %}<button class="btn" data-reload>↻ Refresh</button>{% endif %}
   </div>
   {%- endif %}
 </div>
@@ -127,7 +127,7 @@
       <label class="filter-search-date-label" for="range-to">To</label>
       <input type="date" id="range-to" name="date_to" value="{{ date_to }}" min="{{ earliest_date() }}"
              {{ tip_attrs('Last day the window includes.', 'Inclusive — the whole day counts.') }}>
-      <button type="submit" class="filter-btn-submit"
+      <button type="submit" class="btn btn--primary"
               {{ tip_attrs('Apply this window.',
                  'Replaces the preset above and marks the range as custom.') }}>Apply</button>
     </form>

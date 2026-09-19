@@ -11,20 +11,55 @@
  */
 /* ── Form controls (range picker, search inputs) ── */
 .filter-search-date-label { font-size: var(--font-xs); color: var(--text-muted); }
-.filter-btn-submit {
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────
+   One base and three variants. There were four classes — btn-refresh, which
+   had long stopped meaning "refresh" and styled every Apply, Download and
+   Delete in Settings, filter-btn-submit, btn-icon and btn-danger — each
+   declaring its own surface, radius and transition. Two defects fell out of
+   that: a <button> never inherited the page face (the UA's own font showed
+   through), and a Download *link* went accent-coloured once visited and
+   underlined on hover, because a:visited and a:hover outrank a single class.
+   Sizes are unchanged: the base is the old refresh button's box, the variants keep
+   their own heights. */
+.btn,
+.btn:visited {
+  background: var(--bg-card);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.7rem;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+.btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); text-decoration: none; }
+.btn:disabled { opacity: 0.35; cursor: default; }
+
+/* The one action a form exists for. Ink on accent, no edge: the fill is it. */
+.btn--primary,
+.btn--primary:visited {
   background: var(--accent);
   color: var(--bg);
   border: none;
-  border-radius: var(--radius-md);
-  padding: 0 12px;
-  height: 26px;
+  padding: 0 var(--space-sm);
+  height: var(--control-h);
   font-size: var(--font-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s;
   white-space: nowrap;
 }
-.filter-btn-submit:hover { background: color-mix(in srgb, var(--accent) 80%, var(--bg)); }
+.btn--primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 80%, var(--bg)); color: var(--bg); }
+
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+}
+.btn--icon svg { width: 14px; height: 14px; }
 
 /* ── Sidebar nav ─────────────────────────────────────────────────────────── */
 .sidebar-nav { list-style: none; padding: 0.5rem 0; flex: 1; overflow-y: auto; }
@@ -49,10 +84,10 @@
   border-radius: var(--radius-md);
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: background 0.15s, color 0.15s;
+  font-size: var(--font-nav);
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
-.settings-nav a:hover { background: var(--border); color: var(--text); }
+.settings-nav a:hover { background: var(--bg-hover); color: var(--text); }
 .settings-nav a.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
@@ -102,15 +137,15 @@
   width: 4.5rem;
   padding: 0.3rem 0.5rem;
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-md);
   color: var(--text);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: var(--font-ui);
 }
 /* Destructive actions read as destructive only on approach — a permanently red
    row of Delete buttons would make the whole table look like a warning. */
-.btn-danger:hover {
+.btn--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--grp-threats) 18%, var(--bg-card));
   border-color: var(--grp-threats);
   color: var(--text);
@@ -119,6 +154,11 @@
 @media (max-width: 900px) {
   .settings-layout { flex-direction: column; }
   .settings-nav { flex: none; flex-direction: row; flex-wrap: wrap; width: 100%; }
+  /* The layout keeps align-items: flex-start, which in a column sizes the panel
+     to its widest content rather than to the page. A document's unbreakable code
+     line made it 757px in a 656px column, and .doc-body's own scroller never got
+     the chance to scroll: the page was wider than the window instead. */
+  .settings-panel { align-self: stretch; }
 }
 
 
@@ -126,7 +166,7 @@
 .rich-tooltip {
   display: none;
   position: absolute;
-  z-index: 1000;
+  z-index: var(--z-tooltip);
   background: var(--bg-opaque);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

@@ -12,25 +12,15 @@ database file and logger namespace all use it.
 
 ## 1. Deployment shape
 
-```
-┌─────────────────────┐      ┌──────────────────────────────────────────┐
-│  nginx container    │      │  vidar container (python:3.12-slim)      │
-│  (nginx:alpine)     │      │                                          │
-│  access.log ────────── bind mount (ro) ──→ log_processor              │
-│  /srv/nginx/logs/   │      │        ↓ parse, filter                   │
-│                     │      │   SQLite /data/vidar.db                  │
-│                     │      │        ↑ upsert_ip_intel()               │
-│                     │      │   enricher ← ip-api · Shodan · DNSBL ·   │
-│                     │      │              Tor exit list               │
-│                     │      │   FastAPI → dashboard (Jinja2) + /api    │
-│                     │      │   daily: retention · backup              │
-└─────────────────────┘      └──────────────────────────────────────────┘
-         ↑                                    ↑
-   ports 80/443 (public)          127.0.0.1:8080 (SSH tunnel only)
-```
+![Deployment: operator workstation, SSH tunnel, server host with nginx and the vidar container](diagrams/architecture.svg)
 
-The two containers run in **separate Compose projects with no shared Docker network**. The
-only coupling is a read-only bind mount of the log directory, plus the log format itself —
+The diagrams in this document are generated, not drawn by hand: edit
+`scripts/make_diagrams.py` and run `python3 scripts/make_diagrams.py docs/diagrams`. Each one
+names the code it describes, so a rename there is a rename here.
+
+nginx is outside this repository — on the host or in a container of its own, but never on a
+Docker network shared with Vidar. The only coupling is a read-only bind mount of the log
+directory, plus the log format itself —
 `deploy/nginx-log-format.conf` is the authoritative contract, and any change to the
 fields nginx emits must land in `src/models.py` (`LogEntry`), the `visits` DDL in `src/db.py`
 and [data-reference.md](data-reference.md) together.
@@ -66,8 +56,15 @@ so any page the operator has open could send one. `form-action 'self'` and the C
 
 ## 2. Runtime
 
-Everything runs in **one asyncio event loop**. No threads beyond `asyncio.to_thread` for
-blocking DNS, no inter-process communication except one queue.
+![Components: the modules, what each calls across its boundary, and the external services](diagrams/components.svg)
+
+Everything is coordinated by **one asyncio event loop**, with no inter-process communication
+except one queue. SQLite is synchronous, so **no database work runs on the loop itself**:
+the tailer and the enricher hand theirs to `db.run_db()` (a worker thread, shielded so a
+cancelled task cannot leave a write running), routes read through `_cache.fetch()` and write
+through `_cache.write()`, and the lifespan tasks below use `run_db()` or `asyncio.to_thread`.
+Blocking DNS lookups run on worker threads too. `tests/test_background_tasks_stay_off_the_loop.py`
+holds the lifespan tasks to it.
 
 1. **`tail_log()`** (`src/log_processor.py`) polls the log every `POLL_INTERVAL_SECONDS`,
    reads at most 1 MB per tick, parses each line as JSON, drops noise (RFC1918 and loopback
@@ -77,16 +74,26 @@ blocking DNS, no inter-process communication except one queue.
    re-reads.
 
 2. **`enrichment_worker()`** (`src/enricher.py`) drains that queue, tops it up with stale rows
-   from the database, and calls the four providers below. It writes `fetched_at` only after a
+   from the database, and calls the providers below one step after another — ip-api, Shodan,
+   reverse DNS, the Tor list, the DNSBLs — each step concurrent across the batch's IPs. It writes `fetched_at` only after a
    batch completes, so partial enrichment is never persisted, and finishes each IP with
    `set_visitor_class(conn, ip, classify_ip(conn, ip))`.
 
-3. **Periodic work** runs as lifespan tasks next to those two, all in-process:
+3. **Periodic and one-off work** runs as lifespan tasks next to those two, all in-process.
+   At startup the classifier backfill reclassifies every IP once when `CLASSIFIER_VERSION`
+   changed (otherwise it only fills IPs with no class yet), and the reverse DNS backfill looks
+   up addresses enriched before reverse DNS was resolved locally; both exit when done. Then:
    `_reclassify_task` re-judges IPs that stayed active after being classified, every
    `RECLASSIFY_INTERVAL_MINUTES` (default 15); `_retention_task` and `_backup_task` run once
    a day. Backup is a separate task rather than a step inside the retention pass, because
    retention only does work in `rolling` mode and a snapshot must not stop because someone
    switched to `lifetime`. A failed pass must never kill its loop.
+
+![Sequence: a log line from tail_log() to a committed visit and a queued IP](diagrams/sequence-ingest.svg)
+
+![Sequence: enrich_batch() through the providers to a stored and classified IP](diagrams/sequence-enrich.svg)
+
+![Sequence: a dashboard request through the middleware to a rendered page](diagrams/sequence-request.svg)
 
 > **There is no cron in this container, deliberately.** There was: a `/etc/cron.d` entry that
 > never fired once, because the Dockerfile also installed the same system-format file as
@@ -103,9 +110,11 @@ blocking DNS, no inter-process communication except one queue.
 | ip-api.com | HTTP (free tier) | paced at 13 batches/min against a 15/min ceiling, honours `X-Rl`/`X-Ttl` | Batch of up to 100 IPs |
 | Shodan InternetDB | HTTPS | Rate-gated, 10 concurrent | Per IP; no API key |
 | DNSBL | DNS | Semaphore-bounded | `zen.spamhaus.org`, `bl.spamcop.net`; IPv4 dotted-quad and IPv6 nibble reversal (RFC 5782) |
+| Reverse DNS | DNS | Same semaphore as the DNSBLs | Forward-confirmed (PTR, then the name must resolve back to the IP); an unconfirmed name is discarded, not stored |
 | Tor exit list | HTTPS | Once per 24 h | ~7 KB, cached in memory as a set; three attempts per call, then a 5-minute pause during which the previous list is kept |
 
-**These four hosts are the service's only runtime dependencies beyond the log file**, and
+**These providers and the resolver the container is configured with are the service's only
+runtime dependencies beyond the log file**, and
 their endpoints are module constants in `enricher.py` (`BATCH_URL`, `SHODAN_URL`,
 `TOR_EXIT_URL`) rather than settings — they identify the services Vidar integrates with, not
 something an operator tunes. Every one is optional in the sense that failure degrades
@@ -135,12 +144,16 @@ SQLite in WAL mode: one writer, concurrent readers, so dashboard reads never blo
 `get_conn()` is the only way to open a connection outside `init_db`/`vacuum` — it sets WAL,
 `foreign_keys=ON`, a row factory, and commits or rolls back around the block.
 
+![Data model: the nine SQLite tables, their columns and keys](diagrams/data-model.svg)
+
+![Classes: the pydantic models, dataclasses and enums under src/](diagrams/classes.svg)
+
 | Table | Rows | Purpose |
 |---|---|---|
 | `visits` | one per request that survived filtering | 29 columns; the raw record |
 | `ip_intel` | one per unique IP | 21 columns; enrichment cache plus `visitor_class` |
 | `ip_intel_{ports,vulns,cpes,tags,hostnames}` | one per value | the **sole** store for Shodan multi-value fields |
-| `processor_state` | key/value | tail offset, inode, classifier version, retention mode |
+| `processor_state` | key/value | tail position, classifier version, retention and backup bookkeeping, one-off repair flags — every key in [data-reference.md §2.3](data-reference.md#23-processor_state-keyvalue) |
 | `rate_limits` | one per `/api/export` hit | so the limit survives a restart |
 
 The five child tables carry `ON DELETE CASCADE` from `ip_intel` and replaced comma-separated
@@ -423,15 +436,13 @@ cd /srv/vidar && sudo docker compose -f deploy/docker-compose.yml up -d --build
   the setting; unset, the map still works and reads badly. The free tier
   requires the CARTO and OpenStreetMap attribution the maps now show, which is
   why `attributionControl` is on.
-- **Reverse DNS is not forward-confirmed.** A PTR record is set by whoever owns the
-  address, so a rented box can name itself `crawl-x.googlebot.com` and the needle
-  match in `_SEARCH_RDNS` / `_AI_RDNS` accepts it. The check the industry uses is a
-  round trip — PTR to hostname, hostname to A record, back to the same IP — which
-  needs a forward lookup this service does not make. Production shows the attempt:
-  two Hetzner addresses running a bingbot UA under `search.msn.co.pl`, caught only
-  because the lookalike domain is not `msn.com`. The network-owner check
-  (`_CRAWLER_ORIGINS`) is the harder half to forge, since ip-api reports the
-  registered holder rather than anything the tenant controls.
+- **Reverse DNS confirms the name, not the operator.** `_reverse_dns_lookup()` is
+  forward-confirmed — PTR to hostname, hostname back to the same IP — so a rented box can no
+  longer name itself `crawl-x.googlebot.com` and be believed. What it cannot catch is a
+  lookalike domain the renter really owns: two Hetzner addresses ran a bingbot UA under
+  `search.msn.co.pl`, which confirms perfectly and is caught only because it is not `msn.com`.
+  The network-owner check (`_CRAWLER_ORIGINS`) is the harder half to forge, since ip-api
+  reports the registered holder rather than anything the tenant controls.
 - **Timestamps are assumed to be UTC.** Vidar compares what nginx logged against UTC-derived
   bounds — range windows, retention and staleness cutoffs alike — so a non-UTC `TZ` on the
   nginx host silently shifts every one of them. The constraint is repeated where it can

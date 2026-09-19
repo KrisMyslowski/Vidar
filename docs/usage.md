@@ -145,7 +145,9 @@ de                AS15169         /wp-admin        192.0.2.      404
 Two letters read as a country, `AS…` as a network, a leading `/` as a path, a dotted or
 colonned run as an IP prefix, three digits as a status. Naming a field overrides the shape,
 and `"quotes"` opt out of it entirely. Terms are AND-ed, at most eight. An unknown field name
-is reported at the box rather than silently searched.
+is reported at the box rather than silently searched. A term about requests — a path, a user
+agent, a status — matches the requests inside the selected range, like every other figure on
+the page: `path:/.env` over the last week finds who asked for it that week.
 
 This matters more than it sounds. The previous blind substring across eleven columns matched
 `de` against 3,617 of 11,564 IPs — 1,627 of them through `path` alone, because `/index.html`
@@ -157,7 +159,8 @@ contains those letters — against the 961 actually in Germany. Now `de` returns
 Aggregation rows show a proportional **class mix** and **signals** bar rather than a badge:
 distinct-IP counts per identity group and per signal, in the legend's colours. A single
 visitor has one identity, so its bar is one full-width band with the exact class in the
-tooltip. Clicking a row opens a slide-over with the individual IPs behind it.
+tooltip. Clicking a row — or Enter on it — opens a slide-over with the individual IPs behind it.
+Every row that opens a panel is in the tab order, and Escape closes the panel and returns to it.
 
 ### Map view
 
@@ -604,7 +607,7 @@ Two things follow from that, and both are visible in the output:
   consumers already strip it and a person reading the same file still sees why.
 
 ```
-# Vidar 1.4.0 — addresses matching a selection, not a verdict.
+# Vidar 1.5.0 — addresses matching a selection, not a verdict.
 # Vidar does not decide what is blocked. Review before you act on it.
 # Selection: threats/* (the recommended default)
 203.0.113.60  # threats/exploit-probers · 12 probes · 24 requests · on a blocklist · Tor exit

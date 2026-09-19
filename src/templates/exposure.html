@@ -106,7 +106,7 @@
     {#- Same contract as an incident row: drawer.js is global, and
         tr[data-drawer-src] already carries the pointer cursor. The window rides
         along so the panel counts what the table counted. -#}
-    <tr data-drawer-src="/exposure/finding?path={{ f.path | urlencode }}{{ sort_params }}">
+    <tr tabindex="0" data-drawer-src="/exposure/finding?path={{ f.path | urlencode }}{{ sort_params }}">
       <td data-label="Path" data-col="path" class="col-path">
         <code>{{ f.path }}</code>
         {%- if f.spellings | length > 1 %}

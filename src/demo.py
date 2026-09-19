@@ -2,7 +2,9 @@
 
 Two jobs. It gives anyone a populated dashboard without waiting for a site to be
 crawled, and it is how the screenshots in README.md are reproduced when the UI
-changes — without it they are unrepeatable and slowly drift away from the code.
+changes (scripts/take_screenshots.py) — without it they are unrepeatable and
+slowly drift away from the code. So it carries every surface something to show:
+an incident run twice by one tool, and a file the server handed out.
 
 Every address comes from the RFC 5737 documentation ranges (192.0.2.0/24,
 198.51.100.0/24, 203.0.113.0/24). None of them belongs to a real host, so nothing
@@ -168,9 +170,13 @@ def _geo(rng: random.Random, place: tuple, spread: float = 0.3) -> dict:
 
 def seed(rng: random.Random) -> tuple[int, int]:
     from src.db import get_conn
-    from src.queries import insert_visit, upsert_ip_intel
+    from src.queries import count_visits, insert_visit, upsert_ip_intel
+    from src.queries.intel import count_ip_intel
 
-    ips = [f"{net}{n}" for net in ("192.0.2.", "198.51.100.", "203.0.113.") for n in range(1, 61)]
+    # Seventy per range. It was sixty — 180 addresses — and the slices below
+    # hand out exactly 180 before the datacentre group, so that group was empty
+    # and the demo never showed a browser driven from a datacentre.
+    ips = [f"{net}{n}" for net in ("192.0.2.", "198.51.100.", "203.0.113.") for n in range(1, 71)]
     rng.shuffle(ips)
     humans, crawlers = ips[:110], ips[110:134]
     scanners, threats = ips[134:156], ips[156:168]
@@ -366,6 +372,86 @@ def seed(rng: random.Random) -> tuple[int, int]:
                 },
             )
 
-        visits = conn.execute("SELECT COUNT(*) FROM visits").fetchone()[0]
-        addrs = conn.execute("SELECT COUNT(*) FROM ip_intel").fetchone()[0]
+        _campaigns(conn, rng)
+        _exposure(conn, rng, scanners)
+
+        visits = count_visits(conn)
+        addrs = count_ip_intel(conn)
     return visits, addrs
+
+
+# The same first five missing paths, in the same order: one program. Incidents
+# are sessions sharing that signature across addresses, so without this the demo
+# had none and /incidents showed an empty table. Two runs of the one tool, the
+# second days after the first, which the report counts as one program.
+CAMPAIGN = [
+    "/.env",
+    "/.git/config",
+    "/wp-login.php",
+    "/phpinfo.php",
+    "/server-status",
+    "/.aws/credentials",
+]
+CAMPAIGN_RUNS = [
+    (3, [f"198.51.100.{n}" for n in range(201, 206)]),
+    (15, [f"198.51.100.{n}" for n in range(211, 214)]),
+]
+
+
+def _campaigns(conn, rng: random.Random) -> None:
+    from src.queries import insert_visit, upsert_ip_intel
+
+    for day, addresses in CAMPAIGN_RUNS:
+        start = datetime.now(timezone.utc).replace(hour=4, minute=12, second=0, microsecond=0)
+        start -= timedelta(days=day)
+        for k, ip in enumerate(addresses):
+            for j, path in enumerate(CAMPAIGN):
+                insert_visit(
+                    conn,
+                    ip=ip,
+                    timestamp=(start + timedelta(minutes=4 * k, seconds=3 * j)).isoformat(),
+                    method="GET",
+                    path=path,
+                    server_port=443,
+                    status=404,
+                    bytes_sent=153,
+                    user_agent="Mozilla/5.0 zgrab/0.x",
+                    request_time=0.002,
+                    http_version="HTTP/1.1",
+                    connection=rng.randint(1000, 99999),
+                )
+            upsert_ip_intel(
+                conn,
+                {
+                    "ip": ip,
+                    **_geo(rng, rng.choice([p for p in PLACES if p[5] in CLOUD]), 0.5),
+                    "is_hosting": 1,
+                    "dnsbl_listed": int(rng.random() < 0.6),
+                    "tags": ["scanner"],
+                },
+            )
+
+
+def _exposure(conn, rng: random.Random, scanners: list[str]) -> None:
+    """A .DS_Store the server handed out, fetched by probers and by nobody benign.
+
+    The finding the README describes from the reference deployment. Without one,
+    /exposure had nothing to show but the site's own pages.
+    """
+    from src.queries import insert_visit
+
+    for ip in rng.sample(scanners, k=6):
+        insert_visit(
+            conn,
+            ip=ip,
+            timestamp=_ts(rng, rng.randint(1, 40)),
+            method="GET",
+            path="/.DS_Store",
+            server_port=443,
+            status=200,
+            bytes_sent=6148,
+            user_agent=rng.choice(["", "python-requests/2.31.0", "Mozilla/5.0 zgrab/0.x"]),
+            request_time=0.003,
+            http_version="HTTP/1.1",
+            connection=rng.randint(1000, 99999),
+        )

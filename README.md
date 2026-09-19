@@ -6,7 +6,7 @@
 
 [![tests](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisMyslowski/Vidar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f4a54?style=flat-square)](LICENSE)
-[![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-3f4a54?style=flat-square)](docs/changelog.md)
+[![Version 1.5.0](https://img.shields.io/badge/version-1.5.0-3f4a54?style=flat-square)](docs/changelog.md)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3f4a54?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-3f4a54?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -114,6 +114,8 @@ one **event** rather than three visitors — with the paths it asked for, the ad
 from, and how that compares with an ordinary hour here. The score beside it is a sort key and
 says so: every figure in it is a column of the same row.
 
+![Incidents](docs/img/incidents.png)
+
 ### Exposure
 
 The log read the other way round. Not *who came* but *what did this server hand out* — paths
@@ -121,6 +123,8 @@ that answered 2xx and that fewer than two humans or crawlers ever requested. On 
 it found a `.DS_Store` that had been served for months and that nobody had noticed. Each finding
 that Vidar recognises carries what the file is, why somebody asked for it, a `curl` to check it
 yourself, and how to stop serving it.
+
+![Exposure](docs/img/exposure.png)
 
 ### Shodan
 
@@ -135,6 +139,8 @@ One month, stated rather than displayed, and downloadable as Markdown so it reac
 who will never open the dashboard. Who came, what happened, what the server handed out — and
 the lead sentence that is the point of the whole tool: *91,838 requests from 3,669 addresses.
 3 of them were people.*
+
+![Report](docs/img/report.png)
 
 ---
 
@@ -179,7 +185,7 @@ limit, terms, and what degrades if you leave it out.
 To see it before installing anything, `DEMO_MODE=true` needs no server, no nginx and no mount:
 
 ```bash
-docker run --rm -p 127.0.0.1:8080:8080 -e DEMO_MODE=true ghcr.io/krismyslowski/vidar:1.0.0
+docker run --rm -p 127.0.0.1:8080:8080 -e DEMO_MODE=true ghcr.io/krismyslowski/vidar:1.5.0
 ```
 
 Synthetic traffic, classified by the real classifier, with a banner on every page saying so.

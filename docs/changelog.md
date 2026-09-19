@@ -18,6 +18,80 @@ Versions follow [semantic versioning](https://semver.org).
 
 ---
 
+## 1.5.0 — 2026-09-18
+
+The dashboard for a keyboard and a screen reader, and the architecture drawn from the code.
+Nothing reclassifies on the first start; a host name outside `ALLOWED_HOSTS` is still refused, as
+in 1.4.0.
+
+### Added in 1.5.0
+
+- **Every row that opens a panel opens from the keyboard.** The IPs behind an aggregation row,
+  an incident, an Exposure finding and a session were reachable by mouse only. The rows are in
+  the tab order now and open on Enter or Space; the panel takes focus and gives it back to the
+  row when it closes, and it has a name for assistive technology.
+
+- **Sorted columns say so.** A sortable table's current column carries `aria-sort`, and the
+  client-sorted table on the Overview sorts from the keyboard too.
+
+- **A focus ring on every control, visible control edges, readable badges.** Tabs, pills,
+  buttons and disclosures showed the browser's own ring or none. Control edges hold 3:1 against
+  both surfaces in both themes, and badge labels are ink on a tint — coloured text on its own
+  tint was 2.91:1 at worst.
+
+- **Architecture diagrams, generated from the code.** Seven SVGs — deployment, components, data
+  model, classes, and the ingest, enrich and request sequences — replace the ASCII sketch in
+  architecture.md and are served on the documentation pages. Drawing them from the code found
+  five places where the prose was wrong; those are corrected.
+
+### Changed in 1.5.0
+
+- **Sizes, radii, stacking, motion and paddings sit on one token scale**, with a test that fails
+  on a literal outside it. Motion is zeroed under `prefers-reduced-motion`. One button base
+  replaces four, so buttons take the page's typeface instead of the browser's, and hover is a
+  quieter tint.
+
+- **Page width is measured instead of hidden.** `html, body { overflow-x: hidden }` cut off
+  whatever spilled past the right edge without a trace; a layout test now measures every page
+  from 900px up and the rule is gone. It found one overflow, on the documentation pages at
+  900px, which is fixed. Phones are not a target: the dashboard is reached through an SSH tunnel.
+
+- **The container image is built and smoke-tested in CI** on every push, not only when a
+  release is tagged.
+
+- **The demo shows every surface, and the screenshots are retaken from it.** `DEMO_MODE` seeds a
+  scanning tool run twice and a file the server handed out to probers only, so Incidents and
+  Exposure are no longer empty tables — and the datacentre group, which the seed never reached,
+  is filled. `scripts/take_screenshots.py` retakes all nine README pictures with one command.
+
+### Fixed in 1.5.0
+
+- **An export could fail mid-download.** It kept one SQLite connection open across the rows it
+  streamed, and each row may be produced on a different worker thread, which SQLite refuses. It
+  now reads a page at a time on a connection of its own.
+
+- **A search about requests ignored the date range.** `path:/.env` over the last week listed
+  addresses that asked for it months ago. The search now matches requests inside the window.
+
+- **Background work ran on the event loop.** After a rules change the reclassification froze
+  ingestion and every page for its whole length; it and the daily tasks run on worker threads.
+
+- **One busy address could stop the dashboard.** Its sessions were cut with a query that re-ran
+  the whole cut once per session: 21.8 s for an address with 110 000 requests, minutes on a
+  one-CPU server, and a few reloads of its page held every worker thread while `/health` still
+  answered. The cut is computed once now — 0.8 s for the same address, with identical output.
+
+- **A command suggested on Exposure could run what the path said.** The `curl` beside a finding
+  was built from the path as a stranger sent it, unquoted; on a site that answers any path with
+  200, `/x;$(…)` pasted into a terminal would run on the operator's machine. The URL is now
+  one quoted shell word.
+
+- **Smaller:** a restore pin expires by the instant it names, not by how it is written; an
+  archive or snapshot is served only from its own directory, never a subdirectory; the detail
+  page's Tor, proxy, Shodan and redirect lines are tested.
+
+---
+
 ## 1.4.0 — 2026-09-17
 
 A review release: nothing new to look at, and a good deal less that was wrong. Two changes reach

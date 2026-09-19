@@ -69,6 +69,26 @@ describe('sort.js — client-side table sorting', () => {
     expect(header(t).classList.contains('sort-asc')).toBe(false);
   });
 
+  it('says the direction to assistive technology, on the sorted header only', () => {
+    // The direction was a CSS class, which a screen reader cannot see.
+    const t = table(['b', 'a']);
+    click(header(t));
+    expect(header(t).getAttribute('aria-sort')).toBe('ascending');
+    click(header(t));
+    expect(header(t).getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('sorts from the keyboard, on Enter or Space at the header', () => {
+    // A header that only answered a click could not be sorted without a mouse.
+    const t = table(['banana', 'Apple', 'cherry']);
+    const press = (key) =>
+      header(t).dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+    press('Enter');
+    expect(order(t)).toEqual(['Apple', 'banana', 'cherry']);
+    press(' ');
+    expect(order(t)).toEqual(['cherry', 'banana', 'Apple']);
+  });
+
   it('leaves a server-sorted table alone', () => {
     // Those tables are paginated: reordering the page in the browser would
     // shuffle one page of a larger ordering and claim it is sorted.

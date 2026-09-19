@@ -12,8 +12,9 @@ set -euo pipefail
 # /srv/vidar/data, loads an env_file from the deploy root, and names the container
 # `vidar`. A fresh checkout has no such .env, so `docker compose` refuses to parse
 # the file at all, and the container name collides with a running production
-# one. Container runtime flags that matter (read_only, tmpfs, no-new-privileges)
-# are mirrored below, so this still catches an image that only works writable.
+# one. Container runtime flags that matter (read_only, tmpfs, no-new-privileges,
+# no capabilities, the PID ceiling) are mirrored below, so this still catches an
+# image that only works writable or privileged.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="vidar:smoke"
@@ -24,7 +25,12 @@ TEST_DIR="$(mktemp -d)"
 
 cleanup() {
     docker rm -f "$NAME" >/dev/null 2>&1 || true
-    rm -rf "$TEST_DIR"
+    # The container writes /data as UID 1000. On Linux those files belong to that
+    # UID, and a subdirectory it created (the archive dir) cannot be emptied by the
+    # user running this script — so the image, which is that user, removes them.
+    docker run --rm -v "$TEST_DIR/data:/data" --entrypoint sh "$IMAGE" \
+        -c 'rm -rf /data/* /data/.[!.]*' >/dev/null 2>&1 || true
+    rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -51,14 +57,26 @@ fi
 # filtered before they are ever counted; no static-asset extensions, and no
 # health-check user agent, for the same reason. If you change these lines,
 # change EXPECTED_VISITS with them.
+#
+# Dated today, not on a fixed day. They carried 2026-06-07 once, and the image's
+# own retention pass — which runs on startup — archived them away as soon as June
+# fell out of the rolling window: 0 visits, from a build that was fine.
 echo "[1/5] Preparing test environment..."
 mkdir -p "$TEST_DIR/logs" "$TEST_DIR/data"
+# mktemp -d is 0700 and owned by whoever runs this, while the container runs as
+# UID 1000. Docker Desktop's file sharing ignores that; a Linux host does not, and
+# on the CI runner the app could not create its database. On the server the data
+# directory is owned by that UID — here the test directories are opened up instead.
+chmod 0755 "$TEST_DIR" "$TEST_DIR/logs"
+chmod 0777 "$TEST_DIR/data"
 EXPECTED_VISITS=3
-cat > "$TEST_DIR/logs/access.log" <<'EOF'
-{"time":"2026-06-07T10:00:00+00:00","remote_addr":"1.2.3.4","request":"GET / HTTP/1.1","status":200,"body_bytes_sent":1024,"http_user_agent":"Mozilla/5.0","request_time":0.001,"ssl_protocol":"TLSv1.3","request_method":"GET","request_uri":"/"}
-{"time":"2026-06-07T10:00:01+00:00","remote_addr":"5.6.7.8","request":"GET /about HTTP/1.1","status":200,"body_bytes_sent":2048,"http_user_agent":"curl/8.0","request_time":0.002,"ssl_protocol":"TLSv1.3","request_method":"GET","request_uri":"/about"}
-{"time":"2026-06-07T10:00:02+00:00","remote_addr":"1.2.3.4","request":"POST /api HTTP/1.1","status":201,"body_bytes_sent":512,"http_user_agent":"Mozilla/5.0","request_time":0.005,"ssl_protocol":"TLSv1.3","request_method":"POST","request_uri":"/api"}
+TODAY="$(date -u +%Y-%m-%d)"
+cat > "$TEST_DIR/logs/access.log" <<EOF
+{"time":"${TODAY}T10:00:00+00:00","remote_addr":"1.2.3.4","request":"GET / HTTP/1.1","status":200,"body_bytes_sent":1024,"http_user_agent":"Mozilla/5.0","request_time":0.001,"ssl_protocol":"TLSv1.3","request_method":"GET","request_uri":"/"}
+{"time":"${TODAY}T10:00:01+00:00","remote_addr":"5.6.7.8","request":"GET /about HTTP/1.1","status":200,"body_bytes_sent":2048,"http_user_agent":"curl/8.0","request_time":0.002,"ssl_protocol":"TLSv1.3","request_method":"GET","request_uri":"/about"}
+{"time":"${TODAY}T10:00:02+00:00","remote_addr":"1.2.3.4","request":"POST /api HTTP/1.1","status":201,"body_bytes_sent":512,"http_user_agent":"Mozilla/5.0","request_time":0.005,"ssl_protocol":"TLSv1.3","request_method":"POST","request_uri":"/api"}
 EOF
+chmod 0644 "$TEST_DIR/logs/access.log"
 echo "[OK] ${EXPECTED_VISITS} log entries, 2 IPs"
 
 # ── 2. Build ─────────────────────────────────────────────────────────────────
@@ -89,6 +107,9 @@ docker run -d --name "$NAME" \
     --read-only \
     --tmpfs /tmp --tmpfs /var/run --tmpfs /var/log \
     --security-opt no-new-privileges:true \
+    --cap-drop ALL \
+    --pids-limit 256 \
+    --health-interval 2s --health-start-period 2s \
     "$IMAGE" >/dev/null
 echo "[OK] container ${NAME} started"
 
@@ -119,6 +140,19 @@ done
 [ "${visits:-0}" -eq "$EXPECTED_VISITS" ] \
     || fail "expected ${EXPECTED_VISITS} visits, got ${visits:-0}"
 echo "[OK] ${visits} visits ingested"
+
+# The image's own HEALTHCHECK, not only /health from outside: it runs inside the
+# container with what the image ships, and it lost its tool once already — curl
+# was removed and the check moved to Python. Polled faster than the Dockerfile's
+# 30 s, which the run flags above override.
+health=""
+for i in $(seq 1 20); do
+    health="$(docker inspect --format '{{.State.Health.Status}}' "$NAME" 2>/dev/null || true)"
+    [ "$health" = "healthy" ] && break
+    sleep 1
+done
+[ "$health" = "healthy" ] || fail "container HEALTHCHECK reports '${health:-nothing}'"
+echo "[OK] container healthcheck: healthy"
 
 # The dashboard itself has to render, not just the API.
 curl -fsS "${BASE}/" >/dev/null 2>&1 || fail "GET / did not render"

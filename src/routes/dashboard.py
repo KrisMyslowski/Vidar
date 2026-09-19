@@ -1,11 +1,16 @@
 """Dashboard HTML routes — all Jinja2 template views.
 
-Four routes carry the whole dashboard:
+One module per surface, included in the order of _MODULES below:
   GET /               — overview (stats cards, activity chart, needs attention)
   GET /visitors       — every visitor surface: ?group=ip|asn|country|client|path
-                        selects the grouping, ?view=table|map the presentation
+                        selects the grouping, ?view=table|map|timeline the presentation
   GET /analysis       — identity×signal matrix, distributions, rate limits
-  GET /shodan       — Shodan InternetDB exposure facets + host table
+  GET /shodan         — Shodan InternetDB exposure facets + host table
+  GET /exposure       — what the site serves that it should not, by family
+  GET /incidents      — sessions clustered across addresses
+  GET /report         — the monthly report (?format=md for Markdown)
+  /settings/*         — status, storage & retention, API
+  GET /docs/{slug}    — the documents under docs/, rendered
   GET /visitors/{ip}  — single-IP detail + paginated request log
 
 Backward-compat redirects (301) — the six routes that became parameters:

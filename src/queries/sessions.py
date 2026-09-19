@@ -61,7 +61,14 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
             FROM visits v
             WHERE v.ip = :ip
         ),
-        marked AS (
+        -- MATERIALIZED, and nothing below reaches back into it per row. A CTE
+        -- read more than once may be inlined, and this one was read by a
+        -- correlated subquery and a join for every session: the window over
+        -- every visit re-ran per session. Invisible at 20 000 visits; at
+        -- 110 000 visits and 279 sessions it took 21.8 s, and a few reloads
+        -- of that page held every worker thread and so every other page.
+        -- Materialized and joined once, the same address takes 0.8 s.
+        marked AS MATERIALIZED (
             SELECT *,
                    SUM(CASE WHEN prev_ts IS NULL OR {_GAP_SQL} > :gap
                             THEN 1 ELSE 0 END)
@@ -71,6 +78,10 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
         per_path AS (
             SELECT session_no, COUNT(*) AS hits
             FROM marked GROUP BY session_no, path
+        ),
+        repeats AS (
+            SELECT session_no, MAX(hits) AS max_path_repeats
+            FROM per_path GROUP BY session_no
         ),
         sessions AS (
         SELECT m.session_no,
@@ -92,13 +103,6 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
                SUM(m.is_internal_nav) AS internal_nav,
                SUM(CASE WHEN m.method = 'POST' THEN 1 ELSE 0 END) AS post_requests,
                SUM(CASE WHEN m.status IN (401, 403) THEN 1 ELSE 0 END) AS refused,
-               -- Correlated, and measured against the obvious alternative of
-               -- folding per_path to one row per session and joining it: 82 ms
-               -- correlated against 90 ms joined, on an address with 20 000
-               -- visits. per_path is small enough that the extra join costs
-               -- more than the re-scan saves.
-               (SELECT MAX(hits) FROM per_path p WHERE p.session_no = m.session_no)
-                   AS max_path_repeats,
                MIN(m.id) AS entry_id
         FROM marked m
         GROUP BY m.session_no
@@ -107,9 +111,11 @@ def get_sessions(conn: sqlite3.Connection, ip: str, limit: int = 50) -> list[dic
         -- beside MIN(m.id), which SQLite fills from the row that produced a
         -- min/max only when the query has exactly one; this one has three, and
         -- it was the entry purely because MIN(m.id) happened to be written last.
-        SELECT s.*, e.path AS entry_path, e.referer AS entry_referer
+        SELECT s.*, r.max_path_repeats,
+               e.path AS entry_path, e.referer AS entry_referer
         FROM sessions s
-        JOIN marked e ON e.id = s.entry_id
+        JOIN repeats r ON r.session_no = s.session_no
+        JOIN visits e ON e.id = s.entry_id
         ORDER BY s.session_no DESC
         LIMIT :limit
     """,

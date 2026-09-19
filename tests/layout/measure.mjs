@@ -12,12 +12,17 @@
  *   jobs.json: [{ "key": "...", "url": "...", "width": 1600 }, …]
  *   stdout:    { "<key>": <expression result>, … }
  *
+ * A job may also carry "height" (default 1200), "colorScheme" ("light"/"dark",
+ * emulated as prefers-color-scheme) and "screenshot": a path the viewport is
+ * written to as PNG after the expression ran. scripts/take_screenshots.py uses
+ * that, so the README's pictures come from the same browser as the tests.
+ *
  * One browser for all jobs — starting one per measurement dominated the
  * runtime. Viewport size is set per tab via Emulation, not per process.
  * Exit code 3 means: no browser found — the caller should skip, not fail.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -161,10 +166,15 @@ try {
     await send('Runtime.enable');
     await send('Emulation.setDeviceMetricsOverride', {
       width: job.width,
-      height: 1200,
+      height: job.height || 1200,
       deviceScaleFactor: 1,
       mobile: false,
     });
+    if (job.colorScheme) {
+      await send('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-color-scheme', value: job.colorScheme }],
+      });
+    }
     const loaded = new Promise((resolve) => {
       ws.addEventListener('message', function onMsg(m) {
         if (JSON.parse(m.data).method === 'Page.loadEventFired') {
@@ -189,6 +199,10 @@ try {
       );
     }
     results[job.key] = out.result.value;
+    if (job.screenshot) {
+      const shot = await send('Page.captureScreenshot', { format: 'png' });
+      writeFileSync(job.screenshot, Buffer.from(shot.data, 'base64'));
+    }
     ws.close();
     await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
   }

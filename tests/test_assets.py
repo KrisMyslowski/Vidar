@@ -36,6 +36,9 @@ DYNAMIC = {
     "badge-orange",
     "sort-asc",
     "sort-desc",
+    # Set on a diagram's <img> by the Markdown renderer in routes/docs.py.
+    "doc-diagram",
+    "doc-diagram-link",
 }
 # Leaflet and MarkerCluster emit these; we only style them.
 THIRD_PARTY = ("leaflet", "marker", "mcluster")

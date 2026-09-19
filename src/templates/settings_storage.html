@@ -48,7 +48,7 @@
     <label for="rolling-months">Months to keep before the current one</label>
     <input id="rolling-months" name="months" type="number" inputmode="numeric"
            min="0" max="{{ max_rolling_months }}" value="{{ rolling_months }}">
-    <button class="btn-refresh" type="submit">Apply</button>
+    <button class="btn" type="submit">Apply</button>
   </form>
 
   <p class="text-muted">
@@ -68,7 +68,7 @@
     <label for="archive-keep">Months to keep an archive (0 keeps every archive)</label>
     <input id="archive-keep" name="months" type="number" inputmode="numeric"
            min="0" max="{{ max_archive_keep }}" value="{{ archive_keep }}">
-    <button class="btn-refresh" type="submit">Apply</button>
+    <button class="btn" type="submit">Apply</button>
   </form>
   {% if archive_keep and archive_keep < archive_keep_floor %}
   <p class="text-muted">Raised to {{ archive_keep_floor }} — a shorter window would archive a
@@ -132,10 +132,10 @@
         <td data-label="Archived" class="text-muted">—</td>
         <td data-label="State"><span class="text-muted">in database</span></td>
         <td class="storage-actions">
-          <a class="btn-refresh" href="/settings/storage/download/{{ m.month }}">Download</a>
+          <a class="btn" href="/settings/storage/download/{{ m.month }}">Download</a>
           <form method="post" action="/settings/storage/delete-month/{{ m.month }}"
                 data-confirm="Delete {{ m.month }} from the database? {{ m.visits | fmtnum }} visits, no archive is written. This cannot be undone.">
-            <button class="btn-refresh btn-danger" type="submit">Delete</button>
+            <button class="btn btn--danger" type="submit">Delete</button>
           </form>
         </td>
       </tr>
@@ -210,19 +210,19 @@
           {%- else %}<span class="text-muted">archived</span>{% endif %}
         </td>
         <td class="storage-actions">
-          <a class="btn-refresh" href="/settings/storage/download/{{ a.month }}">Download</a>
+          <a class="btn" href="/settings/storage/download/{{ a.month }}">Download</a>
           {%- if a.restored_until %}
           <form method="post" action="/settings/storage/release/{{ a.month }}">
-            <button class="btn-refresh" type="submit">Put back</button>
+            <button class="btn" type="submit">Put back</button>
           </form>
           {%- elif a.readable %}
           <form method="post" action="/settings/storage/restore/{{ a.month }}">
-            <button class="btn-refresh" type="submit">Re-import</button>
+            <button class="btn" type="submit">Re-import</button>
           </form>
           {%- endif %}
           <form method="post" action="/settings/storage/delete-archive/{{ a.month }}"
                 data-confirm="Delete the {{ a.month }} archive? The file is gone for good.">
-            <button class="btn-refresh btn-danger" type="submit">Delete</button>
+            <button class="btn btn--danger" type="submit">Delete</button>
           </form>
         </td>
       </tr>
@@ -256,7 +256,7 @@
         <td data-label="Size">{{ s.bytes | fmtbytes }}</td>
         <td data-label="Taken">{{ s.created_at | fmtdate }}</td>
         <td class="storage-actions">
-          <a class="btn-refresh" href="/settings/storage/snapshot/{{ s.name }}">Download</a>
+          <a class="btn" href="/settings/storage/snapshot/{{ s.name }}">Download</a>
         </td>
       </tr>
       {% else %}
@@ -274,7 +274,7 @@
     mistaken delete — not the loss of the volume. Download one for that.
   </p>
   <form method="post" action="/settings/storage/backup">
-    <button class="btn-refresh" type="submit">Back up now</button>
+    <button class="btn" type="submit">Back up now</button>
   </form>
 </div>
 

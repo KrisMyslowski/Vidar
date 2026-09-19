@@ -8,6 +8,8 @@ backup is a page nobody reads twice — so most of what follows asserts `None`.
 
 from __future__ import annotations
 
+import shlex
+
 import pytest
 
 from src.families import FAMILIES, explain_paths, family_for, unexplained_paths
@@ -172,3 +174,32 @@ def test_every_path_is_either_explained_or_given_a_command():
     listed = {p for p, _ in unexplained_paths(paths, "h")}
     assert explained | listed == set(paths)
     assert explained & listed == set()
+
+
+def _shell_words(command: str) -> list[str]:
+    """Split as a shell would, with ; | & ( ) as the operators they are."""
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    return list(lexer)
+
+
+def test_a_hostile_path_cannot_break_out_of_the_pasted_command():
+    """The path is whatever a stranger asked for, and the command is for pasting.
+
+    On a site that answers every path with 200, `/x;$(…)` reaches the findings
+    as it was sent. Unquoted, pasting the suggestion would run the stranger's
+    command on the operator's machine; quoted, it is one argument to curl.
+    """
+    hostile = "/x;touch${IFS}pwned;`id`$(id)|sh&'"
+    ((_, check),) = unexplained_paths([hostile], "example.com")
+    assert _shell_words(check) == ["curl", "-sI", f"https://example.com{hostile}"]
+
+    explained = explain_paths(["/.git/config;$(id)"], "example.com")
+    (command,) = explained[0].checks
+    assert _shell_words(command) == [
+        "curl",
+        "-s",
+        "https://example.com/.git/config;$(id)",
+        "|",
+        "head",
+    ]

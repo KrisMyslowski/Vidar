@@ -29,6 +29,17 @@ suite did not execute. Every other test command, the strict and required-suite
 modes, and running the layout suite without a local browser are in
 [testing.md](docs/testing.md).
 
+## Retaking the screenshots
+
+The README's pictures come from synthetic traffic (`src/demo.py`) and are retaken
+with one command, in the same browser container the layout suite runs in:
+
+```bash
+bash scripts/run_layout_docker.sh python scripts/take_screenshots.py
+```
+
+Retake them when the UI changes; they are otherwise the first thing to drift.
+
 ## Conventions you would not guess
 
 - **All SQL lives in `src/queries/`.** Route handlers call query functions; they

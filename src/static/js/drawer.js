@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  var panel, backdrop, currentSrc;
+  var panel, backdrop, currentSrc, returnFocus;
 
   /** Build the panel and its backdrop once, and re-build if they were detached. */
   function ensureShell() {
@@ -23,15 +23,24 @@
     panel.className = 'drawer';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
+    // A dialog needs a name, and focus has to be able to land on it: aria-modal
+    // tells assistive technology that everything behind is inert, so leaving
+    // focus back there put the reader somewhere they were told does not exist.
+    panel.setAttribute('aria-label', 'Details');
+    panel.tabIndex = -1;
     document.body.appendChild(backdrop);
     document.body.appendChild(panel);
   }
 
   /** Hide the drawer. Content stays, so reopening the same row is instant. */
   function close() {
-    if (!panel) return;
+    if (!panel || !panel.classList.contains('open')) return;
     panel.classList.remove('open');
     backdrop.classList.remove('open');
+    // Back to whatever opened it, so a keyboard reader carries on down the table
+    // from the row they were on rather than from the top of the page.
+    if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+    returnFocus = null;
   }
 
   /** Fetch `src` into the panel, then run `done`.
@@ -58,9 +67,11 @@
   /** Open the drawer on `src`, with a placeholder while it flies. */
   function open(src) {
     ensureShell();
+    returnFocus = document.activeElement;
     panel.innerHTML = '<div class="drawer-loading">Loading…</div>';
     panel.classList.add('open');
     backdrop.classList.add('open');
+    panel.focus({ preventScroll: true });
     load(src);
   }
 
@@ -112,6 +123,18 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') {
+      close();
+      return;
+    }
+    // A row opens from the keyboard the way it opens from a click. The rows carry
+    // tabindex="0" in their templates; before that the incident, finding and
+    // session panels could not be reached without a mouse at all. Only the row
+    // itself: Enter on a link inside it follows the link.
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target;
+    if (!row.matches || !row.matches('tr[data-drawer-src]')) return;
+    e.preventDefault();
+    open(row.dataset.drawerSrc);
   });
 })();

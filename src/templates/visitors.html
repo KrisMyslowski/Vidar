@@ -317,7 +317,7 @@
       {% set drill_key = {'asn': 'asn', 'country': 'country', 'client': 'browser', 'path': 'path'}[group] %}
       {% for r in rows %}
       {% set drill_val = {'asn': r.asn, 'country': r.country_code, 'client': r.browser, 'path': r.path}[group] %}
-      <tr{% if drill_val %} data-drawer-src="/visitors/rows?{{ drill_key }}={{ drill_val | urlencode }}{{ rows_params }}"{% endif %}>
+      <tr{% if drill_val %} tabindex="0" data-drawer-src="/visitors/rows?{{ drill_key }}={{ drill_val | urlencode }}{{ rows_params }}"{% endif %}>
         {% if group == 'asn' %}
           <td data-label="ASN" title="{{ r.asn }}"><a href="/visitors?asn={{ r.asn | urlencode }}">{{ r.asn }}</a></td>
           <td data-label="Org" title="{{ r.org or '' }}">{{ r.org or '—' }}</td>

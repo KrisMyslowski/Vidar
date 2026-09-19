@@ -653,3 +653,15 @@ def test_an_address_not_yet_enriched_still_counts(tmp_db):
     assert finding["hits"] == 3
     assert (detail["ips"], detail["hits"]) == (finding["ips"], finding["hits"])
     assert echo == {"urls": 1, "ips": 1}
+
+
+def test_the_sorted_column_says_so_to_assistive_technology(tmp_db, client):
+    """The direction was only a sort-asc / sort-desc class for the stylesheet. The
+    header a table is sorted by now carries aria-sort, and no other header does."""
+    with get_conn(tmp_db) as conn:
+        _hit(conn, "203.0.113.1", "/.git/config")
+
+    html = client.get("/exposure?range=all&sort=addresses&order=ASC").text
+    findings = html.split("<thead>", 1)[1].split("</thead>", 1)[0]  # the Findings table's head
+    assert findings.count("aria-sort=") == 1
+    assert 'sort-asc" aria-sort="ascending"' in findings

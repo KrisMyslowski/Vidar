@@ -59,8 +59,9 @@ deduplicates crash replays, the child tables that replaced the comma-separated S
 and the `Visit` boundary a log format is mapped onto.
 
 **Ingestion.** `test_log_processor*.py` (3 files), `test_log_rotation.py`,
-`test_cancellation_finishes_writes.py` — parsing, filtering, rotation and truncation
-handling, and that a shutdown mid-batch does not tear a write.
+`test_cancellation_finishes_writes.py`, `test_background_tasks_stay_off_the_loop.py` — parsing,
+filtering, rotation and truncation handling, that a shutdown mid-batch does not tear a write, and
+that no background task runs SQLite on the event loop.
 
 **Enrichment.** `test_enricher.py`, `test_enricher_backs_off.py`,
 `test_enrichment_is_not_destructive.py`, `test_failures_are_visible.py` — provider
@@ -95,9 +96,11 @@ that the syntax panel describes what the parser actually does.
 
 **Markup and layout.** `test_tip_contract.py`, `test_tooltips.py`,
 `test_table_structure.py`, `test_assets.py`, `test_render_does_not_query.py`,
-`test_layout_browser.py` ([§5](#5-layout-is-measured-not-inferred)) — tooltips are authored in
-exactly one place, header and body rows carry identical column keys, and
-templates do not issue queries during rendering.
+`test_design_tokens.py`, `test_layout_browser.py` ([§5](#5-layout-is-measured-not-inferred)) —
+tooltips are authored in exactly one place, header and body rows carry identical column keys,
+templates do not issue queries during rendering, the contrast a control border and label ink
+promise holds in both themes, and font sizes, px paddings, radii, stacking, durations and breakpoints come
+from the token scale, with no token left unread.
 
 **Security.** `test_csp.py`, `test_cross_origin_writes.py`, `test_trusted_host.py` — the CSP
 header is well formed, its nonce matches the markup and changes per response, no template
@@ -125,7 +128,13 @@ and the counts and route lists in these documents match the app.
 CDP (`tests/layout/measure.mjs`, using Node's built-in WebSocket — no dependency). It checks
 every page at 1280, 1600 and 1920 px, as delivered and with each column toggled: tables fill
 their container, nothing overflows out of reach, no visible column collapses to zero, body
-cells line up with their headings, and columns of the same type render equally wide.
+cells line up with their headings, and columns of the same type render equally wide. A second
+pass measures every page, settings and documents included, at 900 to 1920 px: nothing visible
+may reach past the window unless a scroller it sits in makes it reachable. Below 900 px it is
+not measured: the dashboard is reached through an SSH tunnel from a desktop, and phones are not
+a target. A third pass holds the accessibility basics
+on every page: each control has a name, each field a label, each image an alt, and nothing
+clickable sits outside the tab order.
 
 **Both column defects that ever shipped were invisible to every markup test and are caught by
 this one** — jsdom computes no layout. It adds about 14 seconds.

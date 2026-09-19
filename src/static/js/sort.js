@@ -36,27 +36,46 @@
     rows.forEach(function (r) { tbody.appendChild(r); });
   }
 
-  // Delegate click handler: any <th> inside a table.sortable triggers sort
-  document.addEventListener('click', function (e) {
-    var th = e.target.closest('th');
-    if (!th) return;
+  /** Sort by `th`, toggling its direction. The direction is a class for the
+   * stylesheet and aria-sort for assistive technology, which cannot see a class. */
+  function sortBy(th) {
     var table = th.closest('table.sortable');
-    if (!table) return;
+    if (!table) return false;
 
     // If this table uses server-side sorting (paginated), don't perform client-side reordering.
-    if (table.classList.contains('server-sort')) return;
+    if (table.classList.contains('server-sort')) return false;
 
     var thead = th.closest('thead');
-    if (!thead) return;
+    if (!thead) return false;
     var ths = Array.from(thead.querySelectorAll('th'));
     var colIdx = ths.indexOf(th);
-    if (colIdx < 0) return;
+    if (colIdx < 0) return false;
 
     // Toggle direction: if already ascending, switch to descending
     var wasAsc = th.classList.contains('sort-asc');
-    ths.forEach(function (t) { t.classList.remove('sort-asc', 'sort-desc'); });
+    ths.forEach(function (t) {
+      t.classList.remove('sort-asc', 'sort-desc');
+      t.removeAttribute('aria-sort');
+    });
     var asc = !wasAsc;
     th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+    th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
     sortTable(table, colIdx, asc);
+    return true;
+  }
+
+  // Delegate click handler: any <th> inside a table.sortable triggers sort
+  document.addEventListener('click', function (e) {
+    var th = e.target.closest('th');
+    if (th) sortBy(th);
+  });
+
+  // And the keyboard: a header that answered only a click could not be sorted
+  // without a mouse. Enter or Space on the header, or on the tooltip label
+  // inside it, which is what takes focus there.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var th = e.target.closest && e.target.closest('th');
+    if (th && sortBy(th)) e.preventDefault();
   });
 })();

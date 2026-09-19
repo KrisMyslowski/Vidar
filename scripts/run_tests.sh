@@ -32,49 +32,10 @@ note_skip() {
 }
 
 # ── Interpreter ──────────────────────────────────────────────────────────────
-# requires-python in pyproject.toml is the contract, and the deploy image
-# (python:3.12-slim) honours it. A bare `python3` on a workstation can be years
-# older — the tests then pass against an interpreter the service never runs on.
-# Prefer an exact match if one is installed; otherwise say so on every run.
+# Chosen by scripts/python.sh, which the commit hook uses too, so the two cannot
+# pick different interpreters. It explains itself and exits when nothing fits.
 REQUIRED="$(sed -n 's/^requires-python *= *">=\([0-9.]*\)".*/\1/p' pyproject.toml)"
-
-# An interpreter is only usable here if it can also run the gates. A bare
-# pythonX.Y from a package manager satisfies the version check and has no black,
-# no isort, no pytest — and the run then dies on the first gate with a
-# ModuleNotFoundError that says nothing about why. Installing one is enough to
-# break a deploy that worked the day before, so the check is for the tooling.
-has_tooling() {
-    "$1" -c 'import black, isort, pytest' >/dev/null 2>&1
-}
-
-# Every candidate in preference order, PYTHON first when it is set. A value
-# from the environment is a preference, not an instruction: an activated
-# virtualenv that has since been deleted still exports its path, and treating
-# that as final turned "the venv is gone" into a failed deploy. Anything that
-# cannot run the gates is passed over, whoever named it.
-CANDIDATES=()
-[ -n "${PYTHON:-}" ] && CANDIDATES+=("$PYTHON")
-CANDIDATES+=(".venv/bin/python" "python${REQUIRED}" "python3" "/usr/bin/python3")
-
-PYTHON=""
-TRIED=()
-for candidate in "${CANDIDATES[@]}"; do
-    command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ] || continue
-    TRIED+=("$candidate")
-    if has_tooling "$candidate"; then
-        PYTHON="$candidate"
-        break
-    fi
-done
-
-if [ -z "$PYTHON" ]; then
-    echo "FAIL: no interpreter here can run the gates (need black, isort, pytest)." >&2
-    echo "  Tried: ${TRIED[*]:-none}" >&2
-    echo "  Install them:  python3 -m pip install -r requirements/dev.txt" >&2
-    echo "  Or build the project venv, which this script prefers when present:" >&2
-    echo "    python${REQUIRED} -m venv .venv && .venv/bin/pip install -r requirements/dev.txt" >&2
-    exit 1
-fi
+PYTHON="$(bash scripts/python.sh --which)"
 
 PY_VERSION="$("$PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
 if ! "$PYTHON" -c "

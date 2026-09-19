@@ -196,3 +196,20 @@ def test_every_offered_column_is_addressable(client, dashboard_db, path):  # noq
             present &= {k for k, _ in row if k}
         offered -= present
     assert not offered, f"{path}: picker offers columns nothing can hide: {sorted(offered)}"
+
+
+def test_every_row_that_opens_a_panel_can_be_reached_from_the_keyboard():
+    """A row carrying data-drawer-src opens a panel on click, and was not in the
+    tab order: the incident, finding and session panels could not be opened
+    without a mouse. drawer.js opens a focused row on Enter; that only helps a
+    row that can take focus."""
+    from pathlib import Path
+
+    templates = Path(__file__).resolve().parent.parent / "src" / "templates"
+    missing = [
+        f"{path.name}: {line.strip()[:80]}"
+        for path in sorted(templates.rglob("*.html"))
+        for line in path.read_text().splitlines()
+        if "<tr" in line and "data-drawer-src=" in line and 'tabindex="0"' not in line
+    ]
+    assert missing == [], missing

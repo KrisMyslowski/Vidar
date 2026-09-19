@@ -11,7 +11,7 @@
 # schema migrates forward only.
 services:
   vidar:
-    image: ghcr.io/krismyslowski/vidar:1.0.0
+    image: ghcr.io/krismyslowski/vidar:1.5.0
     container_name: vidar
     restart: unless-stopped
 

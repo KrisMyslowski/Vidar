@@ -67,7 +67,7 @@ def _exec_visitor_rows(
     query, params = _apply_drilldown_filters(
         query, params, asn_filter, path_filter, browser_filter
     )
-    query, params = _apply_visitor_search(query, params, q)
+    query, params = _apply_visitor_search(query, params, q, date_from, date_to)
     if apply_class:
         query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)
@@ -119,7 +119,7 @@ def _exec_visitor_count(
     query, params = _apply_drilldown_filters(
         query, params, asn_filter, path_filter, browser_filter
     )
-    query, params = _apply_visitor_search(query, params, q)
+    query, params = _apply_visitor_search(query, params, q, date_from, date_to)
     if apply_class:
         query, params = _apply_class_filter(query, params, class_filter)
     query, params = _apply_signal_filter(query, params, signal_filter)

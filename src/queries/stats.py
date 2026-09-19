@@ -444,7 +444,7 @@ def get_visitor_ip_counts(
     conditions, params = _date_conditions(date_from, date_to, "v.timestamp")
     where = " AND ".join(["1=1", *conditions])
     where, params = _apply_signal_filter(where, params, signal_filter)
-    where, params = _apply_visitor_search(where, params, q)
+    where, params = _apply_visitor_search(where, params, q, date_from, date_to)
     where, params = _apply_seen_filter(where, params, seen, date_from)
     drill = dict(drill or {})
     min_visits = drill.pop("min_visits", 0)

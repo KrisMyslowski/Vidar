@@ -49,6 +49,43 @@ describe('drawer.js — the slide-over behind an aggregation row', () => {
     expect(panel().classList.contains('open')).toBe(false);
   });
 
+  describe('from the keyboard', () => {
+    // The rows were reachable by mouse only: no tabindex, no key handler. The
+    // incident, finding and session panels could not be opened without one.
+    const row = () => document.querySelector('tr[data-drawer-src]');
+    const press = (el, key) =>
+      el.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+
+    it('opens on Enter and on Space from the focused row', async () => {
+      for (const key of ['Enter', ' ']) {
+        const fetchMock = stubFetch('<p>opened</p>');
+        row().setAttribute('tabindex', '0');
+        row().focus();
+        press(row(), key);
+        expect(fetchMock).toHaveBeenCalledWith('/visitors/rows?asn=AS1', expect.anything());
+        await vi.waitFor(() => expect(panel().classList.contains('open')).toBe(true));
+        press(document, 'Escape');
+      }
+    });
+
+    it('ignores Enter on a link inside the row, which follows itself', () => {
+      const fetchMock = stubFetch();
+      press(document.getElementById('dim'), 'Enter');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('moves focus into the panel, and back to the row on close', async () => {
+      stubFetch('<p>opened</p>');
+      row().setAttribute('tabindex', '0');
+      row().focus();
+      press(row(), 'Enter');
+      await vi.waitFor(() => expect(document.activeElement).toBe(panel()));
+      expect(panel().getAttribute('aria-label')).toBeTruthy();
+      press(document, 'Escape');
+      expect(document.activeElement).toBe(row());
+    });
+  });
+
   it('says so when the fragment cannot be loaded', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
     click(document.getElementById('plain'));

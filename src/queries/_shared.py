@@ -529,7 +529,13 @@ def _term_sql(term: "search.Term", ip_ref: str) -> tuple[str, list, str, list]:
     return pattern, [param], "", []
 
 
-def _apply_visitor_search(query: str, params: list, q: str | None) -> tuple[str, list]:
+def _apply_visitor_search(
+    query: str,
+    params: list,
+    q: str | None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[str, list]:
     """Append the search to the per-IP visitor list, the map and the timeline.
 
     Terms are AND-ed. Per-IP facts (intel columns, child tables, the address)
@@ -538,7 +544,15 @@ def _apply_visitor_search(query: str, params: list, q: str | None) -> tuple[str,
     and filtering them inline would also shrink the rows the query aggregates
     over, so an IP found via /.env would report only its .env requests rather
     than its real visit count.
+
+    **The subquery takes the window too.** Without it `path:/.env` over the last
+    week selected every address that had *ever* asked for /.env and showed its
+    week of other requests, while the Paths grouping — which filters the rows
+    themselves — found none. The selected range governs every number on a page,
+    and which visitors a search selects is one of them.
     """
+    window, window_params = _date_conditions(since, until, column="timestamp")
+    within = "".join(f" AND {c}" for c in window)
     terms, _ = search.parse(q)
     for term in terms:
         intel, intel_params, visit, visit_params = _term_sql(term, "v.ip")
@@ -547,8 +561,8 @@ def _apply_visitor_search(query: str, params: list, q: str | None) -> tuple[str,
             parts.append(intel)
             term_params.extend(intel_params)
         if visit:
-            parts.append(f"v.ip IN (SELECT ip FROM visits WHERE {visit})")
-            term_params.extend(visit_params)
+            parts.append(f"v.ip IN (SELECT ip FROM visits WHERE ({visit}){within})")
+            term_params.extend([*visit_params, *window_params])
         if not parts:
             continue
         query += " AND (" + " OR ".join(parts) + ")"

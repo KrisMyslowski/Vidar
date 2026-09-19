@@ -248,6 +248,37 @@ def test_a_restored_month_is_skipped_by_the_next_pass(tmp_db):
         assert count_visits(conn) == 1
 
 
+@pytest.mark.parametrize(
+    "stored, now, expired",
+    [
+        # 10:00 UTC written with an offset; an hour later it has run out.
+        ("2026-09-01T12:00:00+02:00", datetime(2026, 9, 1, 11, 0, tzinfo=timezone.utc), True),
+        # The same instant the other way round: not yet.
+        (
+            "2026-09-01T10:00:00+00:00",
+            datetime(2026, 9, 1, 11, 0, tzinfo=timezone(timedelta(hours=2))),
+            False,
+        ),
+        # A naive `now` is UTC, as every timestamp here is.
+        ("2026-09-01T10:00:00+00:00", datetime(2026, 9, 1, 10, 30), True),
+    ],
+    ids=["offset-stored", "offset-now", "naive-now"],
+)
+def test_a_pin_expires_by_the_instant_not_by_how_it_is_written(
+    tmp_db, tmp_archive_dir, stored, now, expired
+):
+    """The expiry compared the stored ISO string with now.isoformat() as text,
+    which orders instants only when both carry the same offset. A pin written
+    12:00+02:00 read as still running at 11:00 UTC, an hour after it ran out."""
+    with get_conn(tmp_db) as conn:
+        _seed(conn, "1.1.1.1", "2026-04")
+        archive.archive_month(conn, "2026-04")
+        archive.restore_month(conn, "2026-04")
+        archive._set_pin(conn, "2026-04", stored)
+
+        assert (archive.expire_restores(conn, now) == ["2026-04"]) is expired
+
+
 def test_an_expired_pin_moves_the_month_back_out(tmp_db):
     with get_conn(tmp_db) as conn:
         _seed(conn, "1.1.1.1", "2026-04")
@@ -349,6 +380,19 @@ def test_resolve_archive_stays_inside_the_directory(tmp_archive_dir, tmp_path):
     outside = tmp_path / "elsewhere.zip"
     outside.write_bytes(b"x")
     assert archive.resolve_archive("../elsewhere") is None
+
+
+def test_resolve_archive_answers_for_a_month_in_the_directory_itself(tmp_archive_dir):
+    """The containment test was `root in path.parents`, which a subdirectory also
+    passes: `sub/2026-04` served archive/sub/2026-04.zip. It relied on the caller
+    having run valid_month() first; it now runs it itself, and wants the file
+    directly in the archive directory."""
+    (tmp_archive_dir / "sub").mkdir(parents=True)
+    (tmp_archive_dir / "sub" / "2026-04.zip").write_bytes(b"x")
+    (tmp_archive_dir / "2026-05.zip").write_bytes(b"x")
+
+    assert archive.resolve_archive("sub/2026-04") is None
+    assert archive.resolve_archive("2026-05") == (tmp_archive_dir / "2026-05.zip").resolve()
 
 
 # ── The daily pass ───────────────────────────────────────────────────────────

@@ -383,12 +383,11 @@ async def _load_tor_exits(client: httpx.AsyncClient) -> set[str] | None:
 # because the container resolves through Docker's embedded DNS to a public upstream
 # and Spamhaus answers 127.255.255.254 to all of it.
 #
-# TODO: parsing alone only makes the answer honest, not useful — the legacy zone
-# still refuses us, so nothing gets recorded at all. Set DNSBL_DQS_KEY (free
-# Spamhaus Data Query Service) to get real data; see _dnsbl_host(). Alternatives
-# weighed in docs/data-reference.md §4.2.8: AbuseIPDB (free API, 1k
-# checks/day, richer than a boolean but below our IP volume) and the Spamhaus rsync
-# feed (needs a local mirroring DNS server).
+# Parsing alone only makes the answer honest, not useful: without a key the legacy
+# zone still refuses us, nothing is recorded, and _warn_dnsbl_error() says so. With
+# DNSBL_DQS_KEY (the free Spamhaus Data Query Service) the query goes to the DQS
+# zone instead — see _dnsbl_host(). The alternatives that were weighed, AbuseIPDB
+# and the Spamhaus rsync feed, are in docs/data-reference.md §4.2.8.
 _DNSBL_ERROR_PREFIX = "127.255.255."
 
 
@@ -622,7 +621,7 @@ async def enrich_batch(
 ) -> tuple[list[dict], list[str]] | None:
     """Enrich one batch of IPs through all four providers.
 
-    Order: ip-api.com (geo/ASN) → Shodan (ports) → Tor → DNSBL.
+    Order: ip-api.com (geo/ASN) → Shodan (ports) → reverse DNS (forward-confirmed) → Tor → DNSBL.
     Returns (enriched, failed_ips): partial ip_intel rows ready for upsert (fetched_at
     stamped at end), plus the IPs ip-api answered with status=fail (invalid/reserved —
     a permanent condition the worker records via mark_enrichment_failed).

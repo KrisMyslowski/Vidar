@@ -34,6 +34,11 @@ _SET_CLASS_SQL = """
 """
 
 
+def count_ip_intel(conn: sqlite3.Connection) -> int:
+    """Addresses with an intel row, enriched or not."""
+    return conn.execute("SELECT COUNT(*) FROM ip_intel").fetchone()[0]
+
+
 def set_visitor_class(conn: sqlite3.Connection, ip: str, label: str) -> None:
     """Write the visitor_class label for an IP into ip_intel."""
     conn.execute(_SET_CLASS_SQL, (label, ip))

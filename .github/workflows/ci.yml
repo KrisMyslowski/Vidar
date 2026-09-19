@@ -44,3 +44,15 @@ jobs:
       # and pointless on a runner that has node and Chrome preinstalled: the
       # layout suite has no reason to skip, so a skip is a fault.
       - run: VIDAR_STRICT=1 bash scripts/run_tests.sh
+
+  # The image the release publishes, built and run the way the server runs it:
+  # read-only, no capabilities, the lock installed with hashes, its own
+  # HEALTHCHECK required to pass. The gate above tests the code and never builds
+  # the image, so a Dockerfile or lock that no longer installs — or a smoke test
+  # that has quietly stopped proving anything, which happened — surfaced only when
+  # a release tag was pushed. amd64 here; arm64 is covered by building locally.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: bash deploy/test_local.sh

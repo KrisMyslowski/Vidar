@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-deployment" viewBox="0 0 960 2426" width="960" height="2426" role="img" aria-labelledby="vidar-deployment-title vidar-deployment-desc">
+<title id="vidar-deployment-title">Vidar deployment</title>
+<desc id="vidar-deployment-desc">Deployment view of Vidar: hosts, the container, mounts, ports, the SSH tunnel and external services.</desc>
+<style>
+.vidar-deployment text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-deployment .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-deployment .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-deployment .sb { font-weight: 600; }
+.vidar-deployment .h { font-size: 16px; font-weight: 600; }
+.vidar-deployment .ti { font-size: 22px; font-weight: 600; }
+.vidar-deployment .st { fill: #59636e; }
+.vidar-deployment .it { font-style: italic; }
+.vidar-deployment .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-deployment .ko { fill: #ffffff; }
+.vidar-deployment .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-deployment .hdr { fill: #eaeef2; }
+.vidar-deployment .tbl { fill: #d6efea; }
+.vidar-deployment .cls { fill: #dce7f7; }
+.vidar-deployment .ext { fill: #f5e6c8; }
+.vidar-deployment .proc { fill: #e7e0f6; }
+.vidar-deployment .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-deployment .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-deployment .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-deployment .dash { stroke-dasharray: 6 4; }
+.vidar-deployment .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-deployment .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-deployment .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-deployment .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-deployment .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-deployment .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-deployment .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-deployment .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-deployment .dot { fill: #59636e; }
+.vidar-deployment .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-deployment text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-deployment .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-deployment .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-deployment .sb { font-weight: 600; }
+.vidar-deployment .h { font-size: 16px; font-weight: 600; }
+.vidar-deployment .ti { font-size: 22px; font-weight: 600; }
+.vidar-deployment .st { fill: #9198a1; }
+.vidar-deployment .it { font-style: italic; }
+.vidar-deployment .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-deployment .ko { fill: #0d1117; }
+.vidar-deployment .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-deployment .hdr { fill: #212830; }
+.vidar-deployment .tbl { fill: #12332e; }
+.vidar-deployment .cls { fill: #1a2940; }
+.vidar-deployment .ext { fill: #3a2d13; }
+.vidar-deployment .proc { fill: #2a2342; }
+.vidar-deployment .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-deployment .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-deployment .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-deployment .dash { stroke-dasharray: 6 4; }
+.vidar-deployment .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-deployment .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-deployment .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-deployment .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-deployment .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-deployment .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-deployment .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-deployment .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-deployment .dot { fill: #9198a1; }
+.vidar-deployment .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-deployment-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-deployment-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-deployment-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-deployment-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="959" height="2425" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — deployment</text>
+<text x="30" y="70" class="st" xml:space="preserve">deploy/docker-compose.yml and deploy/Dockerfile as installed by deploy/deploy_remote.sh under /srv/vidar.</text>
+<text x="30" y="90" class="st" xml:space="preserve">Host paths are the compose defaults (NGINX_LOG_DIR, VIDAR_DATA_DIR).</text>
+<path class="box" d="M30,140 L42,128 L332,128 L332,418 L320,430 L320,140 Z"/>
+<line class="sep" x1="320" y1="140" x2="332" y2="128"/>
+<rect class="box" x="30" y="140" width="290" height="290"/>
+<text x="44" y="164" class="st" xml:space="preserve">«device»</text>
+<text x="44" y="184" class="sb" xml:space="preserve">Operator workstation</text>
+<rect class="box" x="44" y="202" width="262" height="90"/>
+<rect class="hdr cls" x="44.6" y="202.6" width="260.8" height="57.4"/>
+<text x="56" y="227" class="st" xml:space="preserve">«execution environment»</text>
+<text x="56" y="247" class="sb" xml:space="preserve">Browser</text>
+<line class="sep" x1="44" y1="260" x2="306" y2="260"/>
+<text x="56" y="281" class="m" xml:space="preserve">http://localhost:8080/</text>
+<rect class="box" x="44" y="332" width="262" height="90"/>
+<rect class="hdr proc" x="44.6" y="332.6" width="260.8" height="37.4"/>
+<text x="56" y="357" class="sb" xml:space="preserve">ssh client</text>
+<line class="sep" x1="44" y1="370" x2="306" y2="370"/>
+<text x="56" y="391" class="m" xml:space="preserve">ssh -L 8080:localhost:8080</text>
+<text x="56" y="411" class="m" xml:space="preserve">    &lt;user&gt;@&lt;host&gt;</text>
+<path class="ln" d="M175,292 L175,332" marker-end="url(#vidar-deployment-open)"/>
+<path class="box" d="M350,140 L362,128 L642,128 L642,418 L630,430 L630,140 Z"/>
+<line class="sep" x1="630" y1="140" x2="642" y2="128"/>
+<rect class="box" x="350" y="140" width="280" height="290"/>
+<text x="364" y="164" class="st" xml:space="preserve">«external» loaded by the browser</text>
+<text x="364" y="184" class="sb" xml:space="preserve">CDNs</text>
+<rect class="box" x="364" y="202" width="252" height="90"/>
+<rect class="hdr ext" x="364.6" y="202.6" width="250.8" height="37.4"/>
+<text x="376" y="227" class="sb" xml:space="preserve">unpkg.com</text>
+<line class="sep" x1="364" y1="240" x2="616" y2="240"/>
+<text x="376" y="261" class="m" xml:space="preserve">leaflet 1.9.4</text>
+<text x="376" y="281" class="m" xml:space="preserve">leaflet.markercluster 1.5.3</text>
+<rect class="box" x="364" y="308" width="252" height="70"/>
+<rect class="hdr ext" x="364.6" y="308.6" width="250.8" height="37.4"/>
+<text x="376" y="333" class="sb" xml:space="preserve">basemaps.cartocdn.com</text>
+<line class="sep" x1="364" y1="346" x2="616" y2="346"/>
+<text x="376" y="367" class="m" xml:space="preserve">map tiles (CARTO_API_KEY)</text>
+<path class="ln" d="M306,247 L364,247" marker-end="url(#vidar-deployment-open)"/>
+<path class="box" d="M660,140 L672,128 L942,128 L942,418 L930,430 L930,140 Z"/>
+<line class="sep" x1="930" y1="140" x2="942" y2="128"/>
+<rect class="box" x="660" y="140" width="270" height="290"/>
+<text x="674" y="164" class="st" xml:space="preserve">«device», many</text>
+<text x="674" y="184" class="sb" xml:space="preserve">Site visitors</text>
+<text x="674" y="230" class="st" xml:space="preserve">people, crawlers and scanners</text>
+<text x="674" y="250" class="st" xml:space="preserve">on the public internet</text>
+<path class="ln dash" d="M20,470 L940,470"/>
+<text x="30" y="460" class="st" xml:space="preserve">public internet</text>
+<text x="30" y="494" class="st" xml:space="preserve">server</text>
+<path class="box" d="M30,530 L42,518 L942,518 L942,1756 L930,1768 L930,530 Z"/>
+<line class="sep" x1="930" y1="530" x2="942" y2="518"/>
+<rect class="box" x="30" y="530" width="900" height="1238"/>
+<text x="480" y="554" class="st" text-anchor="middle" xml:space="preserve">«device»</text>
+<text x="480" y="574" class="sb" text-anchor="middle" xml:space="preserve">Server host · Docker Engine + Compose</text>
+<rect class="box" x="50" y="592" width="280" height="110"/>
+<rect class="hdr proc" x="50.6" y="592.6" width="278.8" height="57.4"/>
+<text x="62" y="617" class="st" xml:space="preserve">«process» on the host</text>
+<text x="62" y="637" class="sb" xml:space="preserve">sshd</text>
+<line class="sep" x1="50" y1="650" x2="330" y2="650"/>
+<text x="62" y="671" class="m" xml:space="preserve">listens :22</text>
+<text x="62" y="691" xml:space="preserve">accepts the -L forward</text>
+<rect class="box" x="490" y="592" width="420" height="150"/>
+<rect class="hdr cls" x="490.6" y="592.6" width="418.8" height="57.4"/>
+<text x="502" y="617" class="st" xml:space="preserve">«execution environment»</text>
+<text x="502" y="637" class="sb" xml:space="preserve">nginx</text>
+<line class="sep" x1="490" y1="650" x2="910" y2="650"/>
+<text x="502" y="671" class="st" xml:space="preserve">host or container — outside this repo</text>
+<text x="502" y="691" class="m" xml:space="preserve">listens :80 / :443</text>
+<text x="502" y="711" class="m" xml:space="preserve">log_format json_log</text>
+<text x="502" y="731" xml:space="preserve">deploy/nginx-log-format.conf; UTC timestamps</text>
+<rect class="box" x="490" y="802" width="420" height="130"/>
+<rect class="hdr tbl" x="490.6" y="802.6" width="418.8" height="57.4"/>
+<text x="502" y="827" class="st" xml:space="preserve">«artifact»</text>
+<text x="502" y="847" class="sb" xml:space="preserve">host filesystem</text>
+<path class="icon" d="M880,812 L892,812 L898,818 L898,834 L880,834 Z"/>
+<path class="ln" d="M892,812 L892,818 L898,818"/>
+<line class="sep" x1="490" y1="860" x2="910" y2="860"/>
+<text x="502" y="881" class="m" xml:space="preserve">/srv/nginx/logs/access.log</text>
+<text x="502" y="901" class="m" xml:space="preserve">/srv/vidar/data/   vidar.db, archive/, backup/</text>
+<text x="502" y="921" class="m" xml:space="preserve">/srv/vidar/.env    plus deploy/, src/, docs/</text>
+<path class="ln" d="M700,742 L700,802" marker-end="url(#vidar-deployment-open)"/>
+<text x="714" y="778" class="st" xml:space="preserve">appends</text>
+<rect class="box" x="50" y="1012" width="860" height="726"/>
+<rect class="hdr proc" x="50.6" y="1012.6" width="858.8" height="57.4"/>
+<text x="62" y="1037" class="st" xml:space="preserve">«container»</text>
+<text x="62" y="1057" class="mb" xml:space="preserve">vidar</text>
+<line class="sep" x1="50" y1="1070" x2="910" y2="1070"/>
+<text x="62" y="1091" class="m" xml:space="preserve">service vidar · container_name vidar · image deploy-vidar:latest from deploy/Dockerfile</text>
+<text x="62" y="1111" class="m" xml:space="preserve">FROM python:3.12-slim pinned by digest · USER appuser (uid 1000) · WORKDIR /app</text>
+<text x="62" y="1131" class="m" xml:space="preserve">read_only · tmpfs /tmp, /var/log, /var/run · cap_drop ALL · no-new-privileges · pids_limit 256</text>
+<text x="62" y="1151" class="m" xml:space="preserve">restart unless-stopped · json-file logs 10m × 3 · HEALTHCHECK every 30 s: GET /health</text>
+<text x="62" y="1171" class="m" xml:space="preserve">CMD uvicorn src.main:app --host 0.0.0.0 --port 8080</text>
+<text x="62" y="1191" class="m" xml:space="preserve">ports 127.0.0.1:${VIDAR_PORT:-8080}:8080 (loopback only)</text>
+<text x="62" y="1211" class="m" xml:space="preserve">volumes /logs ← /srv/nginx/logs (ro) · /data ← /srv/vidar/data (rw) · env_file ../.env</text>
+<rect class="box" x="66" y="1238" width="828" height="290"/>
+<rect class="hdr proc" x="66.6" y="1238.6" width="826.8" height="57.4"/>
+<text x="78" y="1263" class="st" xml:space="preserve">«process» uvicorn</text>
+<text x="78" y="1283" class="sb" xml:space="preserve">one asyncio event loop</text>
+<line class="sep" x1="66" y1="1296" x2="894" y2="1296"/>
+<text x="78" y="1317" class="m" xml:space="preserve">startup: init_db() · _init_async_globals() · await warm_caches()</text>
+<text x="78" y="1337" class="m" xml:space="preserve">tail_log              every POLL_INTERVAL_SECONDS (1.0 s), ≤ 1 MB per tick</text>
+<text x="78" y="1357" class="m" xml:space="preserve">enrichment_worker     batches of ≤ 100 IPs, 4.5 s apart; 5 s when idle</text>
+<text x="78" y="1377" class="m" xml:space="preserve">_rdns_backfill_task   once at startup</text>
+<text x="78" y="1397" class="m" xml:space="preserve">_backfill_task        once: force_reclassify_all or backfill_visitor_classes</text>
+<text x="78" y="1417" class="m" xml:space="preserve">_reclassify_task      every RECLASSIFY_INTERVAL_MINUTES (15): reclassify_stale_ips</text>
+<text x="78" y="1437" class="m" xml:space="preserve">_retention_task       hourly tick; run_retention() when the last run is ≥ 1 day old</text>
+<text x="78" y="1457" class="m" xml:space="preserve">_backup_task          hourly tick; run_backup() when the last run is ≥ 1 day old</text>
+<text x="78" y="1477" class="m" xml:space="preserve">requests              refuse_unknown_hosts → block_cross_origin_writes →</text>
+<text x="78" y="1497" class="m" xml:space="preserve">                      security_headers → rate_limit_export → routes</text>
+<text x="78" y="1517" class="st" xml:space="preserve">No cron. In DEMO_MODE only _backfill_task starts.</text>
+<rect class="box" x="66" y="1548" width="828" height="170"/>
+<rect class="hdr proc" x="66.6" y="1548.6" width="826.8" height="57.4"/>
+<text x="78" y="1573" class="st" xml:space="preserve">«thread»</text>
+<text x="78" y="1593" class="sb" xml:space="preserve">default thread pool</text>
+<line class="sep" x1="66" y1="1606" x2="894" y2="1606"/>
+<text x="78" y="1627" class="m" xml:space="preserve">db.run_db             _write_batch · _select_batch · _persist_batch (classify_ip) ·</text>
+<text x="78" y="1647" class="m" xml:space="preserve">  (shielded)          the backfill and reclassify passes · rDNS backfill · _cache.write</text>
+<text x="78" y="1667" class="m" xml:space="preserve">asyncio.to_thread     _cache.fetch (route reads) · warm_caches · retention and backup</text>
+<text x="78" y="1687" class="m" xml:space="preserve">                      get_state reads · run_retention · run_backup · sweep_abandoned_temps</text>
+<text x="78" y="1707" class="m" xml:space="preserve">                      _dnsbl_lookup · _reverse_dns_lookup (≤ DNS_TIMEOUT_SECONDS wait)</text>
+<path class="ln" d="M190,702 L190,1012" marker-end="url(#vidar-deployment-open)"/>
+<text x="204" y="972" class="m" xml:space="preserve">TCP 127.0.0.1:8080</text>
+<path class="ln" d="M560,932 L560,1012" marker-end="url(#vidar-deployment-open)"/>
+<text x="572" y="978" class="m" xml:space="preserve">/logs :ro</text>
+<path class="ln" d="M700,932 L700,1012" marker-end="url(#vidar-deployment-open)" marker-start="url(#vidar-deployment-open)"/>
+<text x="712" y="978" class="m" xml:space="preserve">/data :rw</text>
+<path class="ln" d="M840,932 L840,1012" marker-end="url(#vidar-deployment-open)"/>
+<text x="852" y="978" class="m" xml:space="preserve">env_file</text>
+<path class="ln" d="M175,422 L175,592" marker-end="url(#vidar-deployment-open)"/>
+<text x="190" y="460" class="m" xml:space="preserve">SSH :22</text>
+<path class="ln" d="M795,430 L795,592" marker-end="url(#vidar-deployment-open)"/>
+<text x="780" y="460" class="m" text-anchor="end" xml:space="preserve">HTTP :80, HTTPS :443</text>
+<rect class="box" x="45" y="1892" width="420" height="110"/>
+<rect class="hdr ext" x="45.6" y="1892.6" width="418.8" height="57.4"/>
+<text x="57" y="1917" class="st" xml:space="preserve">«external»</text>
+<text x="57" y="1937" class="sb" xml:space="preserve">ip-api.com</text>
+<path class="icon" d="M437,1920 A6,6 0 0 1 437,1908 A8,8 0 0 1 451,1906 A6,6 0 0 1 455,1920 Z"/>
+<line class="sep" x1="45" y1="1950" x2="465" y2="1950"/>
+<text x="57" y="1971" class="m" xml:space="preserve">POST http://ip-api.com/batch</text>
+<text x="57" y="1991" class="m" xml:space="preserve">plain HTTP · ≤ 100 IPs · 4.5 s pacing</text>
+<rect class="box" x="480" y="1892" width="420" height="110"/>
+<rect class="hdr ext" x="480.6" y="1892.6" width="418.8" height="57.4"/>
+<text x="492" y="1917" class="st" xml:space="preserve">«external»</text>
+<text x="492" y="1937" class="sb" xml:space="preserve">internetdb.shodan.io</text>
+<path class="icon" d="M872,1920 A6,6 0 0 1 872,1908 A8,8 0 0 1 886,1906 A6,6 0 0 1 890,1920 Z"/>
+<line class="sep" x1="480" y1="1950" x2="900" y2="1950"/>
+<text x="492" y="1971" class="m" xml:space="preserve">GET https://internetdb.shodan.io/{ip}</text>
+<text x="492" y="1991" class="m" xml:space="preserve">≤ 10 concurrent · ≤ 600 per minute</text>
+<rect class="box" x="45" y="2046" width="420" height="110"/>
+<rect class="hdr ext" x="45.6" y="2046.6" width="418.8" height="57.4"/>
+<text x="57" y="2071" class="st" xml:space="preserve">«external»</text>
+<text x="57" y="2091" class="sb" xml:space="preserve">check.torproject.org</text>
+<path class="icon" d="M437,2074 A6,6 0 0 1 437,2062 A8,8 0 0 1 451,2060 A6,6 0 0 1 455,2074 Z"/>
+<line class="sep" x1="45" y1="2104" x2="465" y2="2104"/>
+<text x="57" y="2125" class="m" xml:space="preserve">GET /torbulkexitlist over HTTPS</text>
+<text x="57" y="2145" class="m" xml:space="preserve">cached 24 h · 3 attempts, then 5 min</text>
+<rect class="box" x="480" y="2046" width="420" height="110"/>
+<rect class="hdr ext" x="480.6" y="2046.6" width="418.8" height="57.4"/>
+<text x="492" y="2071" class="st" xml:space="preserve">«external»</text>
+<text x="492" y="2091" class="sb" xml:space="preserve">DNS resolver of the container</text>
+<path class="icon" d="M872,2074 A6,6 0 0 1 872,2062 A8,8 0 0 1 886,2060 A6,6 0 0 1 890,2074 Z"/>
+<line class="sep" x1="480" y1="2104" x2="900" y2="2104"/>
+<text x="492" y="2125" class="m" xml:space="preserve">DNSBL lookups per DNSBL_PROVIDERS</text>
+<text x="492" y="2145" class="m" xml:space="preserve">FCrDNS: PTR, then forward lookup</text>
+<rect class="frame" x="30" y="1848" width="900" height="358"/>
+<text x="45" y="2190" class="st" xml:space="preserve">«external» services called one step after another by enrich_batch; only the IP address is sent</text>
+<path class="ln" d="M472.5,1738 L472.5,2030"/>
+<path class="ln" d="M255,1876 L690,1876"/>
+<circle class="dot" cx="472.5" cy="1876" r="3"/>
+<path class="ln" d="M255,1876 L255,1892" marker-end="url(#vidar-deployment-open)"/>
+<path class="ln" d="M690,1876 L690,1892" marker-end="url(#vidar-deployment-open)"/>
+<path class="ln" d="M255,2030 L690,2030"/>
+<circle class="dot" cx="472.5" cy="2030" r="3"/>
+<path class="ln" d="M255,2030 L255,2046" marker-end="url(#vidar-deployment-open)"/>
+<path class="ln" d="M690,2030 L690,2046" marker-end="url(#vidar-deployment-open)"/>
+<rect class="note" x="30" y="2236" width="900" height="160" rx="6"/>
+<text x="46" y="2264" class="sb" xml:space="preserve">Reading this view</text>
+<text x="46" y="2295" xml:space="preserve">3D boxes are UML nodes; the dashed line is the boundary to the public internet.</text>
+<text x="46" y="2315" xml:space="preserve">Order of the outbound calls: ip-api, Shodan, reverse DNS, Tor list, DNSBL.</text>
+<text x="46" y="2335" xml:space="preserve">The dashboard has no login: the loopback-only port plus the SSH tunnel is the access control,</text>
+<text x="46" y="2355" xml:space="preserve">and ALLOWED_HOSTS is checked before any route runs.</text>
+<text x="46" y="2375" xml:space="preserve">vidar shares no Docker network with nginx; the coupling is the read-only log mount and its format.</text>
+</svg>

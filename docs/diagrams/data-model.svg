@@ -1,0 +1,263 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-data-model" viewBox="0 0 960 1874" width="960" height="1874" role="img" aria-labelledby="vidar-data-model-title vidar-data-model-desc">
+<title id="vidar-data-model-title">Vidar data model</title>
+<desc id="vidar-data-model-desc">The nine SQLite tables of Vidar with their columns, indexes and foreign keys.</desc>
+<style>
+.vidar-data-model text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-data-model .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-data-model .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-data-model .sb { font-weight: 600; }
+.vidar-data-model .h { font-size: 16px; font-weight: 600; }
+.vidar-data-model .ti { font-size: 22px; font-weight: 600; }
+.vidar-data-model .st { fill: #59636e; }
+.vidar-data-model .it { font-style: italic; }
+.vidar-data-model .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-data-model .ko { fill: #ffffff; }
+.vidar-data-model .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-data-model .hdr { fill: #eaeef2; }
+.vidar-data-model .tbl { fill: #d6efea; }
+.vidar-data-model .cls { fill: #dce7f7; }
+.vidar-data-model .ext { fill: #f5e6c8; }
+.vidar-data-model .proc { fill: #e7e0f6; }
+.vidar-data-model .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-data-model .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-data-model .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-data-model .dash { stroke-dasharray: 6 4; }
+.vidar-data-model .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-data-model .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-data-model .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-data-model .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-data-model .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-data-model .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-data-model .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-data-model .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-data-model .dot { fill: #59636e; }
+.vidar-data-model .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-data-model text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-data-model .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-data-model .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-data-model .sb { font-weight: 600; }
+.vidar-data-model .h { font-size: 16px; font-weight: 600; }
+.vidar-data-model .ti { font-size: 22px; font-weight: 600; }
+.vidar-data-model .st { fill: #9198a1; }
+.vidar-data-model .it { font-style: italic; }
+.vidar-data-model .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-data-model .ko { fill: #0d1117; }
+.vidar-data-model .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-data-model .hdr { fill: #212830; }
+.vidar-data-model .tbl { fill: #12332e; }
+.vidar-data-model .cls { fill: #1a2940; }
+.vidar-data-model .ext { fill: #3a2d13; }
+.vidar-data-model .proc { fill: #2a2342; }
+.vidar-data-model .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-data-model .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-data-model .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-data-model .dash { stroke-dasharray: 6 4; }
+.vidar-data-model .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-data-model .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-data-model .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-data-model .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-data-model .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-data-model .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-data-model .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-data-model .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-data-model .dot { fill: #9198a1; }
+.vidar-data-model .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-data-model-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-data-model-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-data-model-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-data-model-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="959" height="1873" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — data model</text>
+<text x="30" y="70" class="st" xml:space="preserve">The SQLite tables created by src/db.py (SCHEMA, INDEXES and migrations), stored in /data/vidar.db.</text>
+<text x="30" y="90" class="st" xml:space="preserve">Sessions, incidents and the monthly report are derived on read and have no table.</text>
+<rect class="box" x="30" y="126" width="410" height="802"/>
+<rect class="hdr tbl" x="30.6" y="126.6" width="408.8" height="57.4"/>
+<text x="42" y="151" class="st" xml:space="preserve">«table»</text>
+<text x="42" y="171" class="mb" xml:space="preserve">visits</text>
+<line class="sep" x1="30" y1="184" x2="440" y2="184"/>
+<text x="42" y="205" class="m" xml:space="preserve">id                   INTEGER PK AUTOINCREMENT</text>
+<text x="42" y="225" class="m" xml:space="preserve">ip                   TEXT    NOT NULL</text>
+<text x="42" y="245" class="m" xml:space="preserve">timestamp            TEXT    NOT NULL</text>
+<text x="42" y="265" class="m" xml:space="preserve">method               TEXT</text>
+<text x="42" y="285" class="m" xml:space="preserve">path                 TEXT</text>
+<text x="42" y="305" class="m" xml:space="preserve">server_port          INTEGER = 0</text>
+<text x="42" y="325" class="m" xml:space="preserve">status               INTEGER</text>
+<text x="42" y="345" class="m" xml:space="preserve">bytes_sent           INTEGER</text>
+<text x="42" y="365" class="m" xml:space="preserve">user_agent           TEXT</text>
+<text x="42" y="385" class="m" xml:space="preserve">referer              TEXT</text>
+<text x="42" y="405" class="m" xml:space="preserve">request_time         REAL</text>
+<text x="42" y="425" class="m" xml:space="preserve">ssl_protocol         TEXT</text>
+<text x="42" y="445" class="m" xml:space="preserve">browser              TEXT    = ''</text>
+<text x="42" y="465" class="m" xml:space="preserve">os                   TEXT    = ''</text>
+<text x="42" y="485" class="m" xml:space="preserve">device               TEXT    = ''</text>
+<text x="42" y="505" class="m" xml:space="preserve">accept_language      TEXT    = ''</text>
+<text x="42" y="525" class="m" xml:space="preserve">request_length       INTEGER = 0</text>
+<text x="42" y="545" class="m" xml:space="preserve">http_x_forwarded_for TEXT    = ''</text>
+<text x="42" y="565" class="m" xml:space="preserve">ssl_cipher           TEXT    = ''</text>
+<text x="42" y="585" class="m" xml:space="preserve">connection           INTEGER = 0</text>
+<text x="42" y="605" class="m" xml:space="preserve">connection_requests  INTEGER = 0</text>
+<text x="42" y="625" class="m" xml:space="preserve">limit_req_status     TEXT    = ''</text>
+<text x="42" y="645" class="m" xml:space="preserve">http_version         TEXT    = ''</text>
+<text x="42" y="665" class="m" xml:space="preserve">sec_fetch_dest       TEXT    = ''</text>
+<text x="42" y="685" class="m" xml:space="preserve">sec_fetch_mode       TEXT    = ''</text>
+<text x="42" y="705" class="m" xml:space="preserve">sec_fetch_site       TEXT    = ''</text>
+<text x="42" y="725" class="m" xml:space="preserve">accept_encoding      TEXT    = ''</text>
+<text x="42" y="745" class="m" xml:space="preserve">ssl_session_reused   TEXT    = ''</text>
+<text x="42" y="765" class="m" xml:space="preserve">created_at           TEXT    = CURRENT_TIMESTAMP</text>
+<line class="sep" x1="30" y1="776" x2="440" y2="776"/>
+<text x="42" y="797" class="m" xml:space="preserve">idx_visits_ip_timestamp (ip, timestamp)</text>
+<text x="42" y="817" class="m" xml:space="preserve">idx_visits_timestamp (timestamp)</text>
+<text x="42" y="837" class="m" xml:space="preserve">idx_visits_timestamp_ip (timestamp, ip)</text>
+<text x="42" y="857" class="m" xml:space="preserve">idx_visits_status_path (status, path)</text>
+<text x="42" y="877" class="m" xml:space="preserve">UNIQUE idx_visits_request_identity</text>
+<text x="42" y="897" class="m" xml:space="preserve">  (timestamp, connection, connection_requests)</text>
+<text x="42" y="917" class="m" xml:space="preserve">  WHERE connection &gt; 0</text>
+<rect class="box" x="560" y="126" width="370" height="562"/>
+<rect class="hdr tbl" x="560.6" y="126.6" width="368.8" height="57.4"/>
+<text x="572" y="151" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="171" class="mb" xml:space="preserve">ip_intel</text>
+<line class="sep" x1="560" y1="184" x2="930" y2="184"/>
+<text x="572" y="205" class="m" xml:space="preserve">ip                   TEXT    PK</text>
+<text x="572" y="225" class="m" xml:space="preserve">country              TEXT</text>
+<text x="572" y="245" class="m" xml:space="preserve">country_code         TEXT</text>
+<text x="572" y="265" class="m" xml:space="preserve">city                 TEXT</text>
+<text x="572" y="285" class="m" xml:space="preserve">lat                  REAL</text>
+<text x="572" y="305" class="m" xml:space="preserve">lon                  REAL</text>
+<text x="572" y="325" class="m" xml:space="preserve">isp                  TEXT</text>
+<text x="572" y="345" class="m" xml:space="preserve">org                  TEXT</text>
+<text x="572" y="365" class="m" xml:space="preserve">asn                  TEXT</text>
+<text x="572" y="385" class="m" xml:space="preserve">is_proxy             INTEGER = 0</text>
+<text x="572" y="405" class="m" xml:space="preserve">is_hosting           INTEGER = 0</text>
+<text x="572" y="425" class="m" xml:space="preserve">is_mobile            INTEGER = 0</text>
+<text x="572" y="445" class="m" xml:space="preserve">reverse_dns          TEXT    = ''</text>
+<text x="572" y="465" class="m" xml:space="preserve">is_tor               INTEGER = 0</text>
+<text x="572" y="485" class="m" xml:space="preserve">dnsbl_listed         INTEGER = 0</text>
+<text x="572" y="505" class="m" xml:space="preserve">dnsbl_sources        TEXT    = ''</text>
+<text x="572" y="525" class="m" xml:space="preserve">fetched_at           TEXT</text>
+<text x="572" y="545" class="m" xml:space="preserve">visitor_class        TEXT    = ''</text>
+<text x="572" y="565" class="m" xml:space="preserve">classified_at        TEXT</text>
+<text x="572" y="585" class="m" xml:space="preserve">classified_visit_id  INTEGER = 0</text>
+<text x="572" y="605" class="m" xml:space="preserve">rdns_checked_at      TEXT</text>
+<line class="sep" x1="560" y1="616" x2="930" y2="616"/>
+<text x="572" y="637" class="m" xml:space="preserve">idx_ip_intel_fetched (fetched_at)</text>
+<text x="572" y="657" class="m" xml:space="preserve">idx_ip_intel_visitor_class</text>
+<text x="572" y="677" class="m" xml:space="preserve">  (visitor_class)</text>
+<path class="ln dash" d="M440,226 L560,226"/>
+<text x="448" y="218" class="m" xml:space="preserve">*</text>
+<text x="552" y="218" class="m" text-anchor="end" xml:space="preserve">0..1</text>
+<text x="500" y="250" class="st" text-anchor="middle" xml:space="preserve">join on ip;</text>
+<text x="500" y="270" class="st" text-anchor="middle" xml:space="preserve">no FOREIGN</text>
+<text x="500" y="290" class="st" text-anchor="middle" xml:space="preserve">KEY</text>
+<path class="ln" d="M560,658 L505,658" marker-start="url(#vidar-data-model-diamond)"/>
+<text x="538" y="648" class="m" xml:space="preserve">1</text>
+<rect class="box" x="560" y="738" width="370" height="162"/>
+<rect class="hdr tbl" x="560.6" y="738.6" width="368.8" height="57.4"/>
+<text x="572" y="763" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="783" class="mb" xml:space="preserve">ip_intel_ports</text>
+<line class="sep" x1="560" y1="796" x2="930" y2="796"/>
+<text x="572" y="817" class="m" xml:space="preserve">ip        TEXT     NOT NULL · PK · FK</text>
+<text x="572" y="837" class="m" xml:space="preserve">port      INTEGER  NOT NULL · PK</text>
+<line class="sep" x1="560" y1="848" x2="930" y2="848"/>
+<text x="572" y="869" class="m" xml:space="preserve">FK ip → ip_intel(ip) ON DELETE CASCADE</text>
+<text x="572" y="889" class="m" xml:space="preserve">idx_ip_intel_ports_port (port)</text>
+<path class="ln" d="M505,798 L560,798" marker-end="url(#vidar-data-model-open)"/>
+<text x="552" y="790" class="m" text-anchor="end" xml:space="preserve">0..*</text>
+<circle class="dot" cx="505" cy="798" r="3"/>
+<rect class="box" x="560" y="924" width="370" height="162"/>
+<rect class="hdr tbl" x="560.6" y="924.6" width="368.8" height="57.4"/>
+<text x="572" y="949" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="969" class="mb" xml:space="preserve">ip_intel_vulns</text>
+<line class="sep" x1="560" y1="982" x2="930" y2="982"/>
+<text x="572" y="1003" class="m" xml:space="preserve">ip        TEXT     NOT NULL · PK · FK</text>
+<text x="572" y="1023" class="m" xml:space="preserve">vuln      TEXT     NOT NULL · PK</text>
+<line class="sep" x1="560" y1="1034" x2="930" y2="1034"/>
+<text x="572" y="1055" class="m" xml:space="preserve">FK ip → ip_intel(ip) ON DELETE CASCADE</text>
+<text x="572" y="1075" class="m" xml:space="preserve">idx_ip_intel_vulns_vuln (vuln)</text>
+<path class="ln" d="M505,984 L560,984" marker-end="url(#vidar-data-model-open)"/>
+<text x="552" y="976" class="m" text-anchor="end" xml:space="preserve">0..*</text>
+<circle class="dot" cx="505" cy="984" r="3"/>
+<rect class="box" x="560" y="1110" width="370" height="162"/>
+<rect class="hdr tbl" x="560.6" y="1110.6" width="368.8" height="57.4"/>
+<text x="572" y="1135" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="1155" class="mb" xml:space="preserve">ip_intel_cpes</text>
+<line class="sep" x1="560" y1="1168" x2="930" y2="1168"/>
+<text x="572" y="1189" class="m" xml:space="preserve">ip        TEXT     NOT NULL · PK · FK</text>
+<text x="572" y="1209" class="m" xml:space="preserve">cpe       TEXT     NOT NULL · PK</text>
+<line class="sep" x1="560" y1="1220" x2="930" y2="1220"/>
+<text x="572" y="1241" class="m" xml:space="preserve">FK ip → ip_intel(ip) ON DELETE CASCADE</text>
+<text x="572" y="1261" class="m" xml:space="preserve">idx_ip_intel_cpes_cpe (cpe)</text>
+<path class="ln" d="M505,1170 L560,1170" marker-end="url(#vidar-data-model-open)"/>
+<text x="552" y="1162" class="m" text-anchor="end" xml:space="preserve">0..*</text>
+<circle class="dot" cx="505" cy="1170" r="3"/>
+<rect class="box" x="560" y="1296" width="370" height="162"/>
+<rect class="hdr tbl" x="560.6" y="1296.6" width="368.8" height="57.4"/>
+<text x="572" y="1321" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="1341" class="mb" xml:space="preserve">ip_intel_tags</text>
+<line class="sep" x1="560" y1="1354" x2="930" y2="1354"/>
+<text x="572" y="1375" class="m" xml:space="preserve">ip        TEXT     NOT NULL · PK · FK</text>
+<text x="572" y="1395" class="m" xml:space="preserve">tag       TEXT     NOT NULL · PK</text>
+<line class="sep" x1="560" y1="1406" x2="930" y2="1406"/>
+<text x="572" y="1427" class="m" xml:space="preserve">FK ip → ip_intel(ip) ON DELETE CASCADE</text>
+<text x="572" y="1447" class="m" xml:space="preserve">idx_ip_intel_tags_tag (tag)</text>
+<path class="ln" d="M505,1356 L560,1356" marker-end="url(#vidar-data-model-open)"/>
+<text x="552" y="1348" class="m" text-anchor="end" xml:space="preserve">0..*</text>
+<circle class="dot" cx="505" cy="1356" r="3"/>
+<rect class="box" x="560" y="1482" width="370" height="162"/>
+<rect class="hdr tbl" x="560.6" y="1482.6" width="368.8" height="57.4"/>
+<text x="572" y="1507" class="st" xml:space="preserve">«table»</text>
+<text x="572" y="1527" class="mb" xml:space="preserve">ip_intel_hostnames</text>
+<line class="sep" x1="560" y1="1540" x2="930" y2="1540"/>
+<text x="572" y="1561" class="m" xml:space="preserve">ip        TEXT     NOT NULL · PK · FK</text>
+<text x="572" y="1581" class="m" xml:space="preserve">hostname  TEXT     NOT NULL · PK</text>
+<line class="sep" x1="560" y1="1592" x2="930" y2="1592"/>
+<text x="572" y="1613" class="m" xml:space="preserve">FK ip → ip_intel(ip) ON DELETE CASCADE</text>
+<text x="572" y="1633" class="m" xml:space="preserve">idx_ip_intel_hostnames_hostname (hostname)</text>
+<path class="ln" d="M505,1542 L560,1542" marker-end="url(#vidar-data-model-open)"/>
+<text x="552" y="1534" class="m" text-anchor="end" xml:space="preserve">0..*</text>
+<circle class="dot" cx="505" cy="1542" r="3"/>
+<path class="ln" d="M505,658 L505,1542"/>
+<rect class="box" x="30" y="978" width="410" height="342"/>
+<rect class="hdr tbl" x="30.6" y="978.6" width="408.8" height="57.4"/>
+<text x="42" y="1003" class="st" xml:space="preserve">«table»</text>
+<text x="42" y="1023" class="mb" xml:space="preserve">processor_state</text>
+<line class="sep" x1="30" y1="1036" x2="440" y2="1036"/>
+<text x="42" y="1057" class="m" xml:space="preserve">key                  TEXT    PK</text>
+<text x="42" y="1077" class="m" xml:space="preserve">value                TEXT</text>
+<line class="sep" x1="30" y1="1088" x2="440" y2="1088"/>
+<text x="42" y="1109" class="st it" xml:space="preserve">keys, by the module that writes them</text>
+<text x="42" y="1129" class="m" xml:space="preserve">log_processor   file_offset, file_inode,</text>
+<text x="42" y="1149" class="m" xml:space="preserve">                file_fingerprint</text>
+<text x="42" y="1169" class="m" xml:space="preserve">main            classifier_version</text>
+<text x="42" y="1189" class="m" xml:space="preserve">archive         retention.mode,</text>
+<text x="42" y="1209" class="m" xml:space="preserve">                retention.rolling_months,</text>
+<text x="42" y="1229" class="m" xml:space="preserve">                retention.archive_keep_months,</text>
+<text x="42" y="1249" class="m" xml:space="preserve">                retention.last_run,</text>
+<text x="42" y="1269" class="m" xml:space="preserve">                archive.pin.&lt;YYYY-MM&gt;</text>
+<text x="42" y="1289" class="m" xml:space="preserve">backup          backup.last_run</text>
+<text x="42" y="1309" class="m" xml:space="preserve">queries/intel   rdns_unconfirmed_purged</text>
+<rect class="box" x="30" y="1360" width="410" height="182"/>
+<rect class="hdr tbl" x="30.6" y="1360.6" width="408.8" height="57.4"/>
+<text x="42" y="1385" class="st" xml:space="preserve">«table»</text>
+<text x="42" y="1405" class="mb" xml:space="preserve">rate_limits</text>
+<line class="sep" x1="30" y1="1418" x2="440" y2="1418"/>
+<text x="42" y="1439" class="m" xml:space="preserve">id                   INTEGER PK AUTOINCREMENT</text>
+<text x="42" y="1459" class="m" xml:space="preserve">client_ip            TEXT    NOT NULL</text>
+<text x="42" y="1479" class="m" xml:space="preserve">hit_at               REAL    NOT NULL</text>
+<line class="sep" x1="30" y1="1490" x2="440" y2="1490"/>
+<text x="42" y="1511" class="m" xml:space="preserve">idx_rate_limits_ip_time (client_ip, hit_at)</text>
+<text x="42" y="1531" class="st" xml:space="preserve">one row per /api/export hit</text>
+<rect class="note" x="30" y="1684" width="900" height="160" rx="6"/>
+<text x="46" y="1712" class="sb" xml:space="preserve">Notation</text>
+<path class="ln" d="M46,1738 L106,1738" marker-start="url(#vidar-data-model-diamond)"/>
+<text x="122" y="1743" xml:space="preserve">composition: child rows belong to one ip_intel row and are deleted with it</text>
+<path class="ln dash" d="M46,1758 L106,1758"/>
+<text x="122" y="1763" xml:space="preserve">logical association with multiplicities; not a foreign key, not enforced</text>
+<text x="46" y="1783" xml:space="preserve">Foreign keys are enforced on connections from db.get_conn(), which sets PRAGMA foreign_keys=ON.</text>
+<text x="46" y="1803" xml:space="preserve">The five child tables are the only store of Shodan's multi-value fields; upsert_ip_intel()</text>
+<text x="46" y="1823" xml:space="preserve">rewrites them through _sync_shodan_children().</text>
+</svg>

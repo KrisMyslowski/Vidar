@@ -169,7 +169,7 @@
     {% for s in sessions %}
     {#- The row is the claim, the drawer is the evidence. A session has no
         stored id and needs none: its own bounds select exactly its requests. -#}
-    <tr data-drawer-src="/visitors/{{ ip | urlencode }}/session?from={{ s.started | urlencode }}&to={{ s.ended | urlencode }}{% if s.behaviour %}&behaviour={{ s.behaviour }}{% endif %}">
+    <tr tabindex="0" data-drawer-src="/visitors/{{ ip | urlencode }}/session?from={{ s.started | urlencode }}&to={{ s.ended | urlencode }}{% if s.behaviour %}&behaviour={{ s.behaviour }}{% endif %}">
       <td data-label="Started" data-col="started">{{ s.started | fmtdate }}</td>
       <td data-label="For" data-col="duration" class="num">{{ s.duration | fmtduration }}</td>
       <td data-label="Requests" data-col="requests" class="num">{{ s.requests | fmtnum }}</td>

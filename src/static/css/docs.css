@@ -78,7 +78,7 @@
    or pinning a step off the type scale here would start the seventh.
 
    A fenced block is a different thing and does need rules. It sits on --bg
-   inside a --bg-panel card: the same 1.08:1 separation .panel itself has
+   inside a --bg-card panel: the same 1.08:1 separation .panel itself has
    against the page, read the other way round — recessed rather than raised.
    The border delimits it, as everywhere else in the system. */
 .doc-body pre {
@@ -126,3 +126,15 @@
 /* Backstop for a window narrow enough that even wrapped cells do not fit: the
    body scrolls, never the page. */
 .doc-body { overflow-x: auto; }
+
+/* ── Diagrams ────────────────────────────────────────────────────────────── */
+/* Each SVG draws its own background and follows the OS colour scheme inside the
+   file, because an <img> cannot see the page's theme tokens. It scales down to
+   the column and never up past its own width; open it on its own for detail. */
+.doc-body img.doc-diagram {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--space-md) 0 var(--space-lg);
+}
+.doc-body a.doc-diagram-link { display: block; cursor: zoom-in; }

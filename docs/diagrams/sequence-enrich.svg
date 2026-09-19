@@ -1,0 +1,261 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vidar-sequence-enrich" viewBox="0 0 1000 2228" width="1000" height="2228" role="img" aria-labelledby="vidar-sequence-enrich-title vidar-sequence-enrich-desc">
+<title id="vidar-sequence-enrich-title">Vidar enrichment sequence</title>
+<desc id="vidar-sequence-enrich-desc">UML sequence: the enrichment worker looks up a batch of IPs step by step, then classifies them.</desc>
+<style>
+.vidar-sequence-enrich text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #1f2328; }
+.vidar-sequence-enrich .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-enrich .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-enrich .sb { font-weight: 600; }
+.vidar-sequence-enrich .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-enrich .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-enrich .st { fill: #59636e; }
+.vidar-sequence-enrich .it { font-style: italic; }
+.vidar-sequence-enrich .bg { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+.vidar-sequence-enrich .ko { fill: #ffffff; }
+.vidar-sequence-enrich .box { fill: #f6f8fa; stroke: #6e7781; stroke-width: 1.2; }
+.vidar-sequence-enrich .hdr { fill: #eaeef2; }
+.vidar-sequence-enrich .tbl { fill: #d6efea; }
+.vidar-sequence-enrich .cls { fill: #dce7f7; }
+.vidar-sequence-enrich .ext { fill: #f5e6c8; }
+.vidar-sequence-enrich .proc { fill: #e7e0f6; }
+.vidar-sequence-enrich .note { fill: #faf2cf; stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-enrich .sep { stroke: #6e7781; stroke-width: 1; }
+.vidar-sequence-enrich .ln { stroke: #59636e; stroke-width: 1.4; fill: none; }
+.vidar-sequence-enrich .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-enrich .frame { fill: none; stroke: #8c959f; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-enrich .sframe { fill: none; stroke: #8c959f; stroke-width: 1.3; }
+.vidar-sequence-enrich .life { stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-enrich .act { fill: #eaeef2; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-enrich .mkf { fill: #59636e; stroke: #59636e; stroke-width: 1; }
+.vidar-sequence-enrich .mko { fill: none; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-enrich .mkh { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-enrich .ball { fill: #ffffff; stroke: #59636e; stroke-width: 1.4; }
+.vidar-sequence-enrich .dot { fill: #59636e; }
+.vidar-sequence-enrich .icon { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.1; }
+@media (prefers-color-scheme: dark) {
+.vidar-sequence-enrich text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; fill: #e6edf3; }
+.vidar-sequence-enrich .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+.vidar-sequence-enrich .mb { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 700; }
+.vidar-sequence-enrich .sb { font-weight: 600; }
+.vidar-sequence-enrich .h { font-size: 16px; font-weight: 600; }
+.vidar-sequence-enrich .ti { font-size: 22px; font-weight: 600; }
+.vidar-sequence-enrich .st { fill: #9198a1; }
+.vidar-sequence-enrich .it { font-style: italic; }
+.vidar-sequence-enrich .bg { fill: #0d1117; stroke: #3d444d; stroke-width: 1; }
+.vidar-sequence-enrich .ko { fill: #0d1117; }
+.vidar-sequence-enrich .box { fill: #151b23; stroke: #8b949e; stroke-width: 1.2; }
+.vidar-sequence-enrich .hdr { fill: #212830; }
+.vidar-sequence-enrich .tbl { fill: #12332e; }
+.vidar-sequence-enrich .cls { fill: #1a2940; }
+.vidar-sequence-enrich .ext { fill: #3a2d13; }
+.vidar-sequence-enrich .proc { fill: #2a2342; }
+.vidar-sequence-enrich .note { fill: #332d13; stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-enrich .sep { stroke: #8b949e; stroke-width: 1; }
+.vidar-sequence-enrich .ln { stroke: #9198a1; stroke-width: 1.4; fill: none; }
+.vidar-sequence-enrich .dash { stroke-dasharray: 6 4; }
+.vidar-sequence-enrich .frame { fill: none; stroke: #6e7681; stroke-width: 1.3; stroke-dasharray: 8 5; }
+.vidar-sequence-enrich .sframe { fill: none; stroke: #6e7681; stroke-width: 1.3; }
+.vidar-sequence-enrich .life { stroke: #6e7681; stroke-width: 1.2; stroke-dasharray: 5 5; fill: none; }
+.vidar-sequence-enrich .act { fill: #212830; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-enrich .mkf { fill: #9198a1; stroke: #9198a1; stroke-width: 1; }
+.vidar-sequence-enrich .mko { fill: none; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-enrich .mkh { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-enrich .ball { fill: #0d1117; stroke: #9198a1; stroke-width: 1.4; }
+.vidar-sequence-enrich .dot { fill: #9198a1; }
+.vidar-sequence-enrich .icon { fill: #151b23; stroke: #9198a1; stroke-width: 1.1; }
+}
+</style>
+<defs>
+<marker id="vidar-sequence-enrich-tri" viewBox="0 0 16 16" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path class="mkh" d="M1,1 L15,8 L1,15 Z"/></marker>
+<marker id="vidar-sequence-enrich-open" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mko" d="M1,1 L13,7 L1,13"/></marker>
+<marker id="vidar-sequence-enrich-filled" viewBox="0 0 14 14" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,1 L13,7 L1,13 Z"/></marker>
+<marker id="vidar-sequence-enrich-diamond" viewBox="0 0 18 12" markerWidth="18" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path class="mkf" d="M1,6 L9,1 L17,6 L9,11 Z"/></marker>
+</defs>
+<rect class="bg" x="0.5" y="0.5" width="999" height="2227" rx="14"/>
+<text x="30" y="44" class="ti" xml:space="preserve">Vidar — enrichment and classification</text>
+<text x="30" y="70" class="st" xml:space="preserve">enrichment_worker() is an asyncio task. enrich_batch runs its provider steps one after another;</text>
+<text x="30" y="90" class="st" xml:space="preserve">inside a step, asyncio.gather runs one lookup per IP concurrently.</text>
+<rect class="box hdr" x="14.7" y="126" width="180.5" height="52"/>
+<text x="105" y="147" class="st" text-anchor="middle" xml:space="preserve">«asyncio task»</text>
+<text x="105" y="168" class="mb" text-anchor="middle" xml:space="preserve">enrichment_worker()</text>
+<path class="life" d="M105,178 L105,1988"/>
+<rect class="box hdr" x="215.9" y="126" width="138.3" height="52"/>
+<text x="285" y="147" class="st" text-anchor="middle" xml:space="preserve">«external»</text>
+<text x="285" y="168" class="mb" text-anchor="middle" xml:space="preserve">HTTP providers</text>
+<path class="life" d="M285,178 L285,1988"/>
+<rect class="box hdr" x="359.3" y="126" width="121.4" height="52"/>
+<text x="420" y="147" class="st" text-anchor="middle" xml:space="preserve">«external»</text>
+<text x="420" y="168" class="mb" text-anchor="middle" xml:space="preserve">DNS resolver</text>
+<path class="life" d="M420,178 L420,1988"/>
+<rect class="box hdr" x="485.1" y="126" width="129.8" height="52"/>
+<text x="550" y="147" class="st" text-anchor="middle" xml:space="preserve">«thread»</text>
+<text x="550" y="168" class="mb" text-anchor="middle" xml:space="preserve">worker thread</text>
+<path class="life" d="M550,178 L550,1988"/>
+<rect class="box hdr" x="638.8" y="126" width="102.5" height="52"/>
+<text x="690" y="147" class="st" text-anchor="middle" xml:space="preserve">«component»</text>
+<text x="690" y="168" class="mb" text-anchor="middle" xml:space="preserve">queries</text>
+<path class="life" d="M690,178 L690,1988"/>
+<rect class="box hdr" x="762.8" y="126" width="104.5" height="52"/>
+<text x="815" y="147" class="st" text-anchor="middle" xml:space="preserve">«component»</text>
+<text x="815" y="168" class="mb" text-anchor="middle" xml:space="preserve">classifier</text>
+<path class="life" d="M815,178 L815,1988"/>
+<rect class="box hdr" x="882.5" y="126" width="95" height="52"/>
+<text x="930" y="147" class="st" text-anchor="middle" xml:space="preserve">«artifact»</text>
+<text x="930" y="168" class="mb" text-anchor="middle" xml:space="preserve">SQLite</text>
+<path class="life" d="M930,178 L930,1988"/>
+<rect class="sframe" x="55" y="560" width="415" height="132"/>
+<path class="box hdr" d="M55,560 L104,560 L104,574 L96,584 L55,584 Z"/>
+<text x="62" y="577" class="mb" xml:space="preserve">par</text>
+<rect class="ko" x="110" y="562" width="165" height="20"/>
+<text x="114" y="577" class="m" xml:space="preserve">[gather: one per IP]</text>
+<rect class="sframe" x="55" y="720" width="415" height="152"/>
+<path class="box hdr" d="M55,720 L104,720 L104,734 L96,744 L55,744 Z"/>
+<text x="62" y="737" class="mb" xml:space="preserve">par</text>
+<rect class="ko" x="110" y="722" width="165" height="20"/>
+<text x="114" y="737" class="m" xml:space="preserve">[gather: one per IP]</text>
+<rect class="sframe" x="55" y="900" width="415" height="152"/>
+<path class="box hdr" d="M55,900 L104,900 L104,914 L96,924 L55,924 Z"/>
+<text x="62" y="917" class="mb" xml:space="preserve">opt</text>
+<rect class="ko" x="110" y="902" width="235.6" height="20"/>
+<text x="114" y="917" class="m" xml:space="preserve">[cached list older than 24 h]</text>
+<rect class="sframe" x="55" y="1080" width="415" height="152"/>
+<path class="box hdr" d="M55,1080 L104,1080 L104,1094 L96,1104 L55,1104 Z"/>
+<text x="62" y="1097" class="mb" xml:space="preserve">opt</text>
+<rect class="ko" x="110" y="1082" width="243.5" height="20"/>
+<text x="114" y="1097" class="m" xml:space="preserve">[DNSBL_ENABLED; gather per IP]</text>
+<rect class="sframe" x="500" y="1356" width="480" height="452"/>
+<path class="box hdr" d="M500,1356 L558,1356 L558,1370 L550,1380 L500,1380 Z"/>
+<text x="507" y="1373" class="mb" xml:space="preserve">loop</text>
+<rect class="ko" x="564" y="1358" width="110" height="20"/>
+<text x="568" y="1373" class="m" xml:space="preserve">[each result]</text>
+<rect class="sframe" x="43" y="214" width="945" height="1742"/>
+<path class="box hdr" d="M43,214 L101,214 L101,228 L93,238 L43,238 Z"/>
+<text x="50" y="231" class="mb" xml:space="preserve">loop</text>
+<rect class="ko" x="107" y="216" width="102.2" height="20"/>
+<text x="111" y="231" class="m" xml:space="preserve">[while True]</text>
+<rect class="act" x="101" y="250" width="8" height="26"/>
+<path class="ln" d="M109,254 L141,254 L141,272 L110,272" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="147" y="253" width="212.1" height="20"/>
+<text x="151" y="268" class="m" xml:space="preserve">new_ips_queue.get_nowait()</text>
+<rect class="ko" x="147" y="273" width="196.4" height="20"/>
+<text x="151" y="288" class="m" xml:space="preserve">  until 100 IPs or empty</text>
+<rect class="act" x="546" y="341" width="8" height="16"/>
+<path class="ln" d="M109,344 L545,344" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="320" width="290.6" height="20"/>
+<text x="117" y="335" class="m" xml:space="preserve">await run_db(_select_batch, pending)</text>
+<rect class="act" x="686" y="403" width="8" height="16"/>
+<path class="ln" d="M554,406 L685,406" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="558" y="362" width="165" height="20"/>
+<text x="562" y="377" class="m" xml:space="preserve">get_unenriched_ips ·</text>
+<rect class="ko" x="558" y="382" width="267.1" height="20"/>
+<text x="562" y="397" class="m" xml:space="preserve">get_stale_ips · get_ip_intel_bulk</text>
+<path class="ln dash" d="M546,448 L110,448" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="424" width="78.6" height="20"/>
+<text x="117" y="439" class="m" xml:space="preserve">to_enrich</text>
+<rect class="act" x="281" y="487" width="8" height="16"/>
+<path class="ln" d="M109,490 L280,490" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="466" width="251.3" height="20"/>
+<text x="117" y="481" class="m" xml:space="preserve">1  POST http://ip-api.com/batch</text>
+<path class="ln dash" d="M281,532 L110,532" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="508" width="180.7" height="20"/>
+<text x="117" y="523" class="m" xml:space="preserve">JSON list; X-Rl, X-Ttl</text>
+<rect class="act" x="281" y="617" width="8" height="16"/>
+<path class="ln" d="M109,620 L280,620" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="596" width="322" height="20"/>
+<text x="117" y="611" class="m" xml:space="preserve">2  GET https://internetdb.shodan.io/{ip}</text>
+<path class="ln dash" d="M281,662 L110,662" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="638" width="94.3" height="20"/>
+<text x="117" y="653" class="m" xml:space="preserve">dict | None</text>
+<rect class="act" x="416" y="797" width="8" height="16"/>
+<path class="ln" d="M109,800 L415,800" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="756" width="267.1" height="20"/>
+<text x="117" y="771" class="m" xml:space="preserve">3  to_thread(_reverse_dns_lookup)</text>
+<rect class="ko" x="113" y="776" width="251.3" height="20"/>
+<text x="117" y="791" class="m" xml:space="preserve">gethostbyaddr, then getaddrinfo</text>
+<path class="ln dash" d="M416,842 L110,842" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="818" width="157.2" height="20"/>
+<text x="117" y="833" class="m" xml:space="preserve">confirmed name | ''</text>
+<rect class="act" x="281" y="977" width="8" height="16"/>
+<path class="ln" d="M109,980 L280,980" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="936" width="290.6" height="20"/>
+<text x="117" y="951" class="m" xml:space="preserve">4  GET https://check.torproject.org/</text>
+<rect class="ko" x="113" y="956" width="125.8" height="20"/>
+<text x="117" y="971" class="m" xml:space="preserve">torbulkexitlist</text>
+<path class="ln dash" d="M281,1022 L110,1022" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="998" width="110" height="20"/>
+<text x="117" y="1013" class="m" xml:space="preserve">exit-node set</text>
+<rect class="act" x="416" y="1157" width="8" height="16"/>
+<path class="ln" d="M109,1160 L415,1160" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="1116" width="219.9" height="20"/>
+<text x="117" y="1131" class="m" xml:space="preserve">5  to_thread(_dnsbl_lookup)</text>
+<rect class="ko" x="113" y="1136" width="196.4" height="20"/>
+<text x="117" y="1151" class="m" xml:space="preserve">per DNSBL_PROVIDERS zone</text>
+<path class="ln dash" d="M416,1202 L110,1202" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="113" y="1178" width="157.2" height="20"/>
+<text x="117" y="1193" class="m" xml:space="preserve">listed | not | None</text>
+<rect class="act" x="101" y="1250" width="8" height="26"/>
+<path class="ln" d="M109,1254 L141,1254 L141,1272 L110,1272" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="147" y="1253" width="235.6" height="20"/>
+<text x="151" y="1268" class="m" xml:space="preserve">stamp fetched_at on every row</text>
+<rect class="act" x="546" y="1325" width="8" height="16"/>
+<path class="ln" d="M109,1328 L545,1328" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="113" y="1304" width="251.3" height="20"/>
+<text x="117" y="1319" class="m" xml:space="preserve">await run_db(_persist_batch, …)</text>
+<rect class="act" x="686" y="1413" width="8" height="16"/>
+<path class="ln" d="M554,1416 L685,1416" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="558" y="1392" width="227.8" height="20"/>
+<text x="562" y="1407" class="m" xml:space="preserve">upsert_ip_intel(conn, intel)</text>
+<rect class="act" x="926" y="1475" width="8" height="16"/>
+<path class="ln" d="M694,1478 L925,1478" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="698" y="1434" width="165" height="20"/>
+<text x="702" y="1449" class="m" xml:space="preserve">INSERT … ON CONFLICT</text>
+<rect class="ko" x="698" y="1454" width="117.9" height="20"/>
+<text x="702" y="1469" class="m" xml:space="preserve">+ child tables</text>
+<rect class="act" x="811" y="1517" width="8" height="16"/>
+<path class="ln" d="M554,1520 L810,1520" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="558" y="1496" width="172.8" height="20"/>
+<text x="562" y="1511" class="m" xml:space="preserve">classify_ip(conn, ip)</text>
+<rect class="act" x="926" y="1559" width="8" height="16"/>
+<path class="ln" d="M819,1562 L925,1562" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="823" y="1538" width="125.8" height="20"/>
+<text x="827" y="1553" class="m" xml:space="preserve">_classify_sql()</text>
+<rect class="act" x="811" y="1580" width="8" height="26"/>
+<path class="ln" d="M811,1584 L779,1584 L779,1602 L810,1602" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="560.9" y="1583" width="212.1" height="20"/>
+<text x="769" y="1598" class="m" text-anchor="end" xml:space="preserve">_apply_priority_chain(row)</text>
+<rect class="ko" x="600.1" y="1603" width="172.8" height="20"/>
+<text x="769" y="1618" class="m" text-anchor="end" xml:space="preserve">→ _decide(): first of</text>
+<rect class="ko" x="663" y="1623" width="110" height="20"/>
+<text x="769" y="1638" class="m" text-anchor="end" xml:space="preserve">17 rules wins</text>
+<path class="ln dash" d="M811,1694 L555,1694" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="ko" x="558" y="1670" width="110" height="20"/>
+<text x="562" y="1685" class="m" xml:space="preserve">'group/class'</text>
+<rect class="act" x="686" y="1733" width="8" height="16"/>
+<path class="ln" d="M554,1736 L685,1736" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="558" y="1712" width="274.9" height="20"/>
+<text x="562" y="1727" class="m" xml:space="preserve">set_visitor_class(conn, ip, label)</text>
+<rect class="act" x="926" y="1775" width="8" height="16"/>
+<path class="ln" d="M694,1778 L925,1778" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="698" y="1754" width="125.8" height="20"/>
+<text x="702" y="1769" class="m" xml:space="preserve">UPDATE ip_intel</text>
+<rect class="act" x="926" y="1847" width="8" height="16"/>
+<path class="ln" d="M554,1850 L925,1850" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="558" y="1826" width="204.2" height="20"/>
+<text x="562" y="1841" class="m" xml:space="preserve">COMMIT on get_conn() exit</text>
+<path class="ln dash" d="M546,1872 L110,1872" marker-end="url(#vidar-sequence-enrich-open)"/>
+<rect class="act" x="101" y="1890" width="8" height="26"/>
+<path class="ln" d="M109,1894 L141,1894 L141,1912 L110,1912" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<rect class="ko" x="147" y="1893" width="196.4" height="20"/>
+<text x="151" y="1908" class="m" xml:space="preserve">await asyncio.sleep(4.5)</text>
+<rect class="note" x="30" y="2018" width="940" height="180" rx="6"/>
+<text x="46" y="2046" class="sb" xml:space="preserve">Notation</text>
+<path class="ln" d="M46,2072 L106,2072" marker-end="url(#vidar-sequence-enrich-filled)"/>
+<text x="122" y="2077" xml:space="preserve">call the caller waits for (awaited coroutine, or a blocking call in a thread)</text>
+<path class="ln" d="M46,2092 L106,2092" marker-end="url(#vidar-sequence-enrich-open)"/>
+<text x="122" y="2097" xml:space="preserve">asynchronous send: the caller does not wait for a reply</text>
+<path class="ln dash" d="M46,2112 L106,2112" marker-end="url(#vidar-sequence-enrich-open)"/>
+<text x="122" y="2117" xml:space="preserve">return</text>
+<text x="46" y="2137" xml:space="preserve">HTTP providers: ip-api.com, internetdb.shodan.io and check.torproject.org, drawn as one lifeline.</text>
+<text x="46" y="2157" xml:space="preserve">IPs ip-api rejects are recorded with mark_enrichment_failed and classified the same way.</text>
+<text x="46" y="2177" xml:space="preserve">classify_ip is imported through the queries package, which re-exports the classifier.</text>
+</svg>

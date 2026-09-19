@@ -19,9 +19,11 @@ repos:
 
   - repo: local
     hooks:
+      # Through scripts/python.sh, not a bare python3: that resolves to whatever
+      # is first on PATH at commit time, which may be too old to import the app.
       - id: pytest
         name: pytest
-        entry: python3 -m pytest -q
+        entry: bash scripts/python.sh -m pytest -q
         language: system
         pass_filenames: false
         always_run: true

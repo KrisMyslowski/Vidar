@@ -1,8 +1,13 @@
 """FastAPI application entry point.
 
-Lifespan:  init DB → start tail_log + enrichment_worker as asyncio tasks → cancel on shutdown
-Middleware: per-IP rate limit on /api/export (configurable via settings)
-Routing:   dashboard routes (/) + API routes (/api) + static files (/static)
+Lifespan:   init DB → warm caches → start the background tasks → cancel them on shutdown.
+            Always: the classifier backfill. Outside demo mode also the log tailer, the
+            enrichment worker, the reverse DNS backfill, the reclassifier, retention and
+            backup. Their SQLite work runs on worker threads, never on the event loop.
+Middleware: allowed hosts, cross-origin write check, per-IP rate limit on /api/export,
+            security headers (CSP with a per-request nonce).
+Routing:    dashboard routes (/), documentation (/docs), API routes (/api), static files
+            (/static).
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ from .backup import LAST_RUN_KEY as BACKUP_LAST_RUN_KEY
 from .backup import run_backup
 from .backup import sweep_abandoned_temps as sweep_backup_temps
 from .config import settings, unset_site_settings
-from .db import get_conn, init_db
+from .db import get_conn, init_db, run_db
 from .enricher import _init_async_globals, enrichment_worker, reverse_dns_backfill
 from .log_processor import tail_log
 from .queries import (
@@ -70,6 +75,14 @@ async def _backfill_task() -> None:
 
 
 async def _backfill() -> None:
+    # A classifier version change reclassifies every IP, which on a real database
+    # is minutes of SQLite work. On the event loop that froze the tailer, the
+    # enricher and every page for as long as it ran; run_db puts it on a worker
+    # thread and shields it, because it writes.
+    await run_db(_backfill_sync)
+
+
+def _backfill_sync() -> None:
     with get_conn() as conn:
         if get_state(conn, "classifier_version") != CLASSIFIER_VERSION:
             n = force_reclassify_all(conn)
@@ -131,14 +144,28 @@ async def _reclassify_task() -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            with get_conn() as conn:
-                n = reclassify_stale_ips(conn)
+            n = await run_db(_reclassify_stale)
             if n:
                 logger.info("Reclassified %d IPs whose behaviour changed", n)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Reclassification pass failed")
+
+
+def _reclassify_stale() -> int:
+    with get_conn() as conn:
+        return reclassify_stale_ips(conn)
+
+
+def _read_state(key: str) -> str | None:
+    """One processor_state value, for the daily tasks deciding whether they are due.
+
+    A single-row read, but still SQLite: behind a write lock it waits, and on the
+    event loop that wait is everyone's.
+    """
+    with get_conn() as conn:
+        return get_state(conn, key)
 
 
 async def _retention_task() -> None:
@@ -160,8 +187,7 @@ async def _retention_task() -> None:
             # and the first tick is startup, which is when a kill left something.
             await asyncio.to_thread(sweep_archive_temps)
             await asyncio.to_thread(sweep_backup_temps)
-            with get_conn() as conn:
-                last = get_state(conn, LAST_RUN_KEY)
+            last = await asyncio.to_thread(_read_state, LAST_RUN_KEY)
             due = True
             if last:
                 elapsed = datetime.now(timezone.utc) - datetime.fromisoformat(last)
@@ -185,8 +211,7 @@ async def _backup_task() -> None:
     """
     while True:
         try:
-            with get_conn() as conn:
-                last = get_state(conn, BACKUP_LAST_RUN_KEY)
+            last = await asyncio.to_thread(_read_state, BACKUP_LAST_RUN_KEY)
             due = True
             if last:
                 due = datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(

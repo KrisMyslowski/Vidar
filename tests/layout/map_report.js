@@ -13,12 +13,41 @@
     threats: num('sel-threats'),
     countryRows: document.querySelectorAll('#sel-countries-list [data-country]').length,
   });
-  const mode = (name) => {
+  // A fixed wait is a guess at how long Leaflet takes, and on a slow CI runner
+  // it guessed short: a heat cell's fitBounds was still under way when the
+  // numbers were read, so "after the click" and "back to cluster" saw two
+  // different viewports (3 countries / 8 IPs, then 1 / 6).
+  //
+  // The panel's numbers alone cannot say the map has stopped: selection.update()
+  // runs on moveend, so they sit still for the whole animation. Settled is
+  // therefore the map pane's transform, the zoom-animation class and the
+  // numbers all unchanged over a window longer than Leaflet's 250ms animation.
+  const settled = async (timeout = 8000) => {
+    const container = document.getElementById('map');
+    const pane = container && container.querySelector('.leaflet-map-pane');
+    const signature = () =>
+      JSON.stringify([
+        container && container.classList.contains('leaflet-zoom-anim'),
+        pane && pane.style.transform,
+        selection(),
+      ]);
+    const deadline = Date.now() + timeout;
+    let last = null;
+    let stable = 0;
+    while (Date.now() < deadline) {
+      await wait(100);
+      const now = signature();
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+      if (stable >= 5) return;
+    }
+  };
+  const mode = async (name) => {
     const btn = [...document.querySelectorAll('[data-map-mode]')].find(
       (b) => b.dataset.mapMode === name
     );
     btn.click();
-    return wait(500);
+    await settled();
   };
   const box = (sel) => {
     const el = document.querySelector(sel);
@@ -29,7 +58,7 @@
   const overlap = (a, b) =>
     !!a && !!b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-  await wait(600); // Leaflet lays the map out after its own tick
+  await settled(); // Leaflet lays the map out after its own tick
 
   const cluster = selection();
   await mode('heat');
@@ -47,7 +76,11 @@
         : best
     );
     target.dispatchEvent(new MouseEvent('click', { bubbles: true, view: window }));
-    await wait(900);
+    // heat.draw() rebuilds every cell on moveend, so the clicked one leaving the
+    // DOM is the proof the move finished — only then is settling meaningful.
+    const deadline = Date.now() + 8000;
+    while (target.isConnected && Date.now() < deadline) await wait(50);
+    await settled();
     clicked = selection();
   }
 

@@ -120,7 +120,7 @@
     {% for i in incidents %}
     {#- The row is the claim, the panel is the run it stands for. Clicking the
         address links still follows them: drawer.js leaves anchors alone. -#}
-    <tr data-drawer-src="/incidents/case?from={{ i.started | urlencode }}&to={{ i.ended | urlencode }}&last={{ i.last_started | urlencode }}&sig={{ i.digest }}">
+    <tr tabindex="0" data-drawer-src="/incidents/case?from={{ i.started | urlencode }}&to={{ i.ended | urlencode }}&last={{ i.last_started | urlencode }}&sig={{ i.digest }}">
       <td data-label="Started" data-col="started">{{ i.started | fmtdate }}</td>
       <td data-label="For" data-col="duration" class="num">{{ i.duration | fmtduration }}</td>
       <td data-label="Addresses" data-col="addresses" class="num">{{ i.addresses | fmtnum }}</td>

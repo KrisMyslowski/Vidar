@@ -12,13 +12,29 @@
    paragraph, or in a kv-table cell. There was no such rule, so those fell back
    to the browser's blue-and-purple, which is the one pair of colours the theme
    does not own. Underline on hover rather than always, to match the rest. */
+/* One focus ring for everything operable. Before this, four controls styled
+   :focus-visible and the rest — tabs, drill pills, the refresh and submit
+   buttons, the settings nav, every disclosure — fell back to the browser's own
+   ring, the one colour on the page the theme does not own, and on the white
+   submit button in dark mode not always visible at all. :where() keeps the
+   specificity at zero, so the handful of rules that set their own offset
+   (sidebar icons, table rows) still win. */
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:visited { color: var(--accent); }
 a:hover { text-decoration: underline; }
 
+/* No `overflow-x: hidden` here any more. It predated the fixed-layout tables and
+   cut off whatever spilled past the right edge without a trace — the tail of the
+   path badges in card mode, among others. test_no_page_is_wider_than_the_window
+   now measures every page instead, and below the widths it covers an overflow
+   scrolls rather than disappears. */
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
 }
 
 body {
@@ -41,7 +57,7 @@ body {
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 100;
+  z-index: var(--z-sidebar);
 }
 .sidebar-header {
   padding: 1.5rem 1rem;
@@ -68,10 +84,10 @@ body {
   padding: 0.6rem var(--space-md);
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: background 0.15s, color 0.15s;
+  font-size: var(--font-nav);
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
-.sidebar li a:hover { background: var(--border); color: var(--text); }
+.sidebar li a:hover { background: var(--bg-hover); color: var(--text); }
 .sidebar li a.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 /* Three columns, not a flex row with auto margins. The gear, the book and the
    toggle each own a column, so the book sits on the footer's true centre —
@@ -94,7 +110,7 @@ body {
   display: inline-flex;
   align-items: center;
   color: var(--text-muted);
-  transition: color 0.15s;
+  transition: color var(--dur-fast);
 }
 .sidebar-settings { justify-self: start; }
 .sidebar-docs { justify-self: center; }
@@ -119,7 +135,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: color 0.2s ease;
+  transition: color var(--dur-base) var(--ease-std);
   flex-shrink: 0;
 }
 .theme-toggle:hover,

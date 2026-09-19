@@ -232,12 +232,17 @@ def archive_path(month: str) -> Path:
 def resolve_archive(month: str) -> Path | None:
     """Existing archive for `month`, or None — refusing anything outside the dir.
 
-    valid_month() is the first gate; this is the second. A single check between
-    a URL segment and an open() is one check too few.
+    Two gates, both here: the name must be a month, and the resolved file must
+    sit directly in the archive directory. A single check between a URL segment
+    and an open() is one check too few — and the containment test used to be
+    `root in path.parents`, which a subdirectory passes as well, so it held only
+    because every caller had already run valid_month().
     """
+    if valid_month(month) is None:
+        return None
     root = archive_dir().resolve()
     path = (root / f"{month}.zip").resolve()
-    if root not in path.parents or not path.is_file():
+    if path.parent != root or not path.is_file():
         return None
     return path
 
@@ -570,14 +575,30 @@ def delete_month(conn: sqlite3.Connection, month: str) -> int:
 
 def expire_restores(conn: sqlite3.Connection, now: datetime | None = None) -> list[str]:
     """Release every restored month whose pin has run out. Returns those months."""
-    now = now or datetime.now(timezone.utc)
+    now = _aware(now or datetime.now(timezone.utc))
     expired = []
     for entry in list_archives(conn):
         until = entry["restored_until"]
-        if until and until <= now.isoformat():
+        if not until:
+            continue
+        # Compared as instants. As text, "12:00+02:00" sorted after "11:00+00:00"
+        # and a pin read as running an hour after it had run out.
+        try:
+            ends = _aware(datetime.fromisoformat(until))
+        except ValueError:
+            # A pin nobody can read protects nothing. Releasing is safe — the zip
+            # stays — and it is said, rather than keeping the month in forever.
+            logger.warning("Unreadable restore pin %r on %s; releasing it", until, entry["month"])
+            ends = now
+        if ends <= now:
             release_month(conn, entry["month"])
             expired.append(entry["month"])
     return expired
+
+
+def _aware(moment: datetime) -> datetime:
+    """A naive datetime is UTC here, like every timestamp this service writes."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 # ── Mode ─────────────────────────────────────────────────────────────────────

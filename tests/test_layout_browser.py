@@ -28,6 +28,8 @@ REPORT = LAYOUT_DIR / "report.js"
 MAP_REPORT = LAYOUT_DIR / "map_report.js"
 TIMELINE_REPORT = LAYOUT_DIR / "timeline_report.js"
 RANGE_REPORT = LAYOUT_DIR / "range_report.js"
+PAGE_REPORT = LAYOUT_DIR / "page_report.js"
+A11Y_REPORT = LAYOUT_DIR / "a11y_report.js"
 # The seeded window is anchored to today, not to a fixed July: the chart
 # fills silent buckets with zeros now, so data outside the default range
 # leaves the axis it is measured on empty.
@@ -397,6 +399,55 @@ def test_dominant_column_stays_dominant(geometry):
         if c["cls"] == DOMINANT_CLASS and c["w"] < max(x["w"] for x in t["cols"])
     ]
     assert not bad, "dominant columns that are not the widest:\n" + "\n".join(bad)
+
+
+# Every surface a reader can reach, from the width the settings and card layouts
+# switch at up to a wide desktop. Not below 900px, by decision: the dashboard is
+# reached through an SSH tunnel, which is a desktop workflow, so there is no phone
+# layout — the sidebar keeps its 180px and a phone-width page overflows as expected.
+_WHOLE_PAGES = [*PAGES, "/report", "/settings/status", "/settings/storage", "/docs/usage"]
+_PAGE_WIDTHS = [900, 1280, 1920]
+
+
+def test_no_page_is_wider_than_the_window(_node, server):
+    """`html, body { overflow-x: hidden }` predates the fixed-layout tables and
+    cut off whatever spilled past the right edge, silently — it once removed the
+    tail of path badges in card mode. Measured instead of hidden: nothing may
+    reach past the viewport unless a scroller it sits in makes it reachable."""
+    jobs = [
+        {"key": f"{path} @{width}", "url": server + path, "width": width}
+        for path in _WHOLE_PAGES
+        for width in _PAGE_WIDTHS
+    ]
+    pages = measure(_node, jobs, expression=PAGE_REPORT)
+    bad = [
+        f"{where}: {p['scrollWidth']}px wide in {p['viewport']}px — {p['offenders']}"
+        for where, p in pages.items()
+        if p["offenders"]
+    ]
+    assert not bad, "pages wider than the window:\n" + "\n".join(bad)
+
+
+def test_every_control_can_be_found_and_named(_node, server):
+    """Checked once by hand across every page and clean — which is exactly the
+    state that decays without a test. A button whose only content becomes an
+    icon, a search box that loses its label, a clickable chip that is a <span>:
+    each is invisible to the markup tests and to anyone using a mouse."""
+    pages = [*_WHOLE_PAGES, "/visitors?view=map", "/visitors?view=timeline", "/settings/api"]
+    reports = measure(
+        _node,
+        [{"key": p, "url": server + p, "width": 1600} for p in pages],
+        expression=A11Y_REPORT,
+    )
+    empty = [p for p, r in reports.items() if not r["controls"]]
+    assert not empty, f"pages with no controls at all — did they render? {empty}"
+    bad = [
+        f"{page}: {kind} {found}"
+        for page, r in reports.items()
+        for kind, found in r.items()
+        if kind != "controls" and found
+    ]
+    assert not bad, "\n".join(bad)
 
 
 def test_card_layout_stacks_instead_of_sizing_columns(_node, server):

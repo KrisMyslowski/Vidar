@@ -157,7 +157,7 @@ ssh <user>@<host> 'sudo docker logs vidar | grep -iE "retention|snapshot"'
 The published image needs neither Python nor a build on the server:
 
 ```
-ghcr.io/krismyslowski/vidar:1.0.0
+ghcr.io/krismyslowski/vidar:1.5.0
 ```
 
 A compose file with the two bind mounts and an `.env` beside it is the whole install —
